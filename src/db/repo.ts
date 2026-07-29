@@ -1,0 +1,180 @@
+// Jediná vrstva, přes kterou UI čte a zapisuje data.
+// Razítkuje updatedAt, maže výhradně tombstonem (deletedAt) a filtruje smazané záznamy.
+
+import { db } from './db'
+import type { Client, ClientKind, Priority, Project, Task, TaskStatus } from './types'
+
+const now = () => new Date().toISOString()
+
+const newRecord = () => ({
+  id: crypto.randomUUID(),
+  createdAt: now(),
+  updatedAt: now(),
+})
+
+// ---------- Klienti ----------
+
+export async function addClient(input: {
+  name: string
+  color: string
+  kind: ClientKind
+  notes?: string
+}): Promise<Client> {
+  const client: Client = {
+    ...newRecord(),
+    status: 'active',
+    templateIds: [],
+    lastActivityAt: now(),
+    ...input,
+  }
+  await db.clients.add(client)
+  return client
+}
+
+export async function updateClient(id: string, patch: Partial<Client>): Promise<void> {
+  await db.clients.update(id, { ...patch, updatedAt: now() })
+}
+
+export async function removeClient(id: string): Promise<void> {
+  const t = now()
+  await db.transaction('rw', db.clients, db.projects, db.tasks, async () => {
+    await db.clients.update(id, { deletedAt: t, updatedAt: t })
+    await db.projects.where('clientId').equals(id).modify({ deletedAt: t, updatedAt: t })
+    await db.tasks.where('clientId').equals(id).modify({ deletedAt: t, updatedAt: t })
+  })
+}
+
+export const getClient = (id: string) => db.clients.get(id)
+
+export const activeClients = () =>
+  db.clients
+    .filter((c) => !c.deletedAt && c.status !== 'archived')
+    .toArray()
+    .then((cs) => cs.sort((a, b) => a.name.localeCompare(b.name, 'cs')))
+
+export const archivedClients = () =>
+  db.clients
+    .filter((c) => !c.deletedAt && c.status === 'archived')
+    .toArray()
+    .then((cs) => cs.sort((a, b) => a.name.localeCompare(b.name, 'cs')))
+
+export const allClients = () => db.clients.filter((c) => !c.deletedAt).toArray()
+
+// ---------- Projekty ----------
+
+export async function addProject(input: {
+  clientId: string
+  name: string
+  goal?: string
+}): Promise<Project> {
+  const order = await db.projects.where('clientId').equals(input.clientId).count()
+  const project: Project = { ...newRecord(), status: 'active', order, ...input }
+  await db.projects.add(project)
+  return project
+}
+
+export async function updateProject(id: string, patch: Partial<Project>): Promise<void> {
+  await db.projects.update(id, { ...patch, updatedAt: now() })
+}
+
+export async function removeProject(id: string): Promise<void> {
+  const t = now()
+  await db.transaction('rw', db.projects, db.tasks, async () => {
+    await db.projects.update(id, { deletedAt: t, updatedAt: t })
+    // Úkoly zůstávají pod klientem, jen přijdou o projekt.
+    await db.tasks.where('projectId').equals(id).modify({ projectId: undefined, updatedAt: t })
+  })
+}
+
+export const clientProjects = (clientId: string) =>
+  db.projects
+    .where('clientId')
+    .equals(clientId)
+    .filter((p) => !p.deletedAt && p.status !== 'archived')
+    .toArray()
+    .then((ps) => ps.sort((a, b) => a.order - b.order))
+
+export const allProjects = () => db.projects.filter((p) => !p.deletedAt).toArray()
+
+// ---------- Úkoly ----------
+
+export async function addTask(input: {
+  title: string
+  clientId?: string
+  projectId?: string
+  priority?: Priority
+  dueDate?: string
+  scheduledFor?: string
+  notes?: string
+}): Promise<Task> {
+  const status: TaskStatus = input.dueDate || input.scheduledFor ? 'active' : 'inbox'
+  const task: Task = {
+    ...newRecord(),
+    priority: input.priority ?? 'normal',
+    order: 0,
+    status,
+    ...input,
+  }
+  await db.tasks.add(task)
+  if (task.clientId) {
+    await db.clients.update(task.clientId, { lastActivityAt: task.createdAt })
+  }
+  return task
+}
+
+export async function updateTask(id: string, patch: Partial<Task>): Promise<void> {
+  await db.tasks.update(id, { ...patch, updatedAt: now() })
+}
+
+export async function completeTask(id: string): Promise<void> {
+  const t = now()
+  await db.tasks.update(id, { status: 'done', completedAt: t, updatedAt: t })
+  const task = await db.tasks.get(id)
+  if (task?.clientId) {
+    await db.clients.update(task.clientId, { lastActivityAt: t })
+  }
+}
+
+export async function reopenTask(id: string): Promise<void> {
+  const task = await db.tasks.get(id)
+  if (!task) return
+  const status: TaskStatus = task.dueDate || task.scheduledFor ? 'active' : 'inbox'
+  await db.tasks.update(id, { status, completedAt: undefined, updatedAt: now() })
+}
+
+export async function removeTask(id: string): Promise<void> {
+  const t = now()
+  await db.tasks.update(id, { deletedAt: t, updatedAt: t })
+}
+
+export const openTasks = () =>
+  db.tasks
+    .where('status')
+    .anyOf('inbox', 'active')
+    .filter((t) => !t.deletedAt)
+    .toArray()
+
+export const doneOn = (dateISO: string) =>
+  db.tasks
+    .where('status')
+    .equals('done')
+    .filter((t) => !t.deletedAt && (t.completedAt ?? '').startsWith(dateISO))
+    .toArray()
+
+export const clientOpenTasks = (clientId: string) =>
+  db.tasks
+    .where('clientId')
+    .equals(clientId)
+    .filter((t) => !t.deletedAt && (t.status === 'inbox' || t.status === 'active'))
+    .toArray()
+
+const PRIO_WEIGHT: Record<Priority, number> = { critical: 3, high: 2, normal: 1, low: 0 }
+
+export function sortTasks(tasks: Task[]): Task[] {
+  return [...tasks].sort(
+    (a, b) =>
+      PRIO_WEIGHT[b.priority] - PRIO_WEIGHT[a.priority] ||
+      (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') ||
+      a.createdAt.localeCompare(b.createdAt),
+  )
+}
