@@ -1,0 +1,170 @@
+// Synchronizační vrstva (Fáze 2). Běží na pozadí vedle UI:
+// UI čte a zapisuje jen lokální Dexie přes repo, engine se stará o výměnu
+// se Supabase. Pořadí každého běhu: pull všech tabulek → push všech tabulek.
+// Konflikty řeší last-write-wins podle updatedAt (viz supabase/schema.sql).
+//
+// Engine zapisuje do Dexie přímo (bulkPut stažených záznamů) a záměrně
+// nerazítkuje updatedAt — zapisuje cizí záznamy tak, jak jsou.
+
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { db } from '../db/db'
+import { onRepoWrite } from '../db/events'
+import type { Table } from 'dexie'
+import { SUPABASE_ANON_KEY, SUPABASE_URL, isSupabaseConfigured } from './config'
+import {
+  LOCAL_TABLE_NAMES,
+  REMOTE_TABLES,
+  applyPull,
+  maxUpdatedAt,
+  pendingPush,
+  type LocalTableName,
+  type PulledRow,
+  type Syncable,
+} from './merge'
+import { setSyncStatus } from './status'
+
+const PAGE_SIZE = 500
+const WRITE_DEBOUNCE_MS = 2500
+
+let sb: SupabaseClient | null = null
+let syncing = false
+let queued = false
+let debounceTimer: ReturnType<typeof setTimeout> | undefined
+
+const localTable = (name: LocalTableName): Table<Syncable, string> =>
+  db.table(name) as Table<Syncable, string>
+
+export function initSync(): void {
+  if (!isSupabaseConfigured) {
+    setSyncStatus({ phase: 'unconfigured' })
+    return
+  }
+  sb = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!)
+
+  // Zachytí i INITIAL_SESSION po startu, takže se appka srovná hned po otevření.
+  sb.auth.onAuthStateChange((_event, session) => {
+    if (session) {
+      setSyncStatus({ phase: 'idle', email: session.user.email })
+      void syncNow()
+    } else {
+      setSyncStatus({ phase: 'signedOut', email: undefined })
+    }
+  })
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void syncNow()
+  })
+  window.addEventListener('online', () => void syncNow())
+
+  onRepoWrite(() => {
+    clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(() => void syncNow(), WRITE_DEBOUNCE_MS)
+  })
+}
+
+export async function syncNow(): Promise<void> {
+  if (!sb) return
+  if (syncing) {
+    queued = true
+    return
+  }
+  const { data } = await sb.auth.getSession()
+  const session = data.session
+  if (!session) {
+    setSyncStatus({ phase: 'signedOut' })
+    return
+  }
+  if (!navigator.onLine) {
+    setSyncStatus({ phase: 'offline' })
+    return
+  }
+
+  syncing = true
+  setSyncStatus({ phase: 'syncing' })
+  try {
+    await ensureAccount(session.user.id)
+    for (const name of LOCAL_TABLE_NAMES) await pullTable(name)
+    for (const name of LOCAL_TABLE_NAMES) await pushTable(name)
+    setSyncStatus({ phase: 'idle', lastSyncAt: new Date().toISOString(), error: undefined })
+  } catch (e) {
+    setSyncStatus({ phase: 'error', error: e instanceof Error ? e.message : String(e) })
+  } finally {
+    syncing = false
+    if (queued) {
+      queued = false
+      void syncNow()
+    }
+  }
+}
+
+// Při přihlášení jiného účtu, než se kterým se synchronizovalo naposledy,
+// se kurzory vynulují — proběhne plný pull i push (appka je pro jednoho
+// uživatele, tohle jen brání tichému smíchání dat po překliknutí účtu).
+async function ensureAccount(userId: string): Promise<void> {
+  const meta = await db.syncState.get('meta')
+  if (meta?.userId === userId) return
+  await db.syncState.clear()
+  await db.syncState.put({ id: 'meta', userId })
+}
+
+async function pullTable(name: LocalTableName): Promise<void> {
+  const table = localTable(name)
+  const stateId = `pull:${name}`
+  let cursor = (await db.syncState.get(stateId))?.cursor ?? ''
+
+  for (;;) {
+    let query = sb!
+      .from(REMOTE_TABLES[name])
+      .select('id,data,updated_at')
+      .order('updated_at', { ascending: true })
+      .limit(PAGE_SIZE)
+    if (cursor) query = query.gt('updated_at', cursor)
+
+    const { data, error } = await query
+    if (error) throw new Error(`${name}: ${error.message}`)
+    const rows = (data ?? []) as PulledRow[]
+    if (rows.length === 0) break
+
+    const locals = await table.bulkGet(rows.map((r) => r.id))
+    const puts = applyPull(locals, rows)
+    if (puts.length > 0) await table.bulkPut(puts)
+
+    cursor = rows[rows.length - 1].updated_at
+    await db.syncState.put({ id: stateId, cursor })
+    if (rows.length < PAGE_SIZE) break
+  }
+}
+
+async function pushTable(name: LocalTableName): Promise<void> {
+  const table = localTable(name)
+  const stateId = `push:${name}`
+  const cursor = (await db.syncState.get(stateId))?.cursor ?? ''
+
+  const all = await table.toArray()
+  const rows = pendingPush(all, cursor)
+  if (rows.length === 0) return
+
+  for (let i = 0; i < rows.length; i += PAGE_SIZE) {
+    const batch = rows.slice(i, i + PAGE_SIZE)
+    const payload = batch.map((r) => ({
+      id: r.id,
+      data: r,
+      updated_at: r.updatedAt,
+      deleted_at: r.deletedAt ?? null,
+    }))
+    const { error } = await sb!.from(REMOTE_TABLES[name]).upsert(payload)
+    if (error) throw new Error(`${name}: ${error.message}`)
+    await db.syncState.put({ id: stateId, cursor: maxUpdatedAt(batch, cursor) })
+  }
+}
+
+export async function signInWithGoogle(): Promise<void> {
+  await sb?.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.origin },
+  })
+}
+
+export async function signOutUser(): Promise<void> {
+  await sb?.auth.signOut()
+}

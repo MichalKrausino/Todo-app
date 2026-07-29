@@ -19,7 +19,7 @@ npm run dev
 Na iPhonu pak v Safari: **Sdílet → Přidat na plochu** — bez toho nefunguje
 instalace ani (v pozdější fázi) push notifikace.
 
-## Co už umí (Fáze 1)
+## Co už umí
 
 - Klienti/oblasti → projekty → úkoly, vše offline v IndexedDB (Dexie)
 - Rychlé zadávání s českým parserem: „ve čtvrtek poslat report @klient !vysoká“,
@@ -27,6 +27,31 @@ instalace ani (v pozdější fázi) push notifikace.
 - Obrazovky **Dnes** (po termínu / dnes / hotovo), **Plán** (podle dnů + bez
   termínu) a **Klienti** (detail, projekty, archivace)
 - Instalace na plochu, offline režim přes service worker
+- Synchronizace mezi zařízeními přes Supabase (Google login, tombstony,
+  last-write-wins) — vyžaduje jednorázové nastavení níže
+
+## Synchronizace (Fáze 2) — jednorázové nastavení
+
+Appka funguje i bez tohohle — čistě lokálně. Pro propojení iPhonu s MacBookem:
+
+1. Na [supabase.com](https://supabase.com) založ projekt (free tier stačí).
+2. V **SQL Editoru** spusť obsah souboru [`supabase/schema.sql`](supabase/schema.sql)
+   — vytvoří tabulky, RLS („každý vidí jen svá data“) a last-write-wins trigger.
+3. Zapni Google přihlášení: **Authentication → Sign In / Up → Google**.
+   Podle návodu Supabase vytvoř OAuth klienta v Google Cloud Console a vlož
+   Client ID + Secret. Do Google OAuth klienta patří redirect URI, které ukazuje
+   Supabase na téže stránce.
+4. V **Authentication → URL Configuration** nastav Site URL na adresu nasazené
+   appky (např. `https://neco.vercel.app`) a do Additional Redirect URLs přidej
+   `http://localhost:5173` pro vývoj.
+5. Z **Project Settings → API** zkopíruj URL a anon klíč do `.env.local`
+   (vzor v `.env.example`). Při nasazení na Vercel nastav tytéž proměnné
+   v projektu na Vercelu.
+
+Pak se v appce objeví přihlášení přes ikonu obláčku vpravo nahoře. Sync běží
+na pozadí: při startu, při návratu do appky, chvíli po každé změně a ručně
+tlačítkem. Konflikty řeší poslední zápis podle `updatedAt`, mazání jsou
+tombstony — viz `src/sync/`.
 
 ## Stack
 

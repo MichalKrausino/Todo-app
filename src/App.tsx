@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Task } from './db/types'
 import { QuickAdd } from './components/QuickAdd'
+import { SyncButton, SyncSheet } from './components/SyncSheet'
 import { TaskEditSheet } from './components/TaskEditSheet'
 import { TodayView } from './views/TodayView'
 import { UpcomingView } from './views/UpcomingView'
@@ -46,9 +47,16 @@ const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
 export default function App() {
   const [tab, setTab] = useState<Tab>('today')
   const [editing, setEditing] = useState<Task | null>(null)
+  const [syncOpen, setSyncOpen] = useState(false)
 
   return (
-    <div className="mx-auto flex h-dvh max-w-lg flex-col bg-slate-50 text-slate-900 antialiased">
+    <div className="relative mx-auto flex h-dvh max-w-lg flex-col bg-slate-50 text-slate-900 antialiased">
+      <div
+        className="absolute right-4 z-40"
+        style={{ top: 'calc(0.75rem + env(safe-area-inset-top))' }}
+      >
+        <SyncButton onOpen={() => setSyncOpen(true)} />
+      </div>
       <main
         className="flex-1 overflow-y-auto px-4 pb-4"
         style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }}
@@ -80,6 +88,7 @@ export default function App() {
       </footer>
 
       {editing && <TaskEditSheet task={editing} onClose={() => setEditing(null)} />}
+      {syncOpen && <SyncSheet onClose={() => setSyncOpen(false)} />}
     </div>
   )
 }

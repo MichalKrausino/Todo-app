@@ -14,8 +14,11 @@ zdůvodnění rozhodnutí a roadmapa fází: **`docs/PLAN.md`** — před větš
 
 1. **Offline-first.** Zdrojem pravdy je IndexedDB (Dexie, `src/db/db.ts`). UI čte a
    zapisuje výhradně přes vrstvu `src/db/repo.ts` a nikdy nečeká na síť.
-   Komponenty nikdy nevolají síť přímo. Synchronizace (Fáze 2) bude samostatná
-   vrstva na pozadí.
+   Komponenty nikdy nevolají síť přímo — síť smí jen synchronizační vrstva
+   `src/sync/` (engine), která běží na pozadí: pull → push, konflikty LWW podle
+   `updatedAt` (server má stejný guard jako trigger, viz `supabase/schema.sql`).
+   Repo hlásí zápisy přes `src/db/events.ts`, engine na ně reaguje debounced
+   pushem. UI čte stav syncu jen přes `src/sync/status.ts`.
 2. **Tombstony.** Záznamy se nikdy nemažou natvrdo — nastavuje se `deletedAt`.
    Všechny dotazy musí filtrovat `deletedAt`. Konflikty při synchronizaci řeší
    last-write-wins podle `updatedAt`.
@@ -39,7 +42,7 @@ návrhy a reakce na ně, Fáze 6). Úkol může viset přímo pod klientem bez p
 ## Stav fází (roadmapa v docs/PLAN.md)
 
 - [x] Fáze 1 — kostra: PWA na plochu, lokální DB, klienti/projekty/úkoly, rychlé zadávání s českým parserem (`src/lib/quickAdd.ts`), obrazovky Dnes/Plán/Klienti
-- [ ] Fáze 2 — dvě zařízení: Google login, Supabase schéma, sync s tombstony
+- [x] Fáze 2 — dvě zařízení: Google login, Supabase schéma (`supabase/schema.sql`), sync s tombstony (`src/sync/`) — kód hotový; zbývá jednorázově založit Supabase projekt podle README a ověřit na dvou zařízeních
 - [ ] Fáze 3 — Google Calendar: čtení volných oken, zápis bloků do kalendáře „Todo“
 - [ ] Fáze 4 — šablony, RRULE opakování, hlídání zanedbaných klientů
 - [ ] Fáze 5 — AI: tiché odhady času, rozpad projektů, chytřejší parsování

@@ -2,6 +2,7 @@
 // Razítkuje updatedAt, maže výhradně tombstonem (deletedAt) a filtruje smazané záznamy.
 
 import { db } from './db'
+import { emitRepoWrite } from './events'
 import type { Client, ClientKind, Priority, Project, Task, TaskStatus } from './types'
 
 const now = () => new Date().toISOString()
@@ -28,11 +29,13 @@ export async function addClient(input: {
     ...input,
   }
   await db.clients.add(client)
+  emitRepoWrite()
   return client
 }
 
 export async function updateClient(id: string, patch: Partial<Client>): Promise<void> {
   await db.clients.update(id, { ...patch, updatedAt: now() })
+  emitRepoWrite()
 }
 
 export async function removeClient(id: string): Promise<void> {
@@ -42,6 +45,7 @@ export async function removeClient(id: string): Promise<void> {
     await db.projects.where('clientId').equals(id).modify({ deletedAt: t, updatedAt: t })
     await db.tasks.where('clientId').equals(id).modify({ deletedAt: t, updatedAt: t })
   })
+  emitRepoWrite()
 }
 
 export const getClient = (id: string) => db.clients.get(id)
@@ -70,11 +74,13 @@ export async function addProject(input: {
   const order = await db.projects.where('clientId').equals(input.clientId).count()
   const project: Project = { ...newRecord(), status: 'active', order, ...input }
   await db.projects.add(project)
+  emitRepoWrite()
   return project
 }
 
 export async function updateProject(id: string, patch: Partial<Project>): Promise<void> {
   await db.projects.update(id, { ...patch, updatedAt: now() })
+  emitRepoWrite()
 }
 
 export async function removeProject(id: string): Promise<void> {
@@ -84,6 +90,7 @@ export async function removeProject(id: string): Promise<void> {
     // Úkoly zůstávají pod klientem, jen přijdou o projekt.
     await db.tasks.where('projectId').equals(id).modify({ projectId: undefined, updatedAt: t })
   })
+  emitRepoWrite()
 }
 
 export const clientProjects = (clientId: string) =>
@@ -117,13 +124,15 @@ export async function addTask(input: {
   }
   await db.tasks.add(task)
   if (task.clientId) {
-    await db.clients.update(task.clientId, { lastActivityAt: task.createdAt })
+    await db.clients.update(task.clientId, { lastActivityAt: task.createdAt, updatedAt: task.createdAt })
   }
+  emitRepoWrite()
   return task
 }
 
 export async function updateTask(id: string, patch: Partial<Task>): Promise<void> {
   await db.tasks.update(id, { ...patch, updatedAt: now() })
+  emitRepoWrite()
 }
 
 export async function completeTask(id: string): Promise<void> {
@@ -131,8 +140,9 @@ export async function completeTask(id: string): Promise<void> {
   await db.tasks.update(id, { status: 'done', completedAt: t, updatedAt: t })
   const task = await db.tasks.get(id)
   if (task?.clientId) {
-    await db.clients.update(task.clientId, { lastActivityAt: t })
+    await db.clients.update(task.clientId, { lastActivityAt: t, updatedAt: t })
   }
+  emitRepoWrite()
 }
 
 export async function reopenTask(id: string): Promise<void> {
@@ -140,11 +150,13 @@ export async function reopenTask(id: string): Promise<void> {
   if (!task) return
   const status: TaskStatus = task.dueDate || task.scheduledFor ? 'active' : 'inbox'
   await db.tasks.update(id, { status, completedAt: undefined, updatedAt: now() })
+  emitRepoWrite()
 }
 
 export async function removeTask(id: string): Promise<void> {
   const t = now()
   await db.tasks.update(id, { deletedAt: t, updatedAt: t })
+  emitRepoWrite()
 }
 
 export const openTasks = () =>
