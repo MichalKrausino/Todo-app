@@ -158,6 +158,22 @@ async function pushTable(name: LocalTableName): Promise<void> {
   }
 }
 
+const AUTH_ERRORS_CZ: Array<[RegExp, string]> = [
+  [/invalid login credentials/i, 'Nesprávný e-mail nebo heslo.'],
+  [/email not confirmed/i, 'E-mail zatím není potvrzený.'],
+  [/rate limit/i, 'Příliš mnoho pokusů, zkus to za chvíli.'],
+  [/fetch|network/i, 'Nepodařilo se spojit se serverem. Jsi online?'],
+]
+
+// Vrací česky přeloženou chybu, nebo null při úspěchu.
+export async function signInWithPassword(email: string, password: string): Promise<string | null> {
+  if (!sb) return 'Synchronizace není nakonfigurovaná.'
+  const { error } = await sb.auth.signInWithPassword({ email, password })
+  if (!error) return null
+  const hit = AUTH_ERRORS_CZ.find(([re]) => re.test(error.message))
+  return hit ? hit[1] : error.message
+}
+
 export async function signInWithGoogle(): Promise<void> {
   await sb?.auth.signInWithOAuth({
     provider: 'google',

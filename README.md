@@ -53,6 +53,19 @@ na pozadí: při startu, při návratu do appky, chvíli po každé změně a ru
 tlačítkem. Konflikty řeší poslední zápis podle `updatedAt`, mazání jsou
 tombstony — viz `src/sync/`.
 
+Přihlásit se jde e-mailem a heslem (funguje hned) nebo přes Google — ten
+vyžaduje OAuth klienta v Google Cloud Console a přijde vhod až s Fází 3
+(kalendář), kdy bude stejně potřeba.
+
+## Nasazení
+
+Každý push na hlavní větev automaticky projde testy a nasadí se přes GitHub
+Actions na GitHub Pages (`.github/workflows/deploy.yml`):
+**https://michalkrausino.github.io/Todo-app/** — vyžaduje veřejné repo
+(GitHub Pages na privátním repu chce placený plán). Supabase URL a publishable
+klíč jsou ve workflow záměrně natvrdo — jsou to veřejné hodnoty, končí v JS
+bundlu tak jako tak; data chrání RLS.
+
 ## Stack
 
 React + TypeScript + Vite + Tailwind, PWA přes `vite-plugin-pwa`, lokální data

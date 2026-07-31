@@ -1,5 +1,5 @@
-import { useSyncExternalStore } from 'react'
-import { signInWithGoogle, signOutUser, syncNow } from '../sync/engine'
+import { useState, useSyncExternalStore } from 'react'
+import { signInWithGoogle, signInWithPassword, signOutUser, syncNow } from '../sync/engine'
 import { getSyncStatus, subscribeSyncStatus, type SyncPhase } from '../sync/status'
 
 const PHASE_LABELS: Record<SyncPhase, string> = {
@@ -41,20 +41,7 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
           </p>
         )}
 
-        {status.phase === 'signedOut' && (
-          <>
-            <p className="text-sm text-slate-600">
-              Přihlášením přes Google se data začnou zálohovat a synchronizovat
-              mezi tvými zařízeními. Appka dál funguje offline — sync běží na pozadí.
-            </p>
-            <button
-              onClick={() => void signInWithGoogle()}
-              className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-medium text-white"
-            >
-              Přihlásit se přes Google
-            </button>
-          </>
-        )}
+        {status.phase === 'signedOut' && <SignInForm />}
 
         {status.phase !== 'unconfigured' && status.phase !== 'signedOut' && (
           <>
@@ -101,6 +88,66 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
         )}
       </div>
     </div>
+  )
+}
+
+function SignInForm() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!email.trim() || !password) return
+    setBusy(true)
+    setError(null)
+    const err = await signInWithPassword(email.trim(), password)
+    if (err) setError(err)
+    setBusy(false)
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <p className="text-sm text-slate-600">
+        Přihlášením se data začnou zálohovat a synchronizovat mezi tvými
+        zařízeními. Appka dál funguje offline — sync běží na pozadí.
+      </p>
+      <input
+        type="email"
+        autoComplete="email"
+        placeholder="E-mail"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[15px] outline-none focus:border-indigo-400"
+      />
+      <input
+        type="password"
+        autoComplete="current-password"
+        placeholder="Heslo"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[15px] outline-none focus:border-indigo-400"
+      />
+      {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+      <button
+        type="submit"
+        disabled={busy || !email.trim() || !password}
+        className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-medium text-white disabled:opacity-40"
+      >
+        {busy ? 'Přihlašuji…' : 'Přihlásit se'}
+      </button>
+      <button
+        type="button"
+        onClick={() => void signInWithGoogle()}
+        className="w-full rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-500"
+      >
+        Přihlásit se přes Google
+      </button>
+      <p className="text-center text-[11px] text-slate-400">
+        Google přihlášení vyžaduje jednorázové nastavení (přijde s Fází 3 — kalendář).
+      </p>
+    </form>
   )
 }
 
