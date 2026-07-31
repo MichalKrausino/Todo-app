@@ -160,18 +160,34 @@ async function pushTable(name: LocalTableName): Promise<void> {
 
 const AUTH_ERRORS_CZ: Array<[RegExp, string]> = [
   [/invalid login credentials/i, 'Nesprávný e-mail nebo heslo.'],
-  [/email not confirmed/i, 'E-mail zatím není potvrzený.'],
+  [/email not confirmed/i, 'E-mail ještě není potvrzený — klikni na odkaz v e-mailu.'],
+  [/already registered/i, 'Účet s tímhle e-mailem už existuje — přihlas se.'],
+  [/password should be at least/i, 'Heslo musí mít aspoň 6 znaků.'],
+  [/signup.*(disabled|not allowed)/i, 'Registrace jsou v Supabase vypnuté.'],
   [/rate limit/i, 'Příliš mnoho pokusů, zkus to za chvíli.'],
   [/fetch|network/i, 'Nepodařilo se spojit se serverem. Jsi online?'],
 ]
+
+const czAuthError = (message: string): string =>
+  AUTH_ERRORS_CZ.find(([re]) => re.test(message))?.[1] ?? message
 
 // Vrací česky přeloženou chybu, nebo null při úspěchu.
 export async function signInWithPassword(email: string, password: string): Promise<string | null> {
   if (!sb) return 'Synchronizace není nakonfigurovaná.'
   const { error } = await sb.auth.signInWithPassword({ email, password })
-  if (!error) return null
-  const hit = AUTH_ERRORS_CZ.find(([re]) => re.test(error.message))
-  return hit ? hit[1] : error.message
+  return error ? czAuthError(error.message) : null
+}
+
+// Registrace e-mailem. needsConfirm = Supabase poslal potvrzovací e-mail
+// a přihlášení bude fungovat až po kliknutí na odkaz v něm.
+export async function signUpWithPassword(
+  email: string,
+  password: string,
+): Promise<{ error?: string; needsConfirm?: boolean }> {
+  if (!sb) return { error: 'Synchronizace není nakonfigurovaná.' }
+  const { data, error } = await sb.auth.signUp({ email, password })
+  if (error) return { error: czAuthError(error.message) }
+  return { needsConfirm: !data.session }
 }
 
 export async function signInWithGoogle(): Promise<void> {

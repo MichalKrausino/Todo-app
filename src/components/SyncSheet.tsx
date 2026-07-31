@@ -1,5 +1,11 @@
 import { useState, useSyncExternalStore } from 'react'
-import { signInWithGoogle, signInWithPassword, signOutUser, syncNow } from '../sync/engine'
+import {
+  signInWithGoogle,
+  signInWithPassword,
+  signOutUser,
+  signUpWithPassword,
+  syncNow,
+} from '../sync/engine'
 import { getSyncStatus, subscribeSyncStatus, type SyncPhase } from '../sync/status'
 
 const PHASE_LABELS: Record<SyncPhase, string> = {
@@ -96,19 +102,42 @@ function SignInForm() {
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
 
-  const submit = async (e: React.FormEvent) => {
+  const signIn = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email.trim() || !password) return
     setBusy(true)
     setError(null)
+    setInfo(null)
     const err = await signInWithPassword(email.trim(), password)
     if (err) setError(err)
     setBusy(false)
   }
 
+  const signUp = async () => {
+    if (!email.trim() || !password) {
+      setError('Vyplň e-mail a zvol si heslo (aspoň 6 znaků).')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setInfo(null)
+    const result = await signUpWithPassword(email.trim(), password)
+    if (result.error) {
+      setError(result.error)
+    } else if (result.needsConfirm) {
+      setInfo(
+        'Účet vytvořen! Mrkni do e-mailu a klikni na potvrzovací odkaz. ' +
+          'Stránka po kliknutí může hlásit chybu — to nevadí, účet je potvrzený. ' +
+          'Pak se sem vrať a přihlas se.',
+      )
+    }
+    setBusy(false)
+  }
+
   return (
-    <form onSubmit={submit} className="space-y-3">
+    <form onSubmit={signIn} className="space-y-3">
       <p className="text-sm text-slate-600">
         Přihlášením se data začnou zálohovat a synchronizovat mezi tvými
         zařízeními. Appka dál funguje offline — sync běží na pozadí.
@@ -130,20 +159,32 @@ function SignInForm() {
         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[15px] outline-none focus:border-indigo-400"
       />
       {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+      {info && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{info}</p>}
       <button
         type="submit"
         disabled={busy || !email.trim() || !password}
         className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-medium text-white disabled:opacity-40"
       >
-        {busy ? 'Přihlašuji…' : 'Přihlásit se'}
+        {busy ? 'Pracuji…' : 'Přihlásit se'}
       </button>
-      <button
-        type="button"
-        onClick={() => void signInWithGoogle()}
-        className="w-full rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-500"
-      >
-        Přihlásit se přes Google
-      </button>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void signUp()}
+          className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600"
+        >
+          Vytvořit nový účet
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void signInWithGoogle()}
+          className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-500"
+        >
+          Přes Google
+        </button>
+      </div>
       <p className="text-center text-[11px] text-slate-400">
         Google přihlášení vyžaduje jednorázové nastavení (přijde s Fází 3 — kalendář).
       </p>
