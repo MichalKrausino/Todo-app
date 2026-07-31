@@ -58,6 +58,11 @@ export function TaskRow({
                 {formatDayLabel(task.dueDate)}
               </span>
             )}
+            {(task.recurrenceRule || task.sourceTemplateItemId) && (
+              <span className="text-slate-400" title="Opakuje se">
+                ↻
+              </span>
+            )}
             {prio && <span className={prio.cls}>{prio.label}</span>}
           </div>
         )}

@@ -2,7 +2,15 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Priority, Project, Task } from '../db/types'
 import { activeClients, clientProjects, removeTask, updateTask } from '../db/repo'
+import { todayISO } from '../lib/dates'
 import { PRIORITY_LABELS } from '../lib/labels'
+import {
+  PRESET_LABELS,
+  humanizeRule,
+  presetFromRule,
+  ruleFromPreset,
+  type RecurrencePreset,
+} from '../lib/rrule'
 
 const field = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[15px] outline-none focus:border-indigo-400'
 const label = 'mb-1 block text-xs font-medium text-slate-500'
@@ -15,6 +23,9 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   const [priority, setPriority] = useState<Priority>(task.priority)
   const [dueDate, setDueDate] = useState(task.dueDate ?? '')
   const [scheduledFor, setScheduledFor] = useState(task.scheduledFor ?? '')
+  // 'none' | předvolba | 'custom' (existující pravidlo mimo předvolby zachovat)
+  const initialRecurrence = task.recurrenceRule ? presetFromRule(task.recurrenceRule) : 'none'
+  const [recurrence, setRecurrence] = useState<string>(initialRecurrence)
 
   const clients = useLiveQuery(activeClients, []) ?? []
   const projects =
@@ -26,6 +37,11 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   const save = async () => {
     if (!title.trim()) return
     const hasDate = Boolean(dueDate || scheduledFor)
+    let recurrenceRule: string | undefined
+    if (recurrence === 'custom') recurrenceRule = task.recurrenceRule
+    else if (recurrence !== 'none') {
+      recurrenceRule = ruleFromPreset(recurrence as RecurrencePreset, dueDate || scheduledFor || todayISO())
+    }
     await updateTask(task.id, {
       title: title.trim(),
       notes: notes.trim() || undefined,
@@ -34,6 +50,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
       priority,
       dueDate: dueDate || undefined,
       scheduledFor: scheduledFor || undefined,
+      recurrenceRule,
       status: task.status === 'inbox' && hasDate ? 'active' : task.status,
     })
     onClose()
@@ -113,15 +130,31 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           </div>
         </div>
 
-        <div>
-          <label className={label}>Priorita</label>
-          <select className={field} value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
-            {(Object.keys(PRIORITY_LABELS) as Priority[]).map((p) => (
-              <option key={p} value={p}>
-                {PRIORITY_LABELS[p]}
-              </option>
-            ))}
-          </select>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={label}>Priorita</label>
+            <select className={field} value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
+              {(Object.keys(PRIORITY_LABELS) as Priority[]).map((p) => (
+                <option key={p} value={p}>
+                  {PRIORITY_LABELS[p]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={label}>Opakování</label>
+            <select className={field} value={recurrence} onChange={(e) => setRecurrence(e.target.value)}>
+              <option value="none">Neopakuje se</option>
+              {(Object.keys(PRESET_LABELS) as RecurrencePreset[]).map((p) => (
+                <option key={p} value={p}>
+                  {PRESET_LABELS[p]}
+                </option>
+              ))}
+              {initialRecurrence === 'custom' && task.recurrenceRule && (
+                <option value="custom">Vlastní ({humanizeRule(task.recurrenceRule)})</option>
+              )}
+            </select>
+          </div>
         </div>
 
         <div>

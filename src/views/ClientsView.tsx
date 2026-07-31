@@ -18,20 +18,41 @@ import {
   sortTasks,
   updateClient,
 } from '../db/repo'
+import { activeTemplates, deployTemplate, undeployTemplate } from '../db/templates'
 import { CLIENT_COLORS, KIND_LABELS } from '../lib/labels'
+import { daysSince } from '../lib/dates'
 import { parseQuickAdd } from '../lib/quickAdd'
 import { TaskRow } from '../components/TaskRow'
+import { TemplatesView } from './TemplatesView'
+
+// Klient je „zanedbaný", když má nastavené hlídání a od poslední aktivity
+// (založení/dokončení úkolu) uběhlo víc dní.
+export function neglectedDays(c: Client): number | null {
+  if (!c.checkIntervalDays || !c.lastActivityAt) return null
+  const days = daysSince(c.lastActivityAt)
+  return days > c.checkIntervalDays ? days : null
+}
 
 export function ClientsView({ onOpenTask }: { onOpenTask: (t: Task) => void }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [showTemplates, setShowTemplates] = useState(false)
 
   if (selectedId) {
     return <ClientDetail id={selectedId} onBack={() => setSelectedId(null)} onOpenTask={onOpenTask} />
   }
-  return <ClientList onSelect={setSelectedId} />
+  if (showTemplates) {
+    return <TemplatesView onBack={() => setShowTemplates(false)} />
+  }
+  return <ClientList onSelect={setSelectedId} onTemplates={() => setShowTemplates(true)} />
 }
 
-function ClientList({ onSelect }: { onSelect: (id: string) => void }) {
+function ClientList({
+  onSelect,
+  onTemplates,
+}: {
+  onSelect: (id: string) => void
+  onTemplates: () => void
+}) {
   const clients = useLiveQuery(activeClients, []) ?? []
   const archived = useLiveQuery(archivedClients, []) ?? []
   const open = useLiveQuery(openTasks, []) ?? []
@@ -53,6 +74,11 @@ function ClientList({ onSelect }: { onSelect: (id: string) => void }) {
           <span className="block truncate text-[15px] font-medium">{c.name}</span>
           <span className="text-xs text-slate-400">{KIND_LABELS[c.kind]}</span>
         </span>
+        {neglectedDays(c) !== null && (
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+            ⚠ {neglectedDays(c)} dní
+          </span>
+        )}
         {(counts.get(c.id) ?? 0) > 0 && (
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
             {counts.get(c.id)}
@@ -72,12 +98,20 @@ function ClientList({ onSelect }: { onSelect: (id: string) => void }) {
           <h1 className="text-2xl font-bold">Klienti</h1>
           <p className="text-sm text-slate-500">Klienti i oblasti jako „Interní“ nebo „Osobní“</p>
         </div>
-        <button
-          onClick={() => setAdding((v) => !v)}
-          className="rounded-full bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white"
-        >
-          {adding ? 'Zavřít' : '+ Nový'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={onTemplates}
+            className="rounded-full border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600"
+          >
+            Šablony
+          </button>
+          <button
+            onClick={() => setAdding((v) => !v)}
+            className="rounded-full bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white"
+          >
+            {adding ? 'Zavřít' : '+ Nový'}
+          </button>
+        </div>
       </header>
 
       {adding && <NewClientForm onDone={() => setAdding(false)} />}
@@ -169,11 +203,23 @@ function ClientDetail({
   const client = useLiveQuery(() => getClient(id), [id])
   const projects = useLiveQuery(() => clientProjects(id), [id]) ?? []
   const tasks = useLiveQuery(() => clientOpenTasks(id), [id]) ?? []
+  const templates = useLiveQuery(activeTemplates, []) ?? []
   const [taskText, setTaskText] = useState('')
   const [projName, setProjName] = useState('')
   const [addingProject, setAddingProject] = useState(false)
 
   if (!client || client.deletedAt) return null
+
+  const toggleTemplate = (templateId: string) => {
+    void (client.templateIds.includes(templateId)
+      ? undeployTemplate(id, templateId)
+      : deployTemplate(id, templateId))
+  }
+
+  const setWatch = (value: string) => {
+    const n = Number(value)
+    void updateClient(id, { checkIntervalDays: n > 0 ? n : undefined })
+  }
 
   const noProject = sortTasks(tasks.filter((t) => !t.projectId))
 
@@ -258,6 +304,54 @@ function ClientDetail({
           Přidat
         </button>
       </form>
+
+      {templates.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Šablony</h2>
+          <div className="flex flex-wrap gap-2">
+            {templates.map((t) => {
+              const deployed = client.templateIds.includes(t.id)
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => toggleTemplate(t.id)}
+                  className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+                    deployed
+                      ? 'bg-indigo-600 text-white'
+                      : 'border border-slate-200 bg-white text-slate-500'
+                  }`}
+                >
+                  {deployed ? '✓ ' : '+ '}
+                  {t.name}
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      <section className="flex items-center justify-between rounded-xl bg-white px-3 py-2.5 shadow-sm">
+        <div className="text-sm">
+          <div className="font-medium">Hlídat zanedbání</div>
+          <div className="text-xs text-slate-400">
+            {client.lastActivityAt
+              ? `Poslední aktivita před ${daysSince(client.lastActivityAt)} dny`
+              : 'Zatím žádná aktivita'}
+          </div>
+        </div>
+        <label className="flex items-center gap-1.5 text-sm text-slate-500">
+          po
+          <input
+            type="number"
+            min="0"
+            inputMode="numeric"
+            defaultValue={client.checkIntervalDays ?? ''}
+            onBlur={(e) => setWatch(e.target.value)}
+            className="w-16 rounded-lg border border-slate-200 px-2 py-1.5 text-center text-[15px] outline-none focus:border-indigo-400"
+          />
+          dnech
+        </label>
+      </section>
 
       {noProject.length > 0 && (
         <section>

@@ -75,4 +75,24 @@ describe('parseQuickAdd', () => {
   it('dnešní den v týdnu znamená dnes', () => {
     expect(parseQuickAdd('ve středu standup', [], TODAY).dueDate).toBe('2026-07-29')
   })
+
+  it('rozpozná „každý pátek" jako opakování s termínem na nejbližší pátek', () => {
+    const r = parseQuickAdd('každý pátek kontrola kampaní', [], TODAY)
+    expect(r.recurrenceRule).toBe('FREQ=WEEKLY;BYDAY=FR')
+    expect(r.dueDate).toBe('2026-07-31')
+    expect(r.title).toBe('kontrola kampaní')
+  })
+
+  it('rozpozná každý den / měsíc a intervaly', () => {
+    expect(parseQuickAdd('každý den standup', [], TODAY).recurrenceRule).toBe('FREQ=DAILY')
+    expect(parseQuickAdd('každý měsíc report', [], TODAY).recurrenceRule).toBe('FREQ=MONTHLY;BYMONTHDAY=29')
+    expect(parseQuickAdd('každých 14 dní fakturace', [], TODAY).recurrenceRule).toBe('FREQ=DAILY;INTERVAL=14')
+    expect(parseQuickAdd('každé 2 týdny plánování', [], TODAY).recurrenceRule).toBe(
+      'FREQ=WEEKLY;INTERVAL=2;BYDAY=WE',
+    )
+  })
+
+  it('bez „každý" se opakování nenastaví', () => {
+    expect(parseQuickAdd('v pátek report', [], TODAY).recurrenceRule).toBeUndefined()
+  })
 })

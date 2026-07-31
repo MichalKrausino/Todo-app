@@ -55,6 +55,7 @@ export interface Task extends BaseRecord {
 }
 
 export interface TemplateItem {
+  id: string // stabilní napříč úpravami — instance se na něj odkazují přes sourceTemplateItemId
   title: string
   recurrenceRule: string
   priority: Priority

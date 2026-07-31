@@ -4,6 +4,7 @@ import { activeClients, addTask } from '../db/repo'
 import { formatDayLabel } from '../lib/dates'
 import { PRIORITY_LABELS } from '../lib/labels'
 import { parseQuickAdd } from '../lib/quickAdd'
+import { humanizeRule } from '../lib/rrule'
 
 export function QuickAdd() {
   const [text, setText] = useState('')
@@ -22,6 +23,7 @@ export function QuickAdd() {
       dueDate: parsed.dueDate,
       clientId: parsed.clientId,
       priority: parsed.priority,
+      recurrenceRule: parsed.recurrenceRule,
     })
     setText('')
   }
@@ -30,11 +32,16 @@ export function QuickAdd() {
 
   return (
     <div className="px-3 pt-2">
-      {parsed && (parsed.dueDate || client || parsed.priority !== 'normal') && (
+      {parsed && (parsed.dueDate || client || parsed.priority !== 'normal' || parsed.recurrenceRule) && (
         <div className="flex flex-wrap gap-1.5 px-1 pb-1.5 text-[11px]">
           {parsed.dueDate && (
             <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700">
               {formatDayLabel(parsed.dueDate)}
+            </span>
+          )}
+          {parsed.recurrenceRule && (
+            <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700">
+              ↻ {humanizeRule(parsed.recurrenceRule)}
             </span>
           )}
           {client && (

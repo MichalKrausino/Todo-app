@@ -4,6 +4,9 @@
 import { db } from './db'
 import { emitRepoWrite } from './events'
 import type { Client, ClientKind, Priority, Project, Task, TaskStatus } from './types'
+import { deterministicUuid } from '../lib/deterministicId'
+import { todayISO } from '../lib/dates'
+import { nextOccurrence } from '../lib/rrule'
 
 const now = () => new Date().toISOString()
 
@@ -113,6 +116,7 @@ export async function addTask(input: {
   dueDate?: string
   scheduledFor?: string
   notes?: string
+  recurrenceRule?: string
 }): Promise<Task> {
   const status: TaskStatus = input.dueDate || input.scheduledFor ? 'active' : 'inbox'
   const task: Task = {
@@ -142,7 +146,37 @@ export async function completeTask(id: string): Promise<void> {
   if (task?.clientId) {
     await db.clients.update(task.clientId, { lastActivityAt: t, updatedAt: t })
   }
+  await respawnRecurring(task, t)
   emitRepoWrite()
+}
+
+// Opakující se úkol se po dokončení sám založí na další termín.
+// Deterministické id (řetěz z původního úkolu) brání duplikátům, když
+// tentýž úkol odškrtnou obě zařízení offline.
+async function respawnRecurring(task: Task | undefined, t: string): Promise<void> {
+  if (!task?.recurrenceRule || !task.dueDate) return
+  const after = task.dueDate > todayISO() ? task.dueDate : todayISO()
+  let next: string | null
+  try {
+    next = nextOccurrence(task.recurrenceRule, task.dueDate, after)
+  } catch {
+    return // nevalidní pravidlo nesmí rozbít odškrtnutí
+  }
+  if (!next) return
+  const nid = await deterministicUuid('respawn', task.id, next)
+  if (await db.tasks.get(nid)) return
+  const successor: Task = {
+    ...task,
+    id: nid,
+    createdAt: t,
+    updatedAt: t,
+    status: 'active',
+    dueDate: next,
+    scheduledFor: undefined,
+    completedAt: undefined,
+    calendarEventId: undefined,
+  }
+  await db.tasks.add(successor)
 }
 
 export async function reopenTask(id: string): Promise<void> {

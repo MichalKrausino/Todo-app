@@ -29,6 +29,12 @@ instalace ani (v pozdější fázi) push notifikace.
 - Instalace na plochu, offline režim přes service worker
 - Synchronizace mezi zařízeními přes Supabase (Google login, tombstony,
   last-write-wins) — vyžaduje jednorázové nastavení níže
+- Šablony pravidelných úkolů („Správa PPC“ → týdenní kontrola, měsíční
+  report…) nasaditelné na klienty; úkoly se generují 30 dní dopředu
+- Opakování úkolů: „každý pátek report“, „každých 14 dní fakturace“ —
+  po odškrtnutí se úkol sám založí na další termín
+- Hlídání zanedbaných klientů: nastav u klienta „hlídat po X dnech“
+  a appka tě upozorní, když se u něj dlouho nic nedělo
 
 ## Synchronizace (Fáze 2) — jednorázové nastavení
 

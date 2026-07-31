@@ -9,6 +9,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { db } from '../db/db'
 import { onRepoWrite } from '../db/events'
+import { reconcileTemplates } from '../db/templates'
 import type { Table } from 'dexie'
 import { SUPABASE_ANON_KEY, SUPABASE_URL, isSupabaseConfigured } from './config'
 import {
@@ -86,6 +87,8 @@ export async function syncNow(): Promise<void> {
     for (const name of LOCAL_TABLE_NAMES) await pullTable(name)
     for (const name of LOCAL_TABLE_NAMES) await pushTable(name)
     setSyncStatus({ phase: 'idle', lastSyncAt: new Date().toISOString(), error: undefined })
+    // Pull mohl přinést změny šablon z druhého zařízení — dogenerovat instance.
+    await reconcileTemplates()
   } catch (e) {
     setSyncStatus({ phase: 'error', error: e instanceof Error ? e.message : String(e) })
   } finally {

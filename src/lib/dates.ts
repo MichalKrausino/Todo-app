@@ -40,3 +40,10 @@ export function formatDayLabel(iso: string): string {
 export function formatFullDate(d: Date): string {
   return fullFmt.format(d)
 }
+
+// Celé dny od daného ISO datetime do dneška (lokálně, po dnech).
+export function daysSince(isoDatetime: string): number {
+  const then = fromISODate(isoDatetime.slice(0, 10))
+  const today = fromISODate(todayISO())
+  return Math.round((today.getTime() - then.getTime()) / 86400000)
+}
