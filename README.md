@@ -35,6 +35,9 @@ instalace ani (v pozdější fázi) push notifikace.
   po odškrtnutí se úkol sám založí na další termín
 - Hlídání zanedbaných klientů: nastav u klienta „hlídat po X dnech“
   a appka tě upozorní, když se u něj dlouho nic nedělo
+- Tiché signály na obrazovce Dnes („Nepropadá ti něco?“): klient bez
+  naplánované práce, projekt bez dalšího kroku, úkoly ležící v inboxu,
+  opakovaně odkládané úkoly — připomínky věcí, které sis nezapsal
 
 ## Synchronizace (Fáze 2) — jednorázové nastavení
 

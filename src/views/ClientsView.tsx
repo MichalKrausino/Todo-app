@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Client, ClientKind, Task } from '../db/types'
 import {
@@ -22,20 +22,29 @@ import { activeTemplates, deployTemplate, undeployTemplate } from '../db/templat
 import { CLIENT_COLORS, KIND_LABELS } from '../lib/labels'
 import { daysSince } from '../lib/dates'
 import { parseQuickAdd } from '../lib/quickAdd'
+import { neglectedDays } from '../lib/signals'
 import { TaskRow } from '../components/TaskRow'
 import { TemplatesView } from './TemplatesView'
 
-// Klient je „zanedbaný", když má nastavené hlídání a od poslední aktivity
-// (založení/dokončení úkolu) uběhlo víc dní.
-export function neglectedDays(c: Client): number | null {
-  if (!c.checkIntervalDays || !c.lastActivityAt) return null
-  const days = daysSince(c.lastActivityAt)
-  return days > c.checkIntervalDays ? days : null
-}
-
-export function ClientsView({ onOpenTask }: { onOpenTask: (t: Task) => void }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+export function ClientsView({
+  onOpenTask,
+  focusClientId,
+  onFocusConsumed,
+}: {
+  onOpenTask: (t: Task) => void
+  focusClientId?: string | null
+  onFocusConsumed?: () => void
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(focusClientId ?? null)
   const [showTemplates, setShowTemplates] = useState(false)
+
+  useEffect(() => {
+    if (focusClientId) {
+      setSelectedId(focusClientId)
+      setShowTemplates(false)
+      onFocusConsumed?.()
+    }
+  }, [focusClientId, onFocusConsumed])
 
   if (selectedId) {
     return <ClientDetail id={selectedId} onBack={() => setSelectedId(null)} onOpenTask={onOpenTask} />

@@ -45,6 +45,7 @@ návrhy a reakce na ně, Fáze 6). Úkol může viset přímo pod klientem bez p
 - [x] Fáze 2 — dvě zařízení: Google login, Supabase schéma (`supabase/schema.sql`), sync s tombstony (`src/sync/`) — kód hotový; zbývá jednorázově založit Supabase projekt podle README a ověřit na dvou zařízeních
 - [ ] Fáze 3 — Google Calendar: čtení volných oken, zápis bloků do kalendáře „Todo“
 - [x] Fáze 4 — šablony (`src/db/templates.ts`), RRULE opakování (`src/lib/rrule.ts`, knihovna rrule), hlídání zanedbaných klientů. Instance šablon mají deterministická id (`src/lib/deterministicId.ts`) — obě zařízení generují totéž, sync nevyrábí duplikáty a tombstone smazané instance vyhrává. Pravidla šablon s INTERVAL>1 se kotví k `RULE_EPOCH`. Samostatný opakující se úkol se po dokončení sám založí na další termín (respawn v `completeTask`). Reconciler běží při startu, při návratu do popředí a po doběhnutí syncu; generuje 30 dní dopředu.
+- [x] Fáze 4.5 — tiché signály (`src/lib/signals.ts`, čisté funkce): zanedbaní klienti, klienti bez naplánovaného úkolu, projekty bez dalšího kroku, ležáky v inboxu, opakovaně odkládané úkoly (`postponeCount` počítá `updateTask` při posunu termínu na později; respawn ho nuluje). Zobrazuje blok „Nepropadá ti něco?" na Dnes (`SignalsBlock`), řádky navigují na klienta/úkol/inbox. Ranní návrh dne (Fáze 6) má z těchto signálů čerpat.
 - [ ] Fáze 5 — AI: tiché odhady času, rozpad projektů, chytřejší parsování
 - [ ] Fáze 6 — push notifikace + ranní návrh dne (pg_cron)
 - [ ] Fáze 7 — týdenní zpětná vazba

@@ -48,6 +48,13 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('today')
   const [editing, setEditing] = useState<Task | null>(null)
   const [syncOpen, setSyncOpen] = useState(false)
+  // Navigace z tichých signálů: otevřít konkrétního klienta na záložce Klienti.
+  const [clientFocus, setClientFocus] = useState<string | null>(null)
+
+  const openClient = (id: string) => {
+    setClientFocus(id)
+    setTab('clients')
+  }
 
   return (
     <div className="relative mx-auto flex h-dvh max-w-lg flex-col bg-slate-50 text-slate-900 antialiased">
@@ -61,9 +68,21 @@ export default function App() {
         className="flex-1 overflow-y-auto px-4 pb-4"
         style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }}
       >
-        {tab === 'today' && <TodayView onOpenTask={setEditing} />}
+        {tab === 'today' && (
+          <TodayView
+            onOpenTask={setEditing}
+            onOpenClient={openClient}
+            onOpenInbox={() => setTab('upcoming')}
+          />
+        )}
         {tab === 'upcoming' && <UpcomingView onOpenTask={setEditing} />}
-        {tab === 'clients' && <ClientsView onOpenTask={setEditing} />}
+        {tab === 'clients' && (
+          <ClientsView
+            onOpenTask={setEditing}
+            focusClientId={clientFocus}
+            onFocusConsumed={() => setClientFocus(null)}
+          />
+        )}
       </main>
 
       <footer

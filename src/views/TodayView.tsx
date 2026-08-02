@@ -2,8 +2,9 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import type { Task } from '../db/types'
 import { allClients, allProjects, completeTask, doneOn, openTasks, reopenTask, sortTasks } from '../db/repo'
 import { formatFullDate, todayISO } from '../lib/dates'
+import { computeSignals } from '../lib/signals'
+import { SignalsBlock } from '../components/SignalsBlock'
 import { TaskRow } from '../components/TaskRow'
-import { neglectedDays } from './ClientsView'
 
 // Nejbližší relevantní den úkolu — dřívější z „naplánováno“ a „termín“.
 const effectiveDate = (t: Task): string | undefined => {
@@ -11,7 +12,15 @@ const effectiveDate = (t: Task): string | undefined => {
   return dates.sort()[0]
 }
 
-export function TodayView({ onOpenTask }: { onOpenTask: (t: Task) => void }) {
+export function TodayView({
+  onOpenTask,
+  onOpenClient,
+  onOpenInbox,
+}: {
+  onOpenTask: (t: Task) => void
+  onOpenClient: (id: string) => void
+  onOpenInbox: () => void
+}) {
   const today = todayISO()
   const open = useLiveQuery(openTasks, []) ?? []
   const done = useLiveQuery(() => doneOn(today), [today]) ?? []
@@ -51,25 +60,12 @@ export function TodayView({ onOpenTask }: { onOpenTask: (t: Task) => void }) {
         <p className="text-sm text-slate-500 first-letter:uppercase">{formatFullDate(new Date())}</p>
       </header>
 
-      {(() => {
-        const neglected = clients
-          .filter((c) => c.status === 'active')
-          .map((c) => ({ c, days: neglectedDays(c) }))
-          .filter((x): x is { c: (typeof clients)[0]; days: number } => x.days !== null)
-          .sort((a, b) => b.days - a.days)
-        if (neglected.length === 0) return null
-        return (
-          <div className="rounded-xl bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
-            <span className="font-semibold">Dlouho se nic nedělo: </span>
-            {neglected.map(({ c, days }, i) => (
-              <span key={c.id}>
-                {i > 0 && ', '}
-                {c.name} ({days} dní)
-              </span>
-            ))}
-          </div>
-        )
-      })()}
+      <SignalsBlock
+        signals={computeSignals(clients, projects, [...open, ...done], today)}
+        onOpenClient={onOpenClient}
+        onOpenTask={onOpenTask}
+        onOpenInbox={onOpenInbox}
+      />
 
       {overdue.length > 0 && (
         <section>

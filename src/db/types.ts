@@ -51,6 +51,7 @@ export interface Task extends BaseRecord {
   recurrenceRule?: string // iCal RRULE (Fáze 4)
   sourceTemplateItemId?: string
   completedAt?: string
+  postponeCount?: number // kolikrát byl termín posunut na později (signál odkládání)
   order: number
 }
 

@@ -119,6 +119,36 @@ describe('reconcileTemplates', () => {
   })
 })
 
+describe('počítání odkladů (updateTask)', () => {
+  beforeEach(resetDb)
+
+  it('posun na později zvedne počítadlo, posun dopředu ne', async () => {
+    const { addTask, updateTask } = await import('./repo')
+    const t = await addTask({ title: 'Report', dueDate: '2026-08-03' })
+
+    await updateTask(t.id, { dueDate: '2026-08-05' }) // odklad
+    await updateTask(t.id, { dueDate: '2026-08-04' }) // předsunutí — nepočítá se
+    await updateTask(t.id, { title: 'Report v2' }) // beze změny data
+    await updateTask(t.id, { dueDate: '2026-08-10' }) // druhý odklad
+
+    const after = await db.tasks.get(t.id)
+    expect(after?.postponeCount).toBe(2)
+  })
+
+  it('respawn opakujícího se úkolu začíná s čistým počítadlem', async () => {
+    const { addTask, updateTask } = await import('./repo')
+    const t = await addTask({ title: 'Záloha', dueDate: '2026-07-31' })
+    await db.tasks.update(t.id, { recurrenceRule: 'FREQ=WEEKLY;BYDAY=FR' })
+    await updateTask(t.id, { dueDate: '2026-08-01' })
+    await completeTask(t.id)
+
+    const successor = await db.tasks
+      .filter((x) => !x.deletedAt && x.status === 'active')
+      .first()
+    expect(successor?.postponeCount).toBeUndefined()
+  })
+})
+
 describe('opakování samostatného úkolu (respawn)', () => {
   beforeEach(resetDb)
 

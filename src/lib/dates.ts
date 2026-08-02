@@ -42,8 +42,8 @@ export function formatFullDate(d: Date): string {
 }
 
 // Celé dny od daného ISO datetime do dneška (lokálně, po dnech).
-export function daysSince(isoDatetime: string): number {
+export function daysSince(isoDatetime: string, todayRef: string = todayISO()): number {
   const then = fromISODate(isoDatetime.slice(0, 10))
-  const today = fromISODate(todayISO())
+  const today = fromISODate(todayRef)
   return Math.round((today.getTime() - then.getTime()) / 86400000)
 }

@@ -134,8 +134,28 @@ export async function addTask(input: {
   return task
 }
 
+// Nejbližší relevantní den úkolu — dřívější z „naplánováno“ a „termín“.
+const effectiveDate = (due?: string, scheduled?: string): string | undefined => {
+  const dates = [scheduled, due].filter((d): d is string => Boolean(d))
+  return dates.sort()[0]
+}
+
 export async function updateTask(id: string, patch: Partial<Task>): Promise<void> {
-  await db.tasks.update(id, { ...patch, updatedAt: now() })
+  const existing = await db.tasks.get(id)
+  const stamped: Partial<Task> = { ...patch, updatedAt: now() }
+  // Posun na pozdější den = odklad. Počítadlo je podklad pro tiché signály
+  // („odloženo už 4×") a týdenní zpětnou vazbu (Fáze 7).
+  if (existing) {
+    const oldEff = effectiveDate(existing.dueDate, existing.scheduledFor)
+    const newEff = effectiveDate(
+      'dueDate' in patch ? patch.dueDate : existing.dueDate,
+      'scheduledFor' in patch ? patch.scheduledFor : existing.scheduledFor,
+    )
+    if (oldEff && newEff && newEff > oldEff) {
+      stamped.postponeCount = (existing.postponeCount ?? 0) + 1
+    }
+  }
+  await db.tasks.update(id, stamped)
   emitRepoWrite()
 }
 
@@ -175,6 +195,7 @@ async function respawnRecurring(task: Task | undefined, t: string): Promise<void
     scheduledFor: undefined,
     completedAt: undefined,
     calendarEventId: undefined,
+    postponeCount: undefined, // nový výskyt začíná s čistým štítem
   }
   await db.tasks.add(successor)
 }
