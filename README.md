@@ -40,6 +40,9 @@ instalace ani (v pozdější fázi) push notifikace.
   opakovaně odkládané úkoly — připomínky věcí, které sis nezapsal
 - Týdenní ohlédnutí (neděle/pondělí na Dnes): kolik se stihlo a komu,
   plán vs. realita, co odkládáš, u koho byl tichý týden, výhled na 7 dní
+- Pravidelná připomínka kontroly klienta (týdně / každé 2 týdny / měsíčně):
+  úkol „Zkontrolovat klienta“ se po odškrtnutí sám vrací — zapíná se při
+  vytváření klienta nebo v jeho detailu
 
 ## Synchronizace (Fáze 2) — jednorázové nastavení
 

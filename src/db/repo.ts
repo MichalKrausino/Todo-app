@@ -117,6 +117,7 @@ export async function addTask(input: {
   scheduledFor?: string
   notes?: string
   recurrenceRule?: string
+  isClientCheck?: boolean
 }): Promise<Task> {
   const status: TaskStatus = input.dueDate || input.scheduledFor ? 'active' : 'inbox'
   const task: Task = {

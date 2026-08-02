@@ -19,8 +19,15 @@ import {
   updateClient,
 } from '../db/repo'
 import { activeTemplates, deployTemplate, undeployTemplate } from '../db/templates'
+import {
+  CHECK_FREQUENCY_LABELS,
+  checkFrequencyOf,
+  getClientCheckTask,
+  setClientCheck,
+  type CheckFrequency,
+} from '../db/clientCheck'
 import { CLIENT_COLORS, KIND_LABELS } from '../lib/labels'
-import { daysSince } from '../lib/dates'
+import { daysSince, formatDayLabel } from '../lib/dates'
 import { parseQuickAdd } from '../lib/quickAdd'
 import { neglectedDays } from '../lib/signals'
 import { TaskRow } from '../components/TaskRow'
@@ -148,12 +155,15 @@ function ClientList({
 function NewClientForm({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState('')
   const [kind, setKind] = useState<ClientKind>('client')
-  const [color, setColor] = useState(CLIENT_COLORS[7])
+  const [color, setColor] = useState(CLIENT_COLORS[6])
+  const [checkOn, setCheckOn] = useState(false)
+  const [checkFreq, setCheckFreq] = useState<CheckFrequency>('weekly')
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
-    await addClient({ name: name.trim(), kind, color })
+    const client = await addClient({ name: name.trim(), kind, color })
+    if (checkOn) await setClientCheck(client, checkFreq)
     onDone()
   }
 
@@ -189,6 +199,39 @@ function NewClientForm({ onDone }: { onDone: () => void }) {
           />
         ))}
       </div>
+
+      <div className="overflow-hidden rounded-lg border border-line">
+        <label className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5">
+          <span className="text-[15px]">
+            Pravidelná připomínka kontroly
+            <span className="block text-xs text-ink-soft">
+              Úkol „Zkontrolovat klienta“ se sám vrací na Dnes
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={checkOn}
+            onChange={(e) => setCheckOn(e.target.checked)}
+            className="h-5 w-5 shrink-0"
+          />
+        </label>
+        {checkOn && (
+          <div className="border-t border-line px-3 py-2.5">
+            <select
+              value={checkFreq}
+              onChange={(e) => setCheckFreq(e.target.value as CheckFrequency)}
+              className="w-full rounded-lg border border-line bg-card px-3 py-2 text-[15px] outline-none focus:border-accent/60"
+            >
+              {(Object.keys(CHECK_FREQUENCY_LABELS) as CheckFrequency[]).map((f) => (
+                <option key={f} value={f}>
+                  {CHECK_FREQUENCY_LABELS[f]}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
       <button
         type="submit"
         disabled={!name.trim()}
@@ -213,6 +256,7 @@ function ClientDetail({
   const projects = useLiveQuery(() => clientProjects(id), [id]) ?? []
   const tasks = useLiveQuery(() => clientOpenTasks(id), [id]) ?? []
   const templates = useLiveQuery(activeTemplates, []) ?? []
+  const checkTask = useLiveQuery(() => getClientCheckTask(id), [id])
   const [taskText, setTaskText] = useState('')
   const [projName, setProjName] = useState('')
   const [addingProject, setAddingProject] = useState(false)
@@ -339,27 +383,53 @@ function ClientDetail({
         </section>
       )}
 
-      <section className="flex items-center justify-between rounded-2xl bg-card px-3 py-2.5 shadow-card">
-        <div className="text-sm">
-          <div className="font-medium">Hlídat zanedbání</div>
-          <div className="text-xs text-ink-faint">
-            {client.lastActivityAt
-              ? `Poslední aktivita před ${daysSince(client.lastActivityAt)} dny`
-              : 'Zatím žádná aktivita'}
+      <section className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+          <div className="text-sm">
+            <div className="font-medium">Pravidelná kontrola</div>
+            <div className="text-xs text-ink-faint">
+              {checkTask?.dueDate
+                ? `Příště ${formatDayLabel(checkTask.dueDate).toLowerCase()}`
+                : 'Připomínka se vrací sama na Dnes'}
+            </div>
           </div>
+          <select
+            value={checkFrequencyOf(checkTask) ?? ''}
+            onChange={(e) =>
+              void setClientCheck(client, (e.target.value || null) as CheckFrequency | null)
+            }
+            className="rounded-lg border border-line bg-card px-2 py-1.5 text-sm outline-none focus:border-accent/60"
+          >
+            <option value="">Vypnuto</option>
+            {(Object.keys(CHECK_FREQUENCY_LABELS) as CheckFrequency[]).map((f) => (
+              <option key={f} value={f}>
+                {CHECK_FREQUENCY_LABELS[f]}
+              </option>
+            ))}
+          </select>
         </div>
-        <label className="flex items-center gap-1.5 text-sm text-ink-soft">
-          po
-          <input
-            type="number"
-            min="0"
-            inputMode="numeric"
-            defaultValue={client.checkIntervalDays ?? ''}
-            onBlur={(e) => setWatch(e.target.value)}
-            className="w-16 rounded-lg border border-line px-2 py-1.5 text-center text-[15px] outline-none focus:border-accent/60"
-          />
-          dnech
-        </label>
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+          <div className="text-sm">
+            <div className="font-medium">Hlídat zanedbání</div>
+            <div className="text-xs text-ink-faint">
+              {client.lastActivityAt
+                ? `Poslední aktivita před ${daysSince(client.lastActivityAt)} dny`
+                : 'Zatím žádná aktivita'}
+            </div>
+          </div>
+          <label className="flex items-center gap-1.5 text-sm text-ink-soft">
+            po
+            <input
+              type="number"
+              min="0"
+              inputMode="numeric"
+              defaultValue={client.checkIntervalDays ?? ''}
+              onBlur={(e) => setWatch(e.target.value)}
+              className="w-16 rounded-lg border border-line px-2 py-1.5 text-center text-[15px] outline-none focus:border-accent/60"
+            />
+            dnech
+          </label>
+        </div>
       </section>
 
       {noProject.length > 0 && (

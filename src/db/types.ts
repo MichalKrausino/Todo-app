@@ -52,6 +52,7 @@ export interface Task extends BaseRecord {
   sourceTemplateItemId?: string
   completedAt?: string
   postponeCount?: number // kolikrát byl termín posunut na později (signál odkládání)
+  isClientCheck?: boolean // pravidelná připomínka „zkontrolovat klienta" (marker přežívá respawn)
   order: number
 }
 

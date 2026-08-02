@@ -55,6 +55,8 @@ v iOS modré — při změně brandu přegenerovat.
 `src/db/types.ts`: Client (zároveň oblast: `client | internal | personal`) →
 Project → Task; Template (balíčky pravidelných úkolů, Fáze 4), DayPlan (ranní
 návrhy a reakce na ně, Fáze 6). Úkol může viset přímo pod klientem bez projektu.
+Pravidelná připomínka kontroly klienta = opakující se úkol s markerem
+`isClientCheck` (`src/db/clientCheck.ts`), marker přežívá respawn.
 
 ## Stav fází (roadmapa v docs/PLAN.md)
 
