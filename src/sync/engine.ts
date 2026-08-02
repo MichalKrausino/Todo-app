@@ -60,13 +60,17 @@ export function initSync(): void {
           })
       }
       void syncNow()
+      void healPushSubscription()
     } else {
       setSyncStatus({ phase: 'signedOut', email: undefined })
     }
   })
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') void syncNow()
+    if (document.visibilityState === 'visible') {
+      void syncNow()
+      void healPushSubscription()
+    }
   })
   window.addEventListener('online', () => void syncNow())
 
@@ -225,6 +229,11 @@ export async function signOutUser(): Promise<void> {
 
 // ---------- Push notifikace (ranní návrh dne, Fáze 6) ----------
 
+// iOS umí push odběr potichu zahodit (např. po delší neaktivitě appky).
+// Flag drží záměr uživatele („chci push“) přes localStorage, aby se odběr
+// uměl sám obnovit, aniž bychom obnovovali i vědomě vypnutý.
+const PUSH_WANTED_KEY = 'todo.pushWanted'
+
 export const isPushSupported = (): boolean =>
   'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
 
@@ -262,13 +271,43 @@ export async function enablePush(): Promise<string | null> {
     { endpoint: subscription.endpoint, subscription: subscription.toJSON() },
     { onConflict: 'endpoint' },
   )
+  if (!error) localStorage.setItem(PUSH_WANTED_KEY, '1')
   return error ? error.message : null
 }
 
 export async function disablePush(): Promise<void> {
+  localStorage.removeItem(PUSH_WANTED_KEY)
   const reg = await navigator.serviceWorker.ready
   const subscription = await reg.pushManager.getSubscription()
   if (!subscription) return
   await sb?.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint)
   await subscription.unsubscribe()
+}
+
+// Samoléčba odběru: když uživatel push chce a systém odběr zahodil (nebo
+// vyměnil endpoint), potichu se znovu přihlásí a obnoví záznam na serveru.
+// Bez dialogů — běží jen s už uděleným povolením. Throttle drží síťový
+// šum na jednom pokusu za pár hodin.
+let lastHealAt = 0
+
+async function healPushSubscription(): Promise<void> {
+  if (!sb || localStorage.getItem(PUSH_WANTED_KEY) !== '1') return
+  if (!isPushSupported() || Notification.permission !== 'granted') return
+  if (Date.now() - lastHealAt < 4 * 3600_000) return
+  lastHealAt = Date.now()
+  try {
+    const reg = await navigator.serviceWorker.ready
+    const subscription =
+      (await reg.pushManager.getSubscription()) ??
+      (await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: base64UrlToUint8Array(VAPID_PUBLIC_KEY) as unknown as BufferSource,
+      }))
+    await sb.from('push_subscriptions').upsert(
+      { endpoint: subscription.endpoint, subscription: subscription.toJSON() },
+      { onConflict: 'endpoint' },
+    )
+  } catch {
+    lastHealAt = 0 // neúspěch neblokuje další pokus při příštím probuzení
+  }
 }

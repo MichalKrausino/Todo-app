@@ -17,30 +17,44 @@ registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html')))
 
 self.addEventListener('push', (event) => {
   if (!event.data) return
-  let payload: { title?: string; body?: string; url?: string } = {}
+  let payload: { title?: string; body?: string; url?: string; tag?: string; badge?: number } = {}
   try {
     payload = event.data.json()
   } catch {
     payload = { body: event.data.text() }
   }
-  event.waitUntil(
+  const work: Promise<unknown>[] = [
     self.registration.showNotification(payload.title ?? 'Todo', {
       body: payload.body,
       icon: 'icon-192.png',
       badge: 'icon-192.png',
       data: { url: payload.url },
-      tag: 'morning-plan', // nová ranní notifikace nahradí starou
+      tag: payload.tag ?? 'todo', // stejný druh notifikace se nahrazuje, nekupí
     }),
-  )
+  ]
+  // Odznak na ikoně (iOS 16.4+): server posílá počet úkolů na dnes + po termínu.
+  if (typeof payload.badge === 'number' && 'setAppBadge' in self.navigator) {
+    work.push(
+      payload.badge > 0
+        ? self.navigator.setAppBadge(payload.badge).catch(() => {})
+        : self.navigator.clearAppBadge().catch(() => {}),
+    )
+  }
+  event.waitUntil(Promise.all(work))
 })
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const url = (event.notification.data as { url?: string } | undefined)?.url ?? self.registration.scope
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clients) => {
       const existing = clients.find((c) => c.url.startsWith(self.registration.scope))
-      if (existing) return existing.focus()
+      if (existing) {
+        await existing.focus()
+        // otevřenému oknu předat cíl (např. #review) — main.tsx poslouchá
+        existing.postMessage({ type: 'navigate', url })
+        return
+      }
       return self.clients.openWindow(url)
     }),
   )

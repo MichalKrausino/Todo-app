@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Task } from '../db/types'
 import {
@@ -38,6 +38,18 @@ export function TodayView({
 }) {
   const today = todayISO()
   const [reviewOpen, setReviewOpen] = useState(false)
+
+  // Nedělní push (#review) vede rovnou do týdenního ohlédnutí.
+  useEffect(() => {
+    const check = () => {
+      if (window.location.hash !== '#review') return
+      setReviewOpen(true)
+      history.replaceState(null, '', window.location.pathname + window.location.search)
+    }
+    check()
+    window.addEventListener('hashchange', check)
+    return () => window.removeEventListener('hashchange', check)
+  }, [])
   // Ohlédnutí za týdnem se nabízí v neděli (plán: nedělní shrnutí) a v pondělí.
   const reviewDay = [0, 1].includes(fromISODate(today).getDay())
   const open = useLiveQuery(openTasks, []) ?? []

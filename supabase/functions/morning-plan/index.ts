@@ -128,6 +128,9 @@ Deno.serve(async () => {
   if (subsErr) return Response.json({ error: subsErr.message }, { status: 500 })
 
   const today = pragueToday()
+  // Neděle: místo ranního návrhu vede push na týdenní ohlédnutí (Fáze 7) —
+  // návrh dne se přesto spočítá a uloží, v appce je vidět jako blok.
+  const isSunday = new Date(`${today}T12:00:00Z`).getUTCDay() === 0
   const now = new Date().toISOString()
   const users = [...new Set((subs ?? []).map((s) => s.user_id as string))]
   let sent = 0
@@ -185,29 +188,31 @@ Deno.serve(async () => {
         perClient.set(key, (perClient.get(key) ?? 0) + 1)
         if (picked.length >= 6) break
       }
-      if (picked.length === 0) continue
+      if (picked.length === 0 && !isSunday) continue
 
-      const plan = {
-        id: planId,
-        date: today,
-        suggestions: picked.map((p) => ({
-          taskId: p.t.id as string,
-          reason: p.reason,
-          decision: 'ignored',
-        })),
-        createdAt: now,
-        updatedAt: now,
-      }
-      const { error: upsertErr } = await admin.from('day_plans').upsert({
-        id: planId,
-        user_id: userId,
-        data: plan,
-        updated_at: now,
-        deleted_at: null,
-      })
-      if (upsertErr) {
-        console.error('day_plans upsert', upsertErr.message)
-        continue
+      if (picked.length > 0) {
+        const plan = {
+          id: planId,
+          date: today,
+          suggestions: picked.map((p) => ({
+            taskId: p.t.id as string,
+            reason: p.reason,
+            decision: 'ignored',
+          })),
+          createdAt: now,
+          updatedAt: now,
+        }
+        const { error: upsertErr } = await admin.from('day_plans').upsert({
+          id: planId,
+          user_id: userId,
+          data: plan,
+          updated_at: now,
+          deleted_at: null,
+        })
+        if (upsertErr) {
+          console.error('day_plans upsert', upsertErr.message)
+          continue
+        }
       }
       suggestions = picked.map((p) => ({
         taskId: p.t.id as string,
@@ -216,13 +221,34 @@ Deno.serve(async () => {
       }))
     }
 
-    if (suggestions.length === 0) continue
-    const first = suggestions[0]
-    const payload = JSON.stringify({
-      title: 'Ranní návrh dne',
-      body: `${suggestions.length} ${suggestions.length === 1 ? 'návrh' : suggestions.length < 5 ? 'návrhy' : 'návrhů'} · ${first.title} — ${first.reason}`,
-      url: APP_URL,
-    })
+    // Odznak na ikoně (iOS 16.4+): úkoly na dnes + po termínu — stejná
+    // logika jako v appce (src/lib/badge.ts), aby ikona a UI souhlasily.
+    const badge = tasks.filter((t) => {
+      if (t.status !== 'active' && t.status !== 'inbox') return false
+      const d = eff(t)
+      return d !== undefined && d <= today
+    }).length
+
+    let payload: string
+    if (isSunday) {
+      payload = JSON.stringify({
+        title: 'Týdenní ohlédnutí',
+        body: 'Jak šel týden — hotové úkoly, plán vs. realita a výhled na ten další.',
+        url: `${APP_URL}#review`,
+        tag: 'week-review',
+        badge,
+      })
+    } else {
+      if (suggestions.length === 0) continue
+      const first = suggestions[0]
+      payload = JSON.stringify({
+        title: 'Ranní návrh dne',
+        body: `${suggestions.length} ${suggestions.length === 1 ? 'návrh' : suggestions.length < 5 ? 'návrhy' : 'návrhů'} · ${first.title} — ${first.reason}`,
+        url: APP_URL,
+        tag: 'morning-plan',
+        badge,
+      })
+    }
 
     for (const sub of (subs ?? []).filter((s) => s.user_id === userId)) {
       try {

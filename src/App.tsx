@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Task } from './db/types'
 import { QuickAdd } from './components/QuickAdd'
 import { SyncButton, SyncSheet } from './components/SyncSheet'
@@ -55,6 +55,17 @@ export default function App() {
     setClientFocus(id)
     setTab('clients')
   }
+
+  // Deep-link z nedělní push notifikace (#review): přepnout na Dnes,
+  // samotné ohlédnutí si otevře TodayView (a hash uklidí).
+  useEffect(() => {
+    const check = () => {
+      if (window.location.hash === '#review') setTab('today')
+    }
+    check()
+    window.addEventListener('hashchange', check)
+    return () => window.removeEventListener('hashchange', check)
+  }, [])
 
   return (
     <div className="relative mx-auto flex h-dvh max-w-lg flex-col bg-paper text-ink antialiased">
