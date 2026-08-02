@@ -1,7 +1,9 @@
 // Ranní návrh dne (Fáze 6). Budí ho pg_cron v 5:00 UTC (7:00 léto / 6:00 zima).
-// Skórování je čistá logika — model (Fáze 5) později jen vybere a přeformuluje.
-// Pro každého uživatele s push odběrem: načíst úkoly a klienty, vybrat 3–6
-// kandidátů, uložit DayPlan (sync ho stáhne do appky) a poslat push.
+//
+// Chytrou verzi plánu připravuje před 5:00 UTC naplánovaná Claude úloha
+// (předplatné, žádné API) — zapisuje day_plans se stejným deterministickým id.
+// Tahle funkce čerstvý existující plán jen odešle jako push; když chybí,
+// spočítá záložní plán čistou logikou (Fáze 6 bez modelu).
 //
 // Nasazeno na Supabase jako funkce `morning-plan` (verify_jwt: true).
 
@@ -139,52 +141,86 @@ Deno.serve(async () => {
     const clients = (clientsRes.data ?? []).map((r) => r.data as Rec)
     const clientsById = new Map(clients.map((c) => [c.id as string, c]))
 
-    const candidates = tasks
-      .filter((t) => t.status === 'active' || t.status === 'inbox')
-      .map((t) => ({ t, ...scoreAndReason(t, clientsById, today) }))
-      .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score)
-
-    // pestrost: max 2 úkoly od jednoho klienta, celkem 3–6 návrhů
-    const picked: typeof candidates = []
-    const perClient = new Map<string, number>()
-    for (const c of candidates) {
-      const key = (c.t.clientId as string) ?? 'none'
-      if ((perClient.get(key) ?? 0) >= 2) continue
-      picked.push(c)
-      perClient.set(key, (perClient.get(key) ?? 0) + 1)
-      if (picked.length >= 6) break
-    }
-    if (picked.length === 0) continue
-
+    const taskById = new Map(tasks.map((t) => [t.id as string, t]))
     const planId = await deterministicUuid('dayplan', userId, today)
-    const plan = {
-      id: planId,
-      date: today,
-      suggestions: picked.map((p) => ({
+
+    // Dnešní plán už mohl připravit Claude (naplánovaná úloha) — nepřepisovat.
+    const { data: existingRow } = await admin
+      .from('day_plans')
+      .select('data, updated_at, deleted_at')
+      .eq('id', planId)
+      .maybeSingle()
+    const existing = existingRow?.data as Rec | undefined
+    const existingSuggestions = (existing?.suggestions ?? []) as Rec[]
+    const existingFresh =
+      existing?.date === today &&
+      existingSuggestions.length > 0 &&
+      !existingRow?.deleted_at &&
+      String(existingRow?.updated_at ?? '') >= `${today}T00:00:00`
+
+    let suggestions: Array<{ taskId: string; reason: string; title: string }>
+
+    if (existingFresh) {
+      suggestions = existingSuggestions
+        .filter((s) => taskById.has(s.taskId as string))
+        .map((s) => ({
+          taskId: s.taskId as string,
+          reason: s.reason as string,
+          title: (taskById.get(s.taskId as string)?.title as string) ?? 'Úkol',
+        }))
+    } else {
+      const candidates = tasks
+        .filter((t) => t.status === 'active' || t.status === 'inbox')
+        .map((t) => ({ t, ...scoreAndReason(t, clientsById, today) }))
+        .filter((x) => x.score > 0)
+        .sort((a, b) => b.score - a.score)
+
+      // pestrost: max 2 úkoly od jednoho klienta, celkem 3–6 návrhů
+      const picked: typeof candidates = []
+      const perClient = new Map<string, number>()
+      for (const c of candidates) {
+        const key = (c.t.clientId as string) ?? 'none'
+        if ((perClient.get(key) ?? 0) >= 2) continue
+        picked.push(c)
+        perClient.set(key, (perClient.get(key) ?? 0) + 1)
+        if (picked.length >= 6) break
+      }
+      if (picked.length === 0) continue
+
+      const plan = {
+        id: planId,
+        date: today,
+        suggestions: picked.map((p) => ({
+          taskId: p.t.id as string,
+          reason: p.reason,
+          decision: 'ignored',
+        })),
+        createdAt: now,
+        updatedAt: now,
+      }
+      const { error: upsertErr } = await admin.from('day_plans').upsert({
+        id: planId,
+        user_id: userId,
+        data: plan,
+        updated_at: now,
+        deleted_at: null,
+      })
+      if (upsertErr) {
+        console.error('day_plans upsert', upsertErr.message)
+        continue
+      }
+      suggestions = picked.map((p) => ({
         taskId: p.t.id as string,
         reason: p.reason,
-        decision: 'ignored',
-      })),
-      createdAt: now,
-      updatedAt: now,
-    }
-    const { error: upsertErr } = await admin.from('day_plans').upsert({
-      id: planId,
-      user_id: userId,
-      data: plan,
-      updated_at: now,
-      deleted_at: null,
-    })
-    if (upsertErr) {
-      console.error('day_plans upsert', upsertErr.message)
-      continue
+        title: p.t.title as string,
+      }))
     }
 
-    const first = picked[0]
+    if (suggestions.length === 0) continue
+    const first = suggestions[0]
     const payload = JSON.stringify({
       title: 'Ranní návrh dne',
-      body: `${picked.length} ${picked.length === 1 ? 'návrh' : picked.length < 5 ? 'návrhy' : 'návrhů'} · ${first.t.title} — ${first.reason}`,
+      body: `${suggestions.length} ${suggestions.length === 1 ? 'návrh' : suggestions.length < 5 ? 'návrhy' : 'návrhů'} · ${first.title} — ${first.reason}`,
       url: APP_URL,
     })
 
