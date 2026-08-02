@@ -253,7 +253,7 @@ function SignInForm() {
         </button>
       </div>
       <p className="text-center text-[11px] text-ink-faint">
-        Google přihlášení vyžaduje jednorázové nastavení (přijde s Fází 3 — kalendář).
+        Přihlášení přes Google zároveň propojí tvůj Google kalendář.
       </p>
     </form>
   )

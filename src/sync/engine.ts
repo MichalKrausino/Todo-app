@@ -46,6 +46,15 @@ export function initSync(): void {
   sb.auth.onAuthStateChange((_event, session) => {
     if (session) {
       setSyncStatus({ phase: 'idle', email: session.user.email })
+      // Google refresh token patří na server (Fáze 3 — kalendář). Prohlížečem
+      // jen proteče hned po OAuth přihlášení; RPC je pro klienta write-only.
+      if (session.provider_refresh_token) {
+        void sb!
+          .rpc('store_google_token', { token: session.provider_refresh_token })
+          .then(({ error }) => {
+            if (error) console.warn('store_google_token:', error.message)
+          })
+      }
       void syncNow()
     } else {
       setSyncStatus({ phase: 'signedOut', email: undefined })
@@ -196,7 +205,13 @@ export async function signUpWithPassword(
 export async function signInWithGoogle(): Promise<void> {
   await sb?.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.origin },
+    options: {
+      redirectTo: window.location.origin + import.meta.env.BASE_URL,
+      // Kalendář (Fáze 3): čteme všechny kalendáře, zapisovat budeme jen
+      // do vlastního kalendáře „Todo". Offline access = refresh token.
+      scopes: 'https://www.googleapis.com/auth/calendar',
+      queryParams: { access_type: 'offline', prompt: 'consent' },
+    },
   })
 }
 

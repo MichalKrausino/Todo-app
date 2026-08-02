@@ -83,3 +83,30 @@ alter table public.push_subscriptions enable row level security;
 -- /functions/v1/morning-plan denně v 5:00 UTC (7:00 léto / 6:00 zima).
 -- Funkce skóruje kandidáty (termíny, priority, odklady, zanedbaní klienti),
 -- uloží DayPlan do day_plans (sync ho stáhne do appky) a pošle push.
+
+-- ---------------------------------------------------------------------------
+-- Fáze 3 (příprava): Google refresh tokeny pro přístup ke kalendáři
+-- ---------------------------------------------------------------------------
+
+-- Tokeny žijí v private schématu — klient je smí jen ZAPSAT přes RPC
+-- (write-only), číst je bude výhradně service role (server, Fáze 3).
+create table if not exists private.google_tokens (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  refresh_token text not null,
+  updated_at timestamptz not null default now()
+);
+
+create or replace function public.store_google_token(token text)
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  insert into private.google_tokens (user_id, refresh_token, updated_at)
+  values (auth.uid(), token, now())
+  on conflict (user_id) do update
+    set refresh_token = excluded.refresh_token, updated_at = now();
+$$;
+
+revoke all on function public.store_google_token(text) from public, anon;
+grant execute on function public.store_google_token(text) to authenticated;
