@@ -1,10 +1,12 @@
+import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Task } from '../db/types'
 import { allClients, allProjects, completeTask, doneOn, openTasks, reopenTask, sortTasks } from '../db/repo'
-import { formatFullDate, todayISO } from '../lib/dates'
+import { formatFullDate, fromISODate, todayISO } from '../lib/dates'
 import { computeSignals } from '../lib/signals'
 import { SignalsBlock } from '../components/SignalsBlock'
 import { TaskRow } from '../components/TaskRow'
+import { WeeklyReviewSheet } from '../components/WeeklyReviewSheet'
 
 // Nejbližší relevantní den úkolu — dřívější z „naplánováno“ a „termín“.
 const effectiveDate = (t: Task): string | undefined => {
@@ -22,6 +24,9 @@ export function TodayView({
   onOpenInbox: () => void
 }) {
   const today = todayISO()
+  const [reviewOpen, setReviewOpen] = useState(false)
+  // Ohlédnutí za týdnem se nabízí v neděli (plán: nedělní shrnutí) a v pondělí.
+  const reviewDay = [0, 1].includes(fromISODate(today).getDay())
   const open = useLiveQuery(openTasks, []) ?? []
   const done = useLiveQuery(() => doneOn(today), [today]) ?? []
   const clients = useLiveQuery(allClients, []) ?? []
@@ -76,6 +81,26 @@ export function TodayView({
         )}
       </header>
 
+      {reviewDay && (
+        <button
+          onClick={() => setReviewOpen(true)}
+          className="rise flex w-full items-center gap-3 rounded-xl bg-card px-4 py-3 text-left shadow-card transition-colors duration-150 active:bg-well/60"
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-wash text-accent">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19.5V13M10 19.5V8M16 19.5v-9M20.5 19.5H3.5" />
+            </svg>
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold">Týdenní ohlédnutí</span>
+            <span className="text-[13px] text-ink-soft">Jak šel týden a co čeká v tom dalším</span>
+          </span>
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint/70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
+      )}
+
       <SignalsBlock
         signals={computeSignals(clients, projects, [...open, ...done], today)}
         onOpenClient={onOpenClient}
@@ -118,6 +143,8 @@ export function TodayView({
           <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{done.map(row)}</ul>
         </section>
       )}
+
+      {reviewOpen && <WeeklyReviewSheet onClose={() => setReviewOpen(false)} />}
     </div>
   )
 }

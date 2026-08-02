@@ -65,4 +65,4 @@ návrhy a reakce na ně, Fáze 6). Úkol může viset přímo pod klientem bez p
 - [x] Fáze 4.5 — tiché signály (`src/lib/signals.ts`, čisté funkce): zanedbaní klienti, klienti bez naplánovaného úkolu, projekty bez dalšího kroku, ležáky v inboxu, opakovaně odkládané úkoly (`postponeCount` počítá `updateTask` při posunu termínu na později; respawn ho nuluje). Zobrazuje blok „Nepropadá ti něco?" na Dnes (`SignalsBlock`), řádky navigují na klienta/úkol/inbox. Ranní návrh dne (Fáze 6) má z těchto signálů čerpat.
 - [ ] Fáze 5 — AI: tiché odhady času, rozpad projektů, chytřejší parsování
 - [ ] Fáze 6 — push notifikace + ranní návrh dne (pg_cron)
-- [ ] Fáze 7 — týdenní zpětná vazba
+- [x] Fáze 7 — týdenní zpětná vazba (`src/lib/weekReview.ts`, čisté funkce): nedělní/pondělní karta na Dnes otevírá `WeeklyReviewSheet` — hotové úkoly a rozpad podle klientů, plán vs. realita, nejodkládanější úkoly, tiší klienti, výhled na 7 dní. Porovnání odhadu a skutečnosti času přibude s Fází 5 (estimateMinutes). Až bude Fáze 6 (push), nedělní notifikace má vést sem.

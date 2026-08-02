@@ -38,6 +38,8 @@ instalace ani (v pozdější fázi) push notifikace.
 - Tiché signály na obrazovce Dnes („Nepropadá ti něco?“): klient bez
   naplánované práce, projekt bez dalšího kroku, úkoly ležící v inboxu,
   opakovaně odkládané úkoly — připomínky věcí, které sis nezapsal
+- Týdenní ohlédnutí (neděle/pondělí na Dnes): kolik se stihlo a komu,
+  plán vs. realita, co odkládáš, u koho byl tichý týden, výhled na 7 dní
 
 ## Synchronizace (Fáze 2) — jednorázové nastavení
 

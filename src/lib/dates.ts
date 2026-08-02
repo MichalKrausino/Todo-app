@@ -41,6 +41,13 @@ export function formatFullDate(d: Date): string {
   return fullFmt.format(d)
 }
 
+// Pondělí týdne, do kterého daný den patří.
+export function mondayOf(iso: string): string {
+  const d = fromISODate(iso)
+  const delta = (d.getDay() + 6) % 7 // Po=0 … Ne=6
+  return toISODate(addDays(d, -delta))
+}
+
 // Celé dny od daného ISO datetime do dneška (lokálně, po dnech).
 export function daysSince(isoDatetime: string, todayRef: string = todayISO()): number {
   const then = fromISODate(isoDatetime.slice(0, 10))

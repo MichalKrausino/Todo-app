@@ -221,6 +221,9 @@ export const openTasks = () =>
     .filter((t) => !t.deletedAt)
     .toArray()
 
+// Všechny živé úkoly včetně dokončených — podklad týdenní zpětné vazby.
+export const allLiveTasks = () => db.tasks.filter((t) => !t.deletedAt).toArray()
+
 export const doneOn = (dateISO: string) =>
   db.tasks
     .where('status')
