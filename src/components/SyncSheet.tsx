@@ -11,6 +11,7 @@ import {
   syncNow,
 } from '../sync/engine'
 import { getSyncStatus, subscribeSyncStatus, type SyncPhase } from '../sync/status'
+import { Sheet } from './Sheet'
 
 const PHASE_LABELS: Record<SyncPhase, string> = {
   unconfigured: 'Nenastaveno',
@@ -31,13 +32,9 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
   const status = useSyncStatus()
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sheet-backdrop bg-ink/35 backdrop-blur-[2px]" onClick={onClose}>
-      <div
-        className="w-full max-w-lg space-y-4 sheet-panel rounded-t-[28px] bg-card shadow-sheet p-4"
-        style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mx-auto h-1 w-10 rounded-full bg-line" />
+    <Sheet onClose={onClose} className="space-y-4">
+      {() => (
+        <>
         <header>
           <h2 className="text-lg font-bold">Synchronizace</h2>
           <p className="text-sm text-ink-soft">{PHASE_LABELS[status.phase]}</p>
@@ -85,21 +82,22 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
               <button
                 onClick={() => void syncNow()}
                 disabled={status.phase === 'syncing'}
-                className="flex-1 rounded-lg bg-accent py-2.5 text-sm font-medium text-card disabled:opacity-50"
+                className="flex-1 rounded-lg bg-accent py-2.5 text-sm font-medium text-card transition-transform duration-150 active:scale-[0.98] disabled:opacity-50"
               >
                 Synchronizovat teď
               </button>
               <button
                 onClick={() => void signOutUser()}
-                className="rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-ink-soft"
+                className="rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-[0.98]"
               >
                 Odhlásit se
               </button>
             </div>
           </>
         )}
-      </div>
-    </div>
+        </>
+      )}
+    </Sheet>
   )
 }
 
@@ -153,7 +151,7 @@ function PushToggle() {
           } disabled:opacity-50`}
         >
           <span
-            className={`absolute top-0.5 h-6 w-6 rounded-full bg-card shadow-card transition-[left] duration-200 ${
+            className={`absolute top-0.5 h-6 w-6 rounded-full bg-card shadow-card transition-[left] duration-300 ease-spring ${
               enabled ? 'left-[22px]' : 'left-0.5'
             }`}
           />

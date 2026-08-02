@@ -2,6 +2,9 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { allClients, allLiveTasks } from '../db/repo'
 import { fromISODate, todayISO } from '../lib/dates'
 import { computeWeekStats } from '../lib/weekReview'
+import { Sheet } from './Sheet'
+
+const stagger = (i: number) => ({ '--stagger': i }) as React.CSSProperties
 
 const rangeFmt = new Intl.DateTimeFormat('cs-CZ', { day: 'numeric', month: 'numeric' })
 const DAY_INITIALS = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So']
@@ -17,15 +20,10 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
   const nextTotal = stats.nextDays.reduce((sum, d) => sum + d.count, 0)
 
   return (
-    <div className="sheet-backdrop fixed inset-0 z-50 flex items-end justify-center bg-ink/35 backdrop-blur-[2px]" onClick={onClose}>
-      <div
-        className="sheet-panel max-h-[90dvh] w-full max-w-lg space-y-4 overflow-y-auto rounded-t-[28px] bg-paper p-4 shadow-sheet"
-        style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mx-auto h-1 w-10 rounded-full bg-line" />
-
-        <header>
+    <Sheet onClose={onClose} tone="paper" className="space-y-4">
+      {(close) => (
+        <>
+        <header className="rise">
           <h2 className="display text-2xl font-bold">Týdenní ohlédnutí</h2>
           <p className="text-sm text-ink-soft">
             {rangeFmt.format(fromISODate(stats.weekStart))} – {rangeFmt.format(fromISODate(stats.weekEnd))}
@@ -33,12 +31,16 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
         </header>
 
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl bg-card px-4 py-3 shadow-card">
-            <div className="text-3xl font-bold tracking-tight">{stats.completedCount}</div>
+          <div className="rise rounded-xl bg-card px-4 py-3 shadow-card" style={stagger(1)}>
+            <div className="text-3xl font-bold tracking-tight">
+              <span className="pop-soft inline-block">{stats.completedCount}</span>
+            </div>
             <div className="mt-0.5 text-[13px] text-ink-soft">hotových úkolů</div>
           </div>
-          <div className="rounded-xl bg-card px-4 py-3 shadow-card">
-            <div className="text-3xl font-bold tracking-tight">{rate === null ? '—' : `${rate} %`}</div>
+          <div className="rise rounded-xl bg-card px-4 py-3 shadow-card" style={stagger(2)}>
+            <div className="text-3xl font-bold tracking-tight">
+              <span className="pop-soft inline-block">{rate === null ? '—' : `${rate} %`}</span>
+            </div>
             <div className="mt-0.5 text-[13px] text-ink-soft">
               plánu splněno{stats.plannedCount > 0 && ` (${stats.plannedDoneCount} z ${stats.plannedCount})`}
             </div>
@@ -46,13 +48,13 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
         </div>
 
         {stats.completedCount === 0 && (
-          <p className="rounded-xl bg-card px-4 py-3 text-sm text-ink-soft shadow-card">
+          <p className="rise rounded-xl bg-card px-4 py-3 text-sm text-ink-soft shadow-card" style={stagger(3)}>
             Tenhle týden se nic nedokončilo. Příští týden je nový list.
           </p>
         )}
 
         {stats.completedByClient.length > 0 && (
-          <section>
+          <section className="rise" style={stagger(3)}>
             <h3 className="section-label mb-2">komu šla práce</h3>
             <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
               {stats.completedByClient.slice(0, 5).map(({ client, count }) => (
@@ -72,7 +74,7 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
         )}
 
         {stats.mostPostponed.length > 0 && (
-          <section>
+          <section className="rise" style={stagger(4)}>
             <h3 className="section-label mb-2">nejvíc odkládáš</h3>
             <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
               {stats.mostPostponed.map((t) => (
@@ -89,7 +91,7 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
         )}
 
         {stats.quietClients.length > 0 && (
-          <section>
+          <section className="rise" style={stagger(5)}>
             <h3 className="section-label mb-2">tichý týden u</h3>
             <div className="flex flex-wrap gap-2">
               {stats.quietClients.map((c) => (
@@ -102,20 +104,20 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
           </section>
         )}
 
-        <section>
+        <section className="rise" style={stagger(6)}>
           <h3 className="section-label mb-2">
             příštích 7 dní · {nextTotal} {nextTotal === 1 ? 'úkol' : nextTotal < 5 ? 'úkoly' : 'úkolů'}
           </h3>
           <div className="rounded-xl bg-card px-4 pb-2.5 pt-4 shadow-card">
             <div className="flex items-end justify-between gap-2">
-              {stats.nextDays.map((d) => (
+              {stats.nextDays.map((d, i) => (
                 <div key={d.date} className="flex flex-1 flex-col items-center gap-1.5">
                   <span className="text-[11px] font-medium tabular-nums text-ink-soft">
                     {d.count > 0 ? d.count : ''}
                   </span>
                   <div
-                    className={`w-full max-w-7 rounded-md ${d.count > 0 ? 'bg-accent' : 'bg-well'}`}
-                    style={{ height: `${6 + (d.count / maxDay) * 42}px` }}
+                    className={`bar-grow w-full max-w-7 rounded-md ${d.count > 0 ? 'bg-accent' : 'bg-well'}`}
+                    style={{ height: `${6 + (d.count / maxDay) * 42}px`, ...stagger(i) }}
                   />
                   <span className="text-[11px] text-ink-faint">
                     {DAY_INITIALS[fromISODate(d.date).getDay()]}
@@ -127,12 +129,14 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
         </section>
 
         <button
-          onClick={onClose}
-          className="w-full rounded-xl bg-accent py-2.5 text-sm font-semibold text-card transition-transform duration-150 active:scale-[0.98]"
+          onClick={close}
+          className="rise w-full rounded-xl bg-accent py-2.5 text-sm font-semibold text-card transition-transform duration-150 active:scale-[0.98]"
+          style={stagger(7)}
         >
           Do nového týdne
         </button>
-      </div>
-    </div>
+        </>
+      )}
+    </Sheet>
   )
 }

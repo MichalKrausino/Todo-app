@@ -80,21 +80,24 @@ export default function App() {
         className="flex-1 overflow-y-auto px-4 pb-6"
         style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top))' }}
       >
-        {tab === 'today' && (
-          <TodayView
-            onOpenTask={setEditing}
-            onOpenClient={openClient}
-            onOpenInbox={() => setTab('upcoming')}
-          />
-        )}
-        {tab === 'upcoming' && <UpcomingView onOpenTask={setEditing} />}
-        {tab === 'clients' && (
-          <ClientsView
-            onOpenTask={setEditing}
-            focusClientId={clientFocus}
-            onFocusConsumed={() => setClientFocus(null)}
-          />
-        )}
+        {/* key vynutí novou instanci pohledu → nástupní animace při přepnutí */}
+        <div key={tab} className="view-enter">
+          {tab === 'today' && (
+            <TodayView
+              onOpenTask={setEditing}
+              onOpenClient={openClient}
+              onOpenInbox={() => setTab('upcoming')}
+            />
+          )}
+          {tab === 'upcoming' && <UpcomingView onOpenTask={setEditing} />}
+          {tab === 'clients' && (
+            <ClientsView
+              onOpenTask={setEditing}
+              focusClientId={clientFocus}
+              onFocusConsumed={() => setClientFocus(null)}
+            />
+          )}
+        </div>
       </main>
 
       <footer
@@ -112,7 +115,10 @@ export default function App() {
                 tab === t.id ? 'text-accent' : 'text-ink-faint'
               }`}
             >
-              {t.icon}
+              {/* nový element při vybrání → ikona poskočí (tab-bounce) */}
+              <span key={tab === t.id ? 'on' : 'off'} className={tab === t.id ? 'tab-bounce' : ''}>
+                {t.icon}
+              </span>
               {t.label}
             </button>
           ))}

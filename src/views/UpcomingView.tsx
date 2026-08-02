@@ -82,23 +82,23 @@ export function UpcomingView({ onOpenTask }: { onOpenTask: (t: Task) => void }) 
         </div>
       )}
 
-      {dates.map((d) => (
-        <section key={d}>
+      {dates.map((d, i) => (
+        <section key={d} className="rise" style={{ '--stagger': Math.min(i + 1, 8) } as React.CSSProperties}>
           <h2 className="section-label mb-2 first-letter:lowercase">
             {formatDayLabel(d)}
             {(meetingsPerDay.get(d) ?? 0) > 0 &&
               ` · ${meetingsPerDay.get(d)} ${plural(meetingsPerDay.get(d)!, 'schůzka', 'schůzky', 'schůzek')}`}
           </h2>
-          <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
             {sortTasks(groups.get(d)!).map((t) => row(t, false))}
           </ul>
         </section>
       ))}
 
       {inbox.length > 0 && (
-        <section>
+        <section className="rise" style={{ '--stagger': Math.min(dates.length + 1, 9) } as React.CSSProperties}>
           <h2 className="section-label mb-2">bez termínu · {inbox.length}</h2>
-          <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{inbox.map((t) => row(t, true))}</ul>
+          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{inbox.map((t) => row(t, true))}</ul>
         </section>
       )}
     </div>

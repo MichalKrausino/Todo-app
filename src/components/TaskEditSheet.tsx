@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Priority, Project, Task } from '../db/types'
 import { activeClients, clientProjects, removeTask, updateTask } from '../db/repo'
+import { Sheet } from './Sheet'
 import { deleteBlockForTask } from '../sync/calendar'
 import { todayISO } from '../lib/dates'
 import { PRIORITY_LABELS } from '../lib/labels'
@@ -35,7 +36,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
       [clientId],
     ) ?? []
 
-  const save = async () => {
+  const save = async (close: () => void) => {
     if (!title.trim()) return
     const hasDate = Boolean(dueDate || scheduledFor)
     let recurrenceRule: string | undefined
@@ -56,26 +57,21 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
     })
     // Zrušené naplánování uvolní i blok v kalendáři „Todo".
     if (task.calendarEventId && !scheduledFor) void deleteBlockForTask(task)
-    onClose()
+    close()
   }
 
-  const del = async () => {
+  const del = async (close: () => void) => {
     if (confirm('Smazat úkol?')) {
       if (task.calendarEventId) void deleteBlockForTask(task)
       await removeTask(task.id)
-      onClose()
+      close()
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sheet-backdrop bg-ink/35 backdrop-blur-[2px]" onClick={onClose}>
-      <div
-        className="max-h-[90dvh] w-full max-w-lg space-y-3 overflow-y-auto sheet-panel rounded-t-[28px] bg-card shadow-sheet p-4"
-        style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mx-auto h-1 w-10 rounded-full bg-line" />
-
+    <Sheet onClose={onClose} className="space-y-3">
+      {(close) => (
+        <>
         <div>
           <label className={label}>Úkol</label>
           <input className={field} value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -167,23 +163,30 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
         </div>
 
         <div className="flex items-center justify-between pt-1">
-          <button className="px-2 py-2 text-sm font-medium text-danger" onClick={del}>
+          <button
+            className="px-2 py-2 text-sm font-medium text-danger transition-transform duration-150 active:scale-95"
+            onClick={() => void del(close)}
+          >
             Smazat
           </button>
           <div className="flex gap-2">
-            <button className="rounded-lg px-4 py-2 text-sm font-medium text-ink-soft" onClick={onClose}>
+            <button
+              className="rounded-lg px-4 py-2 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-95"
+              onClick={close}
+            >
               Zrušit
             </button>
             <button
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-card disabled:opacity-30"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-card transition-transform duration-150 active:scale-95 disabled:opacity-30"
               disabled={!title.trim()}
-              onClick={save}
+              onClick={() => void save(close)}
             >
               Uložit
             </button>
           </div>
         </div>
-      </div>
-    </div>
+        </>
+      )}
+    </Sheet>
   )
 }

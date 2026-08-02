@@ -73,11 +73,11 @@ export function SignalsBlock({
   const hidden = lines.length - shown.length
 
   return (
-    <section className="rise rounded-2xl bg-note px-4 py-3">
+    <section className="rise rounded-2xl bg-note px-4 py-3" style={{ '--stagger': 4 } as React.CSSProperties}>
       <h2 className="section-label !text-note-ink">nepropadá ti něco?</h2>
       <ul className="mt-1.5 space-y-1.5">
-        {shown.map((line) => (
-          <li key={line.key}>
+        {shown.map((line, i) => (
+          <li key={line.key} className="rise" style={{ '--stagger': 5 + i } as React.CSSProperties}>
             <button
               onClick={line.onClick}
               className="flex w-full items-baseline gap-1.5 text-left text-sm text-ink transition-transform duration-150 active:scale-[0.99]"

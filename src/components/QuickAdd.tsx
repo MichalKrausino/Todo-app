@@ -8,6 +8,9 @@ import { humanizeRule } from '../lib/rrule'
 
 export function QuickAdd() {
   const [text, setText] = useState('')
+  // Počítadlo přidaných úkolů — mění key tlačítka, takže po každém
+  // přidání proběhne potvrzovací pop (hmatová odezva bez haptiky).
+  const [addedCount, setAddedCount] = useState(0)
   const clients = useLiveQuery(activeClients, []) ?? []
 
   const parsed = useMemo(
@@ -26,6 +29,7 @@ export function QuickAdd() {
       recurrenceRule: parsed.recurrenceRule,
     })
     setText('')
+    setAddedCount((n) => n + 1)
   }
 
   const client = parsed?.clientId ? clients.find((c) => c.id === parsed.clientId) : undefined
@@ -34,25 +38,27 @@ export function QuickAdd() {
   return (
     <div className="px-3 pt-2.5">
       {parsed && (parsed.dueDate || client || parsed.priority !== 'normal' || parsed.recurrenceRule) && (
-        <div className="rise flex flex-wrap gap-1.5 px-1 pb-2 text-[11px]">
+        <div className="flex flex-wrap gap-1.5 px-1 pb-2 text-[11px]">
           {parsed.dueDate && (
-            <span className={`${chip} bg-accent-wash text-accent-deep`}>
+            <span key={`d:${parsed.dueDate}`} className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}>
               {formatDayLabel(parsed.dueDate)}
             </span>
           )}
           {parsed.recurrenceRule && (
-            <span className={`${chip} bg-accent-wash text-accent-deep`}>
+            <span key={`r:${parsed.recurrenceRule}`} className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}>
               ↻ {humanizeRule(parsed.recurrenceRule)}
             </span>
           )}
           {client && (
-            <span className={`${chip} inline-flex items-center gap-1.5 bg-well text-ink-soft`}>
+            <span key={`c:${client.id}`} className={`${chip} pop-soft inline-flex items-center gap-1.5 bg-well text-ink-soft`}>
               <span className="h-2 w-2 rounded-full" style={{ background: client.color }} />
               {client.name}
             </span>
           )}
           {parsed.priority !== 'normal' && (
-            <span className={`${chip} bg-well text-ink-soft`}>{PRIORITY_LABELS[parsed.priority]}</span>
+            <span key={`p:${parsed.priority}`} className={`${chip} pop-soft inline-block bg-well text-ink-soft`}>
+              {PRIORITY_LABELS[parsed.priority]}
+            </span>
           )}
         </div>
       )}
@@ -64,13 +70,17 @@ export function QuickAdd() {
           enterKeyHint="done"
           className="min-w-0 flex-1 rounded-full border border-transparent bg-well px-4 py-2.5 text-[15px] text-ink outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus:bg-card"
         />
+        {/* key po přidání → pop; plus se při stisku pootočí (group-active) */}
         <button
+          key={addedCount}
           type="submit"
           aria-label="Přidat úkol"
           disabled={!parsed?.title}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-card shadow-float transition-transform duration-150 active:scale-90 disabled:opacity-30"
+          className={`group flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-card shadow-float transition-transform duration-150 active:scale-90 disabled:opacity-30 ${
+            addedCount > 0 ? 'pop' : ''
+          }`}
         >
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <svg viewBox="0 0 24 24" className="h-5 w-5 transition-transform duration-300 ease-spring group-active:rotate-90" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 5v14M5 12h14" />
           </svg>
         </button>
