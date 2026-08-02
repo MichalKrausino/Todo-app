@@ -13,15 +13,16 @@ export const KIND_LABELS: Record<ClientKind, string> = {
   personal: 'Osobní',
 }
 
+// Tlumené kvašové tóny, aby seděly na papírové pozadí.
 export const CLIENT_COLORS = [
-  '#ef4444',
-  '#f97316',
-  '#f59e0b',
-  '#84cc16',
-  '#10b981',
-  '#06b6d4',
-  '#3b82f6',
-  '#6366f1',
-  '#a855f7',
-  '#ec4899',
+  '#a63d2f', // rez
+  '#c1702c', // jantar
+  '#a08526', // hořčice
+  '#6b7a34', // oliva
+  '#4c7a5c', // mech
+  '#2f6d6a', // borovice
+  '#41678f', // modř
+  '#6f5aa0', // švestka
+  '#9c4c74', // ostružina
+  '#7a5c48', // umbra
 ]

@@ -7,7 +7,7 @@ import { PRIORITY_LABELS } from '../lib/labels'
 import { humanizeRule } from '../lib/rrule'
 import { RecurrencePicker, buildRule } from '../components/RecurrencePicker'
 
-const field = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[15px] outline-none focus:border-indigo-400'
+const field = 'w-full rounded-lg border border-line bg-card px-3 py-2 text-[15px] outline-none focus:border-accent/60'
 
 export function TemplatesView({ onBack }: { onBack: () => void }) {
   const templates = useLiveQuery(activeTemplates, []) ?? []
@@ -34,7 +34,7 @@ export function TemplatesView({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="space-y-4">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm font-medium text-indigo-600">
+      <button onClick={onBack} className="flex items-center gap-1 text-sm font-medium text-accent">
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M15 6l-6 6 6 6" />
         </svg>
@@ -42,8 +42,8 @@ export function TemplatesView({ onBack }: { onBack: () => void }) {
       </button>
 
       <header>
-        <h1 className="text-2xl font-bold">Šablony</h1>
-        <p className="text-sm text-slate-500">
+        <h1 className="display text-[2.1rem] font-semibold leading-tight">Šablony</h1>
+        <p className="text-sm text-ink-soft">
           Balíčky pravidelných úkolů — nasadíš je klientům a úkoly se generují samy
         </p>
       </header>
@@ -58,14 +58,14 @@ export function TemplatesView({ onBack }: { onBack: () => void }) {
         <button
           type="submit"
           disabled={!newName.trim()}
-          className="rounded-lg bg-indigo-600 px-3 text-sm font-medium text-white disabled:opacity-30"
+          className="rounded-lg bg-accent px-3 text-sm font-medium text-card disabled:opacity-30"
         >
           Vytvořit
         </button>
       </form>
 
       {templates.length === 0 && (
-        <div className="rounded-xl border border-dashed border-slate-200 bg-white/60 px-4 py-8 text-center text-sm text-slate-400">
+        <div className="rounded-2xl border border-dashed border-line bg-card/60 px-4 py-8 text-center text-sm text-ink-faint">
           Zatím žádné šablony. Typický start: „Správa PPC“ s týdenní kontrolou
           kampaní a měsíčním reportem.
         </div>
@@ -76,16 +76,16 @@ export function TemplatesView({ onBack }: { onBack: () => void }) {
           <li key={t.id}>
             <button
               onClick={() => setSelectedId(t.id)}
-              className="flex w-full items-center gap-3 rounded-xl bg-white px-3 py-3 text-left shadow-sm"
+              className="flex w-full items-center gap-3 rounded-2xl bg-card px-3 py-3 text-left shadow-card"
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[15px] font-medium">{t.name}</span>
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-ink-faint">
                   {t.items.length} {t.items.length === 1 ? 'položka' : t.items.length < 5 ? 'položky' : 'položek'}
                   {deployedCount(t.id) > 0 && ` · u ${deployedCount(t.id)} klientů`}
                 </span>
               </span>
-              <svg viewBox="0 0 24 24" className="h-4 w-4 text-slate-300" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-faint/70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 6l6 6-6 6" />
               </svg>
             </button>
@@ -122,7 +122,7 @@ function TemplateDetail({ template, onBack }: { template: Template; onBack: () =
 
   return (
     <div className="space-y-4">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm font-medium text-indigo-600">
+      <button onClick={onBack} className="flex items-center gap-1 text-sm font-medium text-accent">
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M15 6l-6 6 6 6" />
         </svg>
@@ -130,25 +130,25 @@ function TemplateDetail({ template, onBack }: { template: Template; onBack: () =
       </button>
 
       <header>
-        <h1 className="text-2xl font-bold">{template.name}</h1>
-        <p className="text-sm text-slate-500">
+        <h1 className="display text-[2.1rem] font-semibold leading-tight">{template.name}</h1>
+        <p className="text-sm text-ink-soft">
           Nasazuje se klientům v jejich detailu. Úpravy se propíší všem.
         </p>
       </header>
 
       <ul className="space-y-2">
         {template.items.map((item) => (
-          <li key={item.id} className="rounded-xl bg-white px-3 py-2.5 shadow-sm">
+          <li key={item.id} className="rounded-2xl bg-card px-3 py-2.5 shadow-card">
             <div className="flex items-start justify-between gap-2">
               <button className="min-w-0 flex-1 text-left" onClick={() => setEditingItem(item)}>
                 <div className="text-[15px]">{item.title}</div>
-                <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-slate-500">
+                <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-ink-soft">
                   <span>↻ {humanizeRule(item.recurrenceRule)}</span>
                   {item.priority !== 'normal' && <span>{PRIORITY_LABELS[item.priority]}</span>}
-                  {item.defaultProjectName && <span className="text-slate-400">→ {item.defaultProjectName}</span>}
+                  {item.defaultProjectName && <span className="text-ink-faint">→ {item.defaultProjectName}</span>}
                 </div>
               </button>
-              <button className="px-1 text-xs text-slate-300" onClick={() => void deleteItem(item.id)}>
+              <button className="px-1 text-xs text-ink-faint/70" onClick={() => void deleteItem(item.id)}>
                 Smazat
               </button>
             </div>
@@ -163,13 +163,13 @@ function TemplateDetail({ template, onBack }: { template: Template; onBack: () =
           onCancel={() => setEditingItem(null)}
         />
       ) : (
-        <button onClick={() => setEditingItem('new')} className="text-sm font-medium text-indigo-600">
+        <button onClick={() => setEditingItem('new')} className="text-sm font-medium text-accent">
           + Nová položka
         </button>
       )}
 
-      <footer className="border-t border-slate-200 pt-4">
-        <button onClick={() => void del()} className="text-sm font-medium text-red-600">
+      <footer className="border-t border-line pt-4">
+        <button onClick={() => void del()} className="text-sm font-medium text-danger">
           Smazat šablonu
         </button>
       </footer>
@@ -199,7 +199,7 @@ function ItemForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-xl bg-white p-3 shadow-sm">
+    <form onSubmit={submit} className="space-y-3 rounded-2xl bg-card p-3 shadow-card">
       <input
         autoFocus
         value={title}
@@ -224,13 +224,13 @@ function ItemForm({
         />
       </div>
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-500">
+        <button type="button" onClick={onCancel} className="rounded-lg px-4 py-2 text-sm font-medium text-ink-soft">
           Zrušit
         </button>
         <button
           type="submit"
           disabled={!title.trim()}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-30"
+          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-card disabled:opacity-30"
         >
           Uložit
         </button>

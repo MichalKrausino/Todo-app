@@ -14,7 +14,7 @@ const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
     id: 'today',
     label: 'Dnes',
     icon: (
-      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="9" />
         <path d="M8.5 12.2l2.4 2.4 4.8-5.2" />
       </svg>
@@ -24,7 +24,7 @@ const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
     id: 'upcoming',
     label: 'Plán',
     icon: (
-      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
         <path d="M3.5 9.5h17M8 3v4M16 3v4" />
       </svg>
@@ -34,7 +34,7 @@ const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
     id: 'clients',
     label: 'Klienti',
     icon: (
-      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="9" cy="8.5" r="3.25" />
         <path d="M3.5 19c.6-3 2.8-4.75 5.5-4.75S13.9 16 14.5 19" />
         <circle cx="17" cy="9.5" r="2.5" />
@@ -57,16 +57,17 @@ export default function App() {
   }
 
   return (
-    <div className="relative mx-auto flex h-dvh max-w-lg flex-col bg-slate-50 text-slate-900 antialiased">
+    <div className="paper-grain relative mx-auto flex h-dvh max-w-lg flex-col bg-paper text-ink antialiased">
       <div
         className="absolute right-4 z-40"
-        style={{ top: 'calc(0.75rem + env(safe-area-inset-top))' }}
+        style={{ top: 'calc(0.85rem + env(safe-area-inset-top))' }}
       >
         <SyncButton onOpen={() => setSyncOpen(true)} />
       </div>
+
       <main
-        className="flex-1 overflow-y-auto px-4 pb-4"
-        style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }}
+        className="flex-1 overflow-y-auto px-4 pb-6"
+        style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top))' }}
       >
         {tab === 'today' && (
           <TodayView
@@ -86,20 +87,27 @@ export default function App() {
       </main>
 
       <footer
-        className="border-t border-slate-200 bg-white/95 backdrop-blur"
+        className="border-t border-line/70 bg-card/90 backdrop-blur-md"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <QuickAdd />
-        <nav className="flex">
+        <nav className="flex px-2 pb-1 pt-0.5">
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium ${
-                tab === t.id ? 'text-indigo-600' : 'text-slate-400'
+              aria-current={tab === t.id ? 'page' : undefined}
+              className={`flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-1.5 text-[11px] font-medium transition-colors duration-200 active:scale-95 ${
+                tab === t.id ? 'text-accent' : 'text-ink-faint'
               }`}
             >
-              {t.icon}
+              <span
+                className={`rounded-full px-4 py-0.5 transition-colors duration-200 ${
+                  tab === t.id ? 'bg-accent-wash' : ''
+                }`}
+              >
+                {t.icon}
+              </span>
               {t.label}
             </button>
           ))}

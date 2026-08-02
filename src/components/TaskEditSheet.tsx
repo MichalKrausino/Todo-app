@@ -12,8 +12,8 @@ import {
   type RecurrencePreset,
 } from '../lib/rrule'
 
-const field = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[15px] outline-none focus:border-indigo-400'
-const label = 'mb-1 block text-xs font-medium text-slate-500'
+const field = 'w-full rounded-lg border border-line bg-card px-3 py-2 text-[15px] outline-none focus:border-accent/60'
+const label = 'mb-1 block text-xs font-medium text-ink-soft'
 
 export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => void }) {
   const [title, setTitle] = useState(task.title)
@@ -64,13 +64,13 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center sheet-backdrop bg-ink/35 backdrop-blur-[2px]" onClick={onClose}>
       <div
-        className="max-h-[90dvh] w-full max-w-lg space-y-3 overflow-y-auto rounded-t-2xl bg-white p-4"
+        className="max-h-[90dvh] w-full max-w-lg space-y-3 overflow-y-auto sheet-panel rounded-t-[28px] bg-card shadow-sheet p-4"
         style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto h-1 w-10 rounded-full bg-slate-200" />
+        <div className="mx-auto h-1 w-10 rounded-full bg-line" />
 
         <div>
           <label className={label}>Úkol</label>
@@ -163,15 +163,15 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
         </div>
 
         <div className="flex items-center justify-between pt-1">
-          <button className="px-2 py-2 text-sm font-medium text-red-600" onClick={del}>
+          <button className="px-2 py-2 text-sm font-medium text-danger" onClick={del}>
             Smazat
           </button>
           <div className="flex gap-2">
-            <button className="rounded-lg px-4 py-2 text-sm font-medium text-slate-500" onClick={onClose}>
+            <button className="rounded-lg px-4 py-2 text-sm font-medium text-ink-soft" onClick={onClose}>
               Zrušit
             </button>
             <button
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-30"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-card disabled:opacity-30"
               disabled={!title.trim()}
               onClick={save}
             >

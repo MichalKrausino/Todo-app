@@ -4,6 +4,9 @@ import { registerSW } from 'virtual:pwa-register'
 import App from './App'
 import { reconcileTemplates } from './db/templates'
 import { initSync } from './sync/engine'
+import '@fontsource-variable/instrument-sans'
+import '@fontsource-variable/fraunces'
+import '@fontsource-variable/fraunces/standard-italic.css'
 import './index.css'
 
 registerSW({ immediate: true })

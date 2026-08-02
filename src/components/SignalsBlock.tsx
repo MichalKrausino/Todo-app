@@ -73,16 +73,14 @@ export function SignalsBlock({
   const hidden = lines.length - shown.length
 
   return (
-    <section className="rounded-xl border border-amber-200/70 bg-amber-50/70 px-3 py-2.5">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-        Nepropadá ti něco?
-      </h2>
-      <ul className="mt-1.5 space-y-1">
+    <section className="rise rounded-2xl bg-note px-4 py-3">
+      <h2 className="section-label !text-note-ink">nepropadá ti něco?</h2>
+      <ul className="mt-1.5 space-y-1.5">
         {shown.map((line) => (
           <li key={line.key}>
             <button
               onClick={line.onClick}
-              className="flex w-full items-baseline gap-1.5 text-left text-sm text-slate-700"
+              className="flex w-full items-baseline gap-1.5 text-left text-sm text-ink transition-transform duration-150 active:scale-[0.99]"
             >
               {line.color && (
                 <span
@@ -95,7 +93,7 @@ export function SignalsBlock({
           </li>
         ))}
       </ul>
-      {hidden > 0 && <p className="mt-1 text-xs text-amber-700/70">…a {hidden} dalších</p>}
+      {hidden > 0 && <p className="mt-1.5 text-xs text-note-ink/70">…a {hidden} dalších</p>}
     </section>
   )
 }

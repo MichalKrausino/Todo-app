@@ -1,9 +1,167 @@
 @import 'tailwindcss';
 
+/* ---------------------------------------------------------------------------
+   Design systém „papírový diář“
+   Teplý krémový papír, inkoustový text, jediný terakotový akcent.
+   Nadpisy Fraunces (serif s charakterem), UI text Instrument Sans.
+   Pravidla: žádné studené šedi, žádný čistě černý text, stíny tónované
+   do hněda, jeden akcent na celou appku.
+--------------------------------------------------------------------------- */
+
+@theme {
+  --font-sans: 'Instrument Sans Variable', system-ui, -apple-system, sans-serif;
+  --font-display: 'Fraunces Variable', Georgia, 'Times New Roman', serif;
+
+  /* papír a inkoust */
+  --color-paper: #f4eee1; /* pozadí appky */
+  --color-card: #fdfaf2; /* karty a plochy */
+  --color-well: #ece4d2; /* zapuštěné plochy (inputy, pilulky) */
+  --color-line: #e0d6c0; /* vlasové linky */
+  --color-ink: #262019; /* hlavní text */
+  --color-ink-soft: #6f6555; /* sekundární text */
+  --color-ink-faint: #a89c87; /* terciární text, ikony v klidu */
+
+  /* jediný akcent — terakota */
+  --color-accent: #bc4f24;
+  --color-accent-deep: #9c3d17;
+  --color-accent-wash: #f4e2d4; /* akcentový nádech pro chipy a zvýraznění */
+
+  /* sémantické tóny (desaturované, aby seděly na papír) */
+  --color-danger: #ab3527;
+  --color-danger-wash: #f3ddd6;
+  --color-note: #eee1c3; /* okrová plocha pro tiché signály */
+  --color-note-ink: #8a6a1f;
+  --color-moss: #56784f; /* ok / synchronizováno */
+
+  /* stíny tónované do teplé hnědi — nikdy čistá čerň */
+  --shadow-card: 0 1px 2px rgb(84 62 34 / 0.05), 0 6px 20px -12px rgb(84 62 34 / 0.18);
+  --shadow-sheet: 0 -8px 40px -12px rgb(60 42 20 / 0.28);
+  --shadow-float: 0 2px 6px rgb(84 62 34 / 0.08), 0 10px 30px -12px rgb(84 62 34 / 0.22);
+}
+
 html {
   -webkit-tap-highlight-color: transparent;
+  color-scheme: light;
 }
 
 body {
   overscroll-behavior-y: none;
+  font-family: var(--font-sans);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-feature-settings: 'tnum' 1; /* tabulkové číslice v celé appce */
+}
+
+/* jemné zrno papíru přes celou appku */
+.paper-grain::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* nadpisy a serifové štítky sekcí */
+.display {
+  font-family: var(--font-display);
+  font-variation-settings: 'SOFT' 40, 'WONK' 0;
+  letter-spacing: -0.02em;
+}
+
+.section-label {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 0.9rem;
+  letter-spacing: 0.01em;
+  color: var(--color-ink-soft);
+}
+
+/* vstupy a fokus — akcentový prstenec pro klávesnici i dotyk */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+input,
+textarea,
+select {
+  accent-color: var(--color-accent);
+}
+
+/* nástupy prvků — kaskáda karet */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* dosednutí fajfky po dokončení úkolu */
+@keyframes pop {
+  0% {
+    transform: scale(0.6);
+  }
+  60% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.pop {
+  animation: pop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* spodní panely */
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0.6;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sheet-backdrop {
+  animation: fade-in 0.2s ease-out both;
+}
+
+.sheet-panel {
+  animation: sheet-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .pop,
+  .sheet-backdrop,
+  .sheet-panel {
+    animation: none;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+  }
 }

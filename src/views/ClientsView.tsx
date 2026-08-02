@@ -76,24 +76,24 @@ function ClientList({
     <li key={c.id}>
       <button
         onClick={() => onSelect(c.id)}
-        className="flex w-full items-center gap-3 rounded-xl bg-white px-3 py-3 text-left shadow-sm"
+        className="flex w-full items-center gap-3 rounded-2xl bg-card px-3 py-3 text-left shadow-card"
       >
         <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: c.color }} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-medium">{c.name}</span>
-          <span className="text-xs text-slate-400">{KIND_LABELS[c.kind]}</span>
+          <span className="text-xs text-ink-faint">{KIND_LABELS[c.kind]}</span>
         </span>
         {neglectedDays(c) !== null && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+          <span className="rounded-full bg-note px-2 py-0.5 text-xs font-semibold text-note-ink">
             ⚠ {neglectedDays(c)} dní
           </span>
         )}
         {(counts.get(c.id) ?? 0) > 0 && (
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+          <span className="rounded-full bg-well px-2 py-0.5 text-xs font-medium text-ink-soft">
             {counts.get(c.id)}
           </span>
         )}
-        <svg viewBox="0 0 24 24" className="h-4 w-4 text-slate-300" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-faint/70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M9 6l6 6-6 6" />
         </svg>
       </button>
@@ -102,21 +102,21 @@ function ClientList({
 
   return (
     <div className="space-y-4">
-      <header className="flex items-center justify-between">
+      <header className="flex items-center justify-between pr-12">
         <div>
-          <h1 className="text-2xl font-bold">Klienti</h1>
-          <p className="text-sm text-slate-500">Klienti i oblasti jako „Interní“ nebo „Osobní“</p>
+          <h1 className="display text-[2.1rem] font-semibold leading-tight">Klienti</h1>
+          <p className="text-sm text-ink-soft">Klienti i oblasti jako „Interní“ nebo „Osobní“</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 flex-col items-end gap-2">
           <button
             onClick={onTemplates}
-            className="rounded-full border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600"
+            className="rounded-full border border-line bg-card px-3.5 py-2 text-sm font-medium text-ink-soft"
           >
             Šablony
           </button>
           <button
             onClick={() => setAdding((v) => !v)}
-            className="rounded-full bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white"
+            className="rounded-full bg-accent px-3.5 py-2 text-sm font-medium text-card"
           >
             {adding ? 'Zavřít' : '+ Nový'}
           </button>
@@ -126,7 +126,7 @@ function ClientList({
       {adding && <NewClientForm onDone={() => setAdding(false)} />}
 
       {clients.length === 0 && !adding && (
-        <div className="rounded-xl border border-dashed border-slate-200 bg-white/60 px-4 py-8 text-center text-sm text-slate-400">
+        <div className="rounded-2xl border border-dashed border-line bg-card/60 px-4 py-8 text-center text-sm text-ink-faint">
           Zatím žádní klienti. Začni tlačítkem „+ Nový“.
         </div>
       )}
@@ -135,7 +135,7 @@ function ClientList({
 
       {archived.length > 0 && (
         <section>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <h2 className="mb-2 section-label">
             Archivované · {archived.length}
           </h2>
           <ul className="space-y-2 opacity-60">{archived.map(item)}</ul>
@@ -158,18 +158,18 @@ function NewClientForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-xl bg-white p-3 shadow-sm">
+    <form onSubmit={submit} className="space-y-3 rounded-2xl bg-card p-3 shadow-card">
       <input
         autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Jméno klienta nebo oblasti"
-        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[15px] outline-none focus:border-indigo-400"
+        className="w-full rounded-lg border border-line px-3 py-2 text-[15px] outline-none focus:border-accent/60"
       />
       <select
         value={kind}
         onChange={(e) => setKind(e.target.value as ClientKind)}
-        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[15px] outline-none focus:border-indigo-400"
+        className="w-full rounded-lg border border-line bg-card px-3 py-2 text-[15px] outline-none focus:border-accent/60"
       >
         {(Object.keys(KIND_LABELS) as ClientKind[]).map((k) => (
           <option key={k} value={k}>
@@ -184,7 +184,7 @@ function NewClientForm({ onDone }: { onDone: () => void }) {
             type="button"
             aria-label={`Barva ${c}`}
             onClick={() => setColor(c)}
-            className={`h-7 w-7 rounded-full ${color === c ? 'ring-2 ring-slate-800 ring-offset-2' : ''}`}
+            className={`h-7 w-7 rounded-full ${color === c ? 'ring-2 ring-accent ring-offset-2' : ''}`}
             style={{ background: c }}
           />
         ))}
@@ -192,7 +192,7 @@ function NewClientForm({ onDone }: { onDone: () => void }) {
       <button
         type="submit"
         disabled={!name.trim()}
-        className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white disabled:opacity-30"
+        className="w-full rounded-lg bg-accent py-2 text-sm font-medium text-card disabled:opacity-30"
       >
         Vytvořit
       </button>
@@ -280,18 +280,18 @@ function ClientDetail({
 
   return (
     <div className="space-y-4">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm font-medium text-indigo-600">
+      <button onClick={onBack} className="flex items-center gap-1 text-sm font-medium text-accent">
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M15 6l-6 6 6 6" />
         </svg>
         Klienti
       </button>
 
-      <header className="flex items-center gap-3">
+      <header className="flex items-center gap-3 pr-10">
         <span className="h-4 w-4 shrink-0 rounded-full" style={{ background: client.color }} />
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-2xl font-bold">{client.name}</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="truncate display text-[2.1rem] font-semibold leading-tight">{client.name}</h1>
+          <p className="text-sm text-ink-soft">
             {KIND_LABELS[client.kind]}
             {client.status === 'archived' && ' · archivovaný'}
           </p>
@@ -303,12 +303,12 @@ function ClientDetail({
           value={taskText}
           onChange={(e) => setTaskText(e.target.value)}
           placeholder="Nový úkol (např. „zítra kontrola kampaní“)"
-          className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[15px] outline-none focus:border-indigo-400"
+          className="min-w-0 flex-1 rounded-lg border border-line bg-card px-3 py-2 text-[15px] outline-none focus:border-accent/60"
         />
         <button
           type="submit"
           disabled={!taskText.trim()}
-          className="rounded-lg bg-indigo-600 px-3 text-sm font-medium text-white disabled:opacity-30"
+          className="rounded-lg bg-accent px-3 text-sm font-medium text-card disabled:opacity-30"
         >
           Přidat
         </button>
@@ -316,7 +316,7 @@ function ClientDetail({
 
       {templates.length > 0 && (
         <section>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Šablony</h2>
+          <h2 className="mb-2 section-label">Šablony</h2>
           <div className="flex flex-wrap gap-2">
             {templates.map((t) => {
               const deployed = client.templateIds.includes(t.id)
@@ -326,8 +326,8 @@ function ClientDetail({
                   onClick={() => toggleTemplate(t.id)}
                   className={`rounded-full px-3 py-1.5 text-sm font-medium ${
                     deployed
-                      ? 'bg-indigo-600 text-white'
-                      : 'border border-slate-200 bg-white text-slate-500'
+                      ? 'bg-accent text-card'
+                      : 'border border-line bg-card text-ink-soft'
                   }`}
                 >
                   {deployed ? '✓ ' : '+ '}
@@ -339,16 +339,16 @@ function ClientDetail({
         </section>
       )}
 
-      <section className="flex items-center justify-between rounded-xl bg-white px-3 py-2.5 shadow-sm">
+      <section className="flex items-center justify-between rounded-2xl bg-card px-3 py-2.5 shadow-card">
         <div className="text-sm">
           <div className="font-medium">Hlídat zanedbání</div>
-          <div className="text-xs text-slate-400">
+          <div className="text-xs text-ink-faint">
             {client.lastActivityAt
               ? `Poslední aktivita před ${daysSince(client.lastActivityAt)} dny`
               : 'Zatím žádná aktivita'}
           </div>
         </div>
-        <label className="flex items-center gap-1.5 text-sm text-slate-500">
+        <label className="flex items-center gap-1.5 text-sm text-ink-soft">
           po
           <input
             type="number"
@@ -356,7 +356,7 @@ function ClientDetail({
             inputMode="numeric"
             defaultValue={client.checkIntervalDays ?? ''}
             onBlur={(e) => setWatch(e.target.value)}
-            className="w-16 rounded-lg border border-slate-200 px-2 py-1.5 text-center text-[15px] outline-none focus:border-indigo-400"
+            className="w-16 rounded-lg border border-line px-2 py-1.5 text-center text-[15px] outline-none focus:border-accent/60"
           />
           dnech
         </label>
@@ -364,7 +364,7 @@ function ClientDetail({
 
       {noProject.length > 0 && (
         <section>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Úkoly</h2>
+          <h2 className="mb-2 section-label">Úkoly</h2>
           <ul className="space-y-2">{noProject.map(row)}</ul>
         </section>
       )}
@@ -374,18 +374,18 @@ function ClientDetail({
         return (
           <section key={p.id}>
             <div className="mb-2 flex items-baseline justify-between">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <h2 className="section-label">
                 {p.name}
-                {p.goal && <span className="ml-2 font-normal normal-case text-slate-400">{p.goal}</span>}
+                {p.goal && <span className="ml-2 font-normal normal-case text-ink-faint">{p.goal}</span>}
               </h2>
-              <button className="text-xs text-slate-300" onClick={() => void delProject(p.id, p.name)}>
+              <button className="text-xs text-ink-faint/70" onClick={() => void delProject(p.id, p.name)}>
                 Smazat
               </button>
             </div>
             {projectTasks.length > 0 ? (
               <ul className="space-y-2">{projectTasks.map(row)}</ul>
             ) : (
-              <p className="rounded-xl border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-400">
+              <p className="rounded-2xl border border-dashed border-line px-3 py-3 text-xs text-ink-faint">
                 Zatím bez úkolů — přiřaď je úkolu v detailu.
               </p>
             )}
@@ -400,27 +400,27 @@ function ClientDetail({
             value={projName}
             onChange={(e) => setProjName(e.target.value)}
             placeholder="Název projektu"
-            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[15px] outline-none focus:border-indigo-400"
+            className="min-w-0 flex-1 rounded-lg border border-line bg-card px-3 py-2 text-[15px] outline-none focus:border-accent/60"
           />
           <button
             type="submit"
             disabled={!projName.trim()}
-            className="rounded-lg bg-indigo-600 px-3 text-sm font-medium text-white disabled:opacity-30"
+            className="rounded-lg bg-accent px-3 text-sm font-medium text-card disabled:opacity-30"
           >
             OK
           </button>
         </form>
       ) : (
-        <button onClick={() => setAddingProject(true)} className="text-sm font-medium text-indigo-600">
+        <button onClick={() => setAddingProject(true)} className="text-sm font-medium text-accent">
           + Nový projekt
         </button>
       )}
 
-      <footer className="flex gap-4 border-t border-slate-200 pt-4">
-        <button onClick={archiveToggle} className="text-sm font-medium text-slate-500">
+      <footer className="flex gap-4 border-t border-line pt-4">
+        <button onClick={archiveToggle} className="text-sm font-medium text-ink-soft">
           {client.status === 'archived' ? 'Obnovit' : 'Archivovat'}
         </button>
-        <button onClick={() => void del()} className="text-sm font-medium text-red-600">
+        <button onClick={() => void del()} className="text-sm font-medium text-danger">
           Smazat klienta
         </button>
       </footer>

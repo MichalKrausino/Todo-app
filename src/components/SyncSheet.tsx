@@ -27,23 +27,23 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
   const status = useSyncStatus()
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center sheet-backdrop bg-ink/35 backdrop-blur-[2px]" onClick={onClose}>
       <div
-        className="w-full max-w-lg space-y-4 rounded-t-2xl bg-white p-4"
+        className="w-full max-w-lg space-y-4 sheet-panel rounded-t-[28px] bg-card shadow-sheet p-4"
         style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto h-1 w-10 rounded-full bg-slate-200" />
+        <div className="mx-auto h-1 w-10 rounded-full bg-line" />
         <header>
           <h2 className="text-lg font-bold">Synchronizace</h2>
-          <p className="text-sm text-slate-500">{PHASE_LABELS[status.phase]}</p>
+          <p className="text-sm text-ink-soft">{PHASE_LABELS[status.phase]}</p>
         </header>
 
         {status.phase === 'unconfigured' && (
-          <p className="rounded-xl bg-slate-50 px-3 py-3 text-sm text-slate-600">
+          <p className="rounded-2xl bg-paper px-3 py-3 text-sm text-ink-soft">
             Appka běží čistě lokálně. Pro synchronizaci mezi iPhonem a MacBookem
             založ Supabase projekt podle návodu v README (sekce „Synchronizace“)
-            a doplň klíče do <code className="rounded bg-slate-200 px-1">.env.local</code>.
+            a doplň klíče do <code className="rounded bg-line px-1">.env.local</code>.
           </p>
         )}
 
@@ -54,12 +54,12 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
             <dl className="space-y-1 text-sm">
               {status.email && (
                 <div className="flex justify-between">
-                  <dt className="text-slate-500">Účet</dt>
+                  <dt className="text-ink-soft">Účet</dt>
                   <dd className="font-medium">{status.email}</dd>
                 </div>
               )}
               <div className="flex justify-between">
-                <dt className="text-slate-500">Poslední sync</dt>
+                <dt className="text-ink-soft">Poslední sync</dt>
                 <dd className="font-medium">
                   {status.lastSyncAt ? timeFmt.format(new Date(status.lastSyncAt)) : '—'}
                 </dd>
@@ -67,10 +67,10 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
             </dl>
 
             {status.phase === 'error' && status.error && (
-              <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">{status.error}</p>
+              <p className="rounded-2xl bg-danger-wash px-3 py-2 text-xs text-danger">{status.error}</p>
             )}
             {status.phase === 'offline' && (
-              <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              <p className="rounded-2xl bg-note px-3 py-2 text-xs text-note-ink">
                 Bez připojení. Změny se odešlou, jakmile bude síť.
               </p>
             )}
@@ -79,13 +79,13 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
               <button
                 onClick={() => void syncNow()}
                 disabled={status.phase === 'syncing'}
-                className="flex-1 rounded-lg bg-indigo-600 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                className="flex-1 rounded-lg bg-accent py-2.5 text-sm font-medium text-card disabled:opacity-50"
               >
                 Synchronizovat teď
               </button>
               <button
                 onClick={() => void signOutUser()}
-                className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600"
+                className="rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-ink-soft"
               >
                 Odhlásit se
               </button>
@@ -138,7 +138,7 @@ function SignInForm() {
 
   return (
     <form onSubmit={signIn} className="space-y-3">
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-ink-soft">
         Přihlášením se data začnou zálohovat a synchronizovat mezi tvými
         zařízeními. Appka dál funguje offline — sync běží na pozadí.
       </p>
@@ -148,7 +148,7 @@ function SignInForm() {
         placeholder="E-mail"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[15px] outline-none focus:border-indigo-400"
+        className="w-full rounded-lg border border-line px-3 py-2 text-[15px] outline-none focus:border-accent/60"
       />
       <input
         type="password"
@@ -156,14 +156,14 @@ function SignInForm() {
         placeholder="Heslo"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[15px] outline-none focus:border-indigo-400"
+        className="w-full rounded-lg border border-line px-3 py-2 text-[15px] outline-none focus:border-accent/60"
       />
-      {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
-      {info && <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{info}</p>}
+      {error && <p className="rounded-2xl bg-danger-wash px-3 py-2 text-xs text-danger">{error}</p>}
+      {info && <p className="rounded-2xl bg-note px-3 py-2 text-xs text-note-ink">{info}</p>}
       <button
         type="submit"
         disabled={busy || !email.trim() || !password}
-        className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-medium text-white disabled:opacity-40"
+        className="w-full rounded-lg bg-accent py-2.5 text-sm font-medium text-card disabled:opacity-40"
       >
         {busy ? 'Pracuji…' : 'Přihlásit se'}
       </button>
@@ -172,7 +172,7 @@ function SignInForm() {
           type="button"
           disabled={busy}
           onClick={() => void signUp()}
-          className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-600"
+          className="flex-1 rounded-lg border border-line py-2.5 text-sm font-medium text-ink-soft"
         >
           Vytvořit nový účet
         </button>
@@ -180,12 +180,12 @@ function SignInForm() {
           type="button"
           disabled={busy}
           onClick={() => void signInWithGoogle()}
-          className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-medium text-slate-500"
+          className="flex-1 rounded-lg border border-line py-2.5 text-sm font-medium text-ink-soft"
         >
           Přes Google
         </button>
       </div>
-      <p className="text-center text-[11px] text-slate-400">
+      <p className="text-center text-[11px] text-ink-faint">
         Google přihlášení vyžaduje jednorázové nastavení (přijde s Fází 3 — kalendář).
       </p>
     </form>
@@ -193,12 +193,12 @@ function SignInForm() {
 }
 
 const PHASE_COLORS: Record<SyncPhase, string> = {
-  unconfigured: 'text-slate-300',
-  signedOut: 'text-slate-400',
-  idle: 'text-emerald-600',
-  syncing: 'text-indigo-500',
-  offline: 'text-amber-500',
-  error: 'text-red-500',
+  unconfigured: 'text-ink-faint/70',
+  signedOut: 'text-ink-faint',
+  idle: 'text-moss',
+  syncing: 'text-accent',
+  offline: 'text-note-ink',
+  error: 'text-danger',
 }
 
 export function SyncButton({ onOpen }: { onOpen: () => void }) {
@@ -207,7 +207,7 @@ export function SyncButton({ onOpen }: { onOpen: () => void }) {
     <button
       aria-label="Synchronizace"
       onClick={onOpen}
-      className={`flex h-9 w-9 items-center justify-center rounded-full bg-white/80 shadow-sm backdrop-blur ${PHASE_COLORS[status.phase]} ${
+      className={`flex h-9 w-9 items-center justify-center rounded-full bg-card/80 shadow-card backdrop-blur ${PHASE_COLORS[status.phase]} ${
         status.phase === 'syncing' ? 'animate-pulse' : ''
       }`}
     >

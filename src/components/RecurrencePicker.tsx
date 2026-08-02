@@ -13,7 +13,7 @@ const WEEKDAYS: Array<[string, string]> = [
 
 const MONTHS = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec']
 
-const field = 'rounded-lg border border-slate-200 bg-white px-3 py-2 text-[15px] outline-none focus:border-indigo-400'
+const field = 'rounded-lg border border-line bg-card px-3 py-2 text-[15px] outline-none focus:border-accent/60'
 
 function parseInitial(rule: string) {
   const get = (key: string) => new RegExp(`${key}=([^;]+)`).exec(rule)?.[1]
