@@ -47,6 +47,10 @@ instalace ani (v pozdější fázi) push notifikace.
   odklady, zanedbaní klienti), pošle push notifikaci a v appce se návrhy
   přijímají/zamítají jedním klepnutím. Zapíná se v panelu synchronizace
   (obláček) — na iPhonu musí být appka přidaná na ploše
+- Google kalendář (po přihlášení přes Google): schůzky ze všech kalendářů
+  na Dnes s výpočtem volného času, počty schůzek v Plánu, a přijatý ranní
+  návrh si sám zabere blok v samostatném kalendáři „Todo“ — tvoje schůzky
+  appka nikdy neupravuje
 
 ## Synchronizace (Fáze 2) — jednorázové nastavení
 
