@@ -33,19 +33,22 @@ zdůvodnění rozhodnutí a roadmapa fází: **`docs/PLAN.md`** — před větš
    pozadí. `estimateMinutes` je tichý odhad, nikdy se nezobrazuje jako pole k vyplnění.
 6. **UI česky.** Veškeré texty v rozhraní jsou české.
 
-## Design („papírový diář“)
+## Design („iOS minimal“)
 
-Tokeny v `src/index.css` (Tailwind v4 `@theme`) — **používat výhradně je**,
-žádné surové Tailwind barvy (slate/indigo/…): `paper` (pozadí), `card`
-(plochy), `well` (zapuštěné), `line` (linky), `ink`/`ink-soft`/`ink-faint`
-(text), jediný akcent `accent` (terakota) + `accent-deep`/`accent-wash`,
-sémantické `danger`, `note`/`note-ink` (signály), `moss` (ok). Stíny jen
-tónované (`shadow-card`, `shadow-sheet`, `shadow-float`). Nadpisy třídou
-`display` (Fraunces), štítky sekcí `section-label` (serif italic, ne
-verzálky). Písma self-hostovaná přes @fontsource (offline!). Animace:
-`rise` (nástup karet, zpoždění dle indexu), `pop` (fajfka), `sheet-*`
-(panely) — respektují `prefers-reduced-motion`. Ikony PWA generuje
-skript v terakotě — při změně barev přegenerovat.
+Vzhled nativní Apple aplikace: systémový font (na iPhonu SF Pro — nic se
+nestahuje), seskupené karty (`divide-y divide-line` v `rounded-xl bg-card`)
+na podkladu `paper`, hairline oddělovače, frosted-glass tab bar, velké
+titulky (`display`, iOS Large Title), hlavičky sekcí `section-label`
+(13px verzálky). Tokeny v `src/index.css` (Tailwind v4 `@theme`) —
+**používat výhradně je**, žádné surové Tailwind barvy: `paper`/`card`/
+`well`/`line`, text `ink`/`ink-soft`/`ink-faint`, jediný akcent `accent`
+(iOS modrá) + `accent-deep`/`accent-wash`, sémantické `danger`, `note`/
+`note-ink` (signály), `moss` (ok). **Plný tmavý režim**: tokeny se přepisují
+v `@media (prefers-color-scheme: dark)` — nová barva se VŽDY přidává v obou
+režimech; theme-color metas v `index.html` jsou dvě (light/dark). Barvy
+klientů = systémová paleta iOS (`CLIENT_COLORS`). Animace `rise`/`pop`/
+`sheet-*` respektují `prefers-reduced-motion`. Ikony PWA generuje skript
+v iOS modré — při změně brandu přegenerovat.
 
 ## Datový model
 

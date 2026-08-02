@@ -45,11 +45,10 @@ export function TodayView({
     void (t.status === 'done' ? reopenTask(t.id) : completeTask(t.id))
   }
 
-  const row = (t: Task, i: number) => (
+  const row = (t: Task) => (
     <TaskRow
       key={t.id}
       task={t}
-      index={i}
       client={t.clientId ? clientMap.get(t.clientId) : undefined}
       project={t.projectId ? projectMap.get(t.projectId) : undefined}
       onToggle={toggle}
@@ -87,14 +86,14 @@ export function TodayView({
       {overdue.length > 0 && (
         <section>
           <h2 className="section-label mb-2 !text-danger">po termínu · {overdue.length}</h2>
-          <ul className="space-y-2">{overdue.map(row)}</ul>
+          <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{overdue.map(row)}</ul>
         </section>
       )}
 
       <section>
         {overdue.length > 0 && todays.length > 0 && <h2 className="section-label mb-2">dnes</h2>}
         {todays.length > 0 ? (
-          <ul className="space-y-2">{todays.map(row)}</ul>
+          <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{todays.map(row)}</ul>
         ) : (
           overdue.length === 0 && (
             <div className="rise rounded-2xl bg-card px-6 py-10 text-center shadow-card">
@@ -116,7 +115,7 @@ export function TodayView({
       {done.length > 0 && (
         <section>
           <h2 className="section-label mb-2">hotovo · {done.length}</h2>
-          <ul className="space-y-2">{done.map(row)}</ul>
+          <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{done.map(row)}</ul>
         </section>
       )}
     </div>

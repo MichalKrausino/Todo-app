@@ -76,7 +76,7 @@ function ClientList({
     <li key={c.id}>
       <button
         onClick={() => onSelect(c.id)}
-        className="flex w-full items-center gap-3 rounded-2xl bg-card px-3 py-3 text-left shadow-card"
+        className="flex w-full items-center gap-3 bg-card px-4 py-3 text-left transition-colors duration-150 active:bg-well/60"
       >
         <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: c.color }} />
         <span className="min-w-0 flex-1">
@@ -131,14 +131,14 @@ function ClientList({
         </div>
       )}
 
-      <ul className="space-y-2">{clients.map(item)}</ul>
+      <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{clients.map(item)}</ul>
 
       {archived.length > 0 && (
         <section>
           <h2 className="mb-2 section-label">
             Archivované · {archived.length}
           </h2>
-          <ul className="space-y-2 opacity-60">{archived.map(item)}</ul>
+          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card opacity-60 shadow-card">{archived.map(item)}</ul>
         </section>
       )}
     </div>
@@ -365,7 +365,7 @@ function ClientDetail({
       {noProject.length > 0 && (
         <section>
           <h2 className="mb-2 section-label">Úkoly</h2>
-          <ul className="space-y-2">{noProject.map(row)}</ul>
+          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{noProject.map(row)}</ul>
         </section>
       )}
 
@@ -383,7 +383,7 @@ function ClientDetail({
               </button>
             </div>
             {projectTasks.length > 0 ? (
-              <ul className="space-y-2">{projectTasks.map(row)}</ul>
+              <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{projectTasks.map(row)}</ul>
             ) : (
               <p className="rounded-2xl border border-dashed border-line px-3 py-3 text-xs text-ink-faint">
                 Zatím bez úkolů — přiřaď je úkolu v detailu.

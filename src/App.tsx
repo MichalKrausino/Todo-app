@@ -57,7 +57,7 @@ export default function App() {
   }
 
   return (
-    <div className="paper-grain relative mx-auto flex h-dvh max-w-lg flex-col bg-paper text-ink antialiased">
+    <div className="relative mx-auto flex h-dvh max-w-lg flex-col bg-paper text-ink antialiased">
       <div
         className="absolute right-4 z-40"
         style={{ top: 'calc(0.85rem + env(safe-area-inset-top))' }}
@@ -87,7 +87,7 @@ export default function App() {
       </main>
 
       <footer
-        className="border-t border-line/70 bg-card/90 backdrop-blur-md"
+        className="border-t border-line/80 bg-card/85 backdrop-blur-xl"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <QuickAdd />
@@ -97,17 +97,11 @@ export default function App() {
               key={t.id}
               onClick={() => setTab(t.id)}
               aria-current={tab === t.id ? 'page' : undefined}
-              className={`flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-1.5 text-[11px] font-medium transition-colors duration-200 active:scale-95 ${
+              className={`flex flex-1 flex-col items-center gap-1 py-1.5 text-[10px] font-medium transition-colors duration-200 active:scale-95 ${
                 tab === t.id ? 'text-accent' : 'text-ink-faint'
               }`}
             >
-              <span
-                className={`rounded-full px-4 py-0.5 transition-colors duration-200 ${
-                  tab === t.id ? 'bg-accent-wash' : ''
-                }`}
-              >
-                {t.icon}
-              </span>
+              {t.icon}
               {t.label}
             </button>
           ))}

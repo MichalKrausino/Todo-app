@@ -33,11 +33,10 @@ export function UpcomingView({ onOpenTask }: { onOpenTask: (t: Task) => void }) 
     void (t.status === 'done' ? reopenTask(t.id) : completeTask(t.id))
   }
 
-  const row = (t: Task, i: number, showDate: boolean) => (
+  const row = (t: Task, showDate: boolean) => (
     <TaskRow
       key={t.id}
       task={t}
-      index={i}
       client={t.clientId ? clientMap.get(t.clientId) : undefined}
       project={t.projectId ? projectMap.get(t.projectId) : undefined}
       onToggle={toggle}
@@ -67,8 +66,8 @@ export function UpcomingView({ onOpenTask }: { onOpenTask: (t: Task) => void }) 
       {dates.map((d) => (
         <section key={d}>
           <h2 className="section-label mb-2 first-letter:lowercase">{formatDayLabel(d)}</h2>
-          <ul className="space-y-2">
-            {sortTasks(groups.get(d)!).map((t, i) => row(t, i, false))}
+          <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+            {sortTasks(groups.get(d)!).map((t) => row(t, false))}
           </ul>
         </section>
       ))}
@@ -76,7 +75,7 @@ export function UpcomingView({ onOpenTask }: { onOpenTask: (t: Task) => void }) 
       {inbox.length > 0 && (
         <section>
           <h2 className="section-label mb-2">bez termínu · {inbox.length}</h2>
-          <ul className="space-y-2">{inbox.map((t, i) => row(t, i, true))}</ul>
+          <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{inbox.map((t) => row(t, true))}</ul>
         </section>
       )}
     </div>

@@ -1,47 +1,73 @@
 @import 'tailwindcss';
 
 /* ---------------------------------------------------------------------------
-   Design systém „papírový diář“
-   Teplý krémový papír, inkoustový text, jediný terakotový akcent.
-   Nadpisy Fraunces (serif s charakterem), UI text Instrument Sans.
-   Pravidla: žádné studené šedi, žádný čistě černý text, stíny tónované
-   do hněda, jeden akcent na celou appku.
+   Design systém „iOS minimal“
+   Vzhled nativní Apple aplikace: systémový font (na iPhonu SF Pro),
+   seskupené bílé karty na světlém podkladu, hairline oddělovače,
+   frosted-glass panely, jediný modrý akcent, plný tmavý režim.
+   Komponenty používají výhradně tokeny níže — žádné surové barvy.
 --------------------------------------------------------------------------- */
 
 @theme {
-  --font-sans: 'Instrument Sans Variable', system-ui, -apple-system, sans-serif;
-  --font-display: 'Fraunces Variable', Georgia, 'Times New Roman', serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto,
+    'Helvetica Neue', system-ui, sans-serif;
 
-  /* papír a inkoust */
-  --color-paper: #f4eee1; /* pozadí appky */
-  --color-card: #fdfaf2; /* karty a plochy */
-  --color-well: #ece4d2; /* zapuštěné plochy (inputy, pilulky) */
-  --color-line: #e0d6c0; /* vlasové linky */
-  --color-ink: #262019; /* hlavní text */
-  --color-ink-soft: #6f6555; /* sekundární text */
-  --color-ink-faint: #a89c87; /* terciární text, ikony v klidu */
+  /* plochy a text (světlý režim) */
+  --color-paper: #f2f2f7; /* pozadí appky (systemGroupedBackground) */
+  --color-card: #ffffff; /* karty a plochy */
+  --color-well: #e9e9ee; /* zapuštěné plochy (inputy, pilulky) */
+  --color-line: #e5e5ea; /* hairline oddělovače */
+  --color-ink: #0b0b0f; /* hlavní text */
+  --color-ink-soft: #6d6d72; /* sekundární text */
+  --color-ink-faint: #aeaeb2; /* terciární text, ikony v klidu */
 
-  /* jediný akcent — terakota */
-  --color-accent: #bc4f24;
-  --color-accent-deep: #9c3d17;
-  --color-accent-wash: #f4e2d4; /* akcentový nádech pro chipy a zvýraznění */
+  /* jediný akcent — iOS modrá */
+  --color-accent: #007aff;
+  --color-accent-deep: #0063cc;
+  --color-accent-wash: #e8f2ff;
 
-  /* sémantické tóny (desaturované, aby seděly na papír) */
-  --color-danger: #ab3527;
-  --color-danger-wash: #f3ddd6;
-  --color-note: #eee1c3; /* okrová plocha pro tiché signály */
-  --color-note-ink: #8a6a1f;
-  --color-moss: #56784f; /* ok / synchronizováno */
+  /* sémantické tóny (iOS systémová paleta) */
+  --color-danger: #e5372c;
+  --color-danger-wash: #ffebe9;
+  --color-note: #fff3e0; /* oranžový nádech pro tiché signály */
+  --color-note-ink: #8f5600;
+  --color-moss: #248a3d; /* ok / synchronizováno */
 
-  /* stíny tónované do teplé hnědi — nikdy čistá čerň */
-  --shadow-card: 0 1px 2px rgb(84 62 34 / 0.05), 0 6px 20px -12px rgb(84 62 34 / 0.18);
-  --shadow-sheet: 0 -8px 40px -12px rgb(60 42 20 / 0.28);
-  --shadow-float: 0 2px 6px rgb(84 62 34 / 0.08), 0 10px 30px -12px rgb(84 62 34 / 0.22);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-sheet: 0 -8px 40px -12px rgb(0 0 0 / 0.25);
+  --shadow-float: 0 2px 8px rgb(0 0 0 / 0.08), 0 8px 24px -8px rgb(0 0 0 / 0.16);
+}
+
+/* tmavý režim podle systému — přepis tokenů, komponenty se přebarví samy */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-paper: #000000;
+    --color-card: #1c1c1e;
+    --color-well: #2c2c2e;
+    --color-line: #38383a;
+    --color-ink: #f5f5f7;
+    --color-ink-soft: #98989f;
+    --color-ink-faint: #636366;
+
+    --color-accent: #0a84ff;
+    --color-accent-deep: #409cff;
+    --color-accent-wash: #0d2b4d;
+
+    --color-danger: #ff453a;
+    --color-danger-wash: #3a1512;
+    --color-note: #2e2410;
+    --color-note-ink: #ffb340;
+    --color-moss: #30d158;
+
+    --shadow-card: 0 0 #0000;
+    --shadow-sheet: 0 -8px 40px -8px rgb(0 0 0 / 0.7);
+    --shadow-float: 0 2px 12px rgb(0 0 0 / 0.5);
+  }
 }
 
 html {
   -webkit-tap-highlight-color: transparent;
-  color-scheme: light;
+  color-scheme: light dark;
 }
 
 body {
@@ -50,40 +76,28 @@ body {
   background: var(--color-paper);
   color: var(--color-ink);
   font-feature-settings: 'tnum' 1; /* tabulkové číslice v celé appce */
+  text-rendering: optimizeLegibility;
 }
 
-/* jemné zrno papíru přes celou appku */
-.paper-grain::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: 5;
-  pointer-events: none;
-  opacity: 0.05;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-/* nadpisy a serifové štítky sekcí */
+/* velké titulky ve stylu iOS Large Title */
 .display {
-  font-family: var(--font-display);
-  font-variation-settings: 'SOFT' 40, 'WONK' 0;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.022em;
 }
 
+/* hlavičky sekcí ve stylu seskupených iOS seznamů */
 .section-label {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 500;
-  font-size: 0.9rem;
-  letter-spacing: 0.01em;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   color: var(--color-ink-soft);
+  padding-inline: 4px;
 }
 
-/* vstupy a fokus — akcentový prstenec pro klávesnici i dotyk */
 :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
 input,
@@ -92,11 +106,11 @@ select {
   accent-color: var(--color-accent);
 }
 
-/* nástupy prvků — kaskáda karet */
+/* nástup skupin obsahu */
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -105,16 +119,16 @@ select {
 }
 
 .rise {
-  animation: rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rise 0.3s cubic-bezier(0.25, 1, 0.5, 1) both;
 }
 
 /* dosednutí fajfky po dokončení úkolu */
 @keyframes pop {
   0% {
-    transform: scale(0.6);
+    transform: scale(0.5);
   }
   60% {
-    transform: scale(1.12);
+    transform: scale(1.1);
   }
   100% {
     transform: scale(1);
@@ -122,7 +136,7 @@ select {
 }
 
 .pop {
-  animation: pop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 /* spodní panely */
@@ -151,7 +165,7 @@ select {
 }
 
 .sheet-panel {
-  animation: sheet-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: sheet-up 0.3s cubic-bezier(0.25, 1, 0.5, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

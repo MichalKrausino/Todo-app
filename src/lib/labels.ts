@@ -13,16 +13,16 @@ export const KIND_LABELS: Record<ClientKind, string> = {
   personal: 'Osobní',
 }
 
-// Tlumené kvašové tóny, aby seděly na papírové pozadí.
+// Systémová paleta iOS — barvy štítků klientů.
 export const CLIENT_COLORS = [
-  '#a63d2f', // rez
-  '#c1702c', // jantar
-  '#a08526', // hořčice
-  '#6b7a34', // oliva
-  '#4c7a5c', // mech
-  '#2f6d6a', // borovice
-  '#41678f', // modř
-  '#6f5aa0', // švestka
-  '#9c4c74', // ostružina
-  '#7a5c48', // umbra
+  '#FF3B30', // červená
+  '#FF9500', // oranžová
+  '#FFCC00', // žlutá
+  '#34C759', // zelená
+  '#00C7BE', // mátová
+  '#30B0C7', // tyrkysová
+  '#007AFF', // modrá
+  '#5856D6', // indigo
+  '#AF52DE', // fialová
+  '#FF2D55', // růžová
 ]

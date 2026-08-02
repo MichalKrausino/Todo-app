@@ -71,12 +71,12 @@ export function TemplatesView({ onBack }: { onBack: () => void }) {
         </div>
       )}
 
-      <ul className="space-y-2">
+      <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
         {templates.map((t) => (
           <li key={t.id}>
             <button
               onClick={() => setSelectedId(t.id)}
-              className="flex w-full items-center gap-3 rounded-2xl bg-card px-3 py-3 text-left shadow-card"
+              className="flex w-full items-center gap-3 bg-card px-4 py-3 text-left transition-colors duration-150 active:bg-well/60"
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[15px] font-medium">{t.name}</span>
@@ -136,9 +136,9 @@ function TemplateDetail({ template, onBack }: { template: Template; onBack: () =
         </p>
       </header>
 
-      <ul className="space-y-2">
+      <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
         {template.items.map((item) => (
-          <li key={item.id} className="rounded-2xl bg-card px-3 py-2.5 shadow-card">
+          <li key={item.id} className="bg-card px-4 py-3">
             <div className="flex items-start justify-between gap-2">
               <button className="min-w-0 flex-1 text-left" onClick={() => setEditingItem(item)}>
                 <div className="text-[15px]">{item.title}</div>
