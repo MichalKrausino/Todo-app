@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Priority, Project, Task } from '../db/types'
 import { activeClients, clientProjects, removeTask, updateTask } from '../db/repo'
+import { deleteBlockForTask } from '../sync/calendar'
 import { todayISO } from '../lib/dates'
 import { PRIORITY_LABELS } from '../lib/labels'
 import {
@@ -53,11 +54,14 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
       recurrenceRule,
       status: task.status === 'inbox' && hasDate ? 'active' : task.status,
     })
+    // Zrušené naplánování uvolní i blok v kalendáři „Todo".
+    if (task.calendarEventId && !scheduledFor) void deleteBlockForTask(task)
     onClose()
   }
 
   const del = async () => {
     if (confirm('Smazat úkol?')) {
+      if (task.calendarEventId) void deleteBlockForTask(task)
       await removeTask(task.id)
       onClose()
     }

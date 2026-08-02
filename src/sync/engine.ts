@@ -28,6 +28,10 @@ const PAGE_SIZE = 500
 const WRITE_DEBOUNCE_MS = 2500
 
 let sb: SupabaseClient | null = null
+
+// Pro sesterské moduly sync vrstvy (kalendář) — komponenty klienta nepoužívají.
+export const getSupabase = (): SupabaseClient | null => sb
+
 let syncing = false
 let queued = false
 let debounceTimer: ReturnType<typeof setTimeout> | undefined

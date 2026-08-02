@@ -4,6 +4,7 @@ import type { Task } from '../db/types'
 import {
   allClients,
   allProjects,
+  calendarEventsOn,
   completeTask,
   decideDayPlanSuggestion,
   doneOn,
@@ -12,7 +13,9 @@ import {
   reopenTask,
   sortTasks,
 } from '../db/repo'
+import { scheduleBlockForTask } from '../sync/calendar'
 import { formatFullDate, fromISODate, todayISO } from '../lib/dates'
+import { freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { computeSignals } from '../lib/signals'
 import { SignalsBlock } from '../components/SignalsBlock'
 import { TaskRow } from '../components/TaskRow'
@@ -42,6 +45,7 @@ export function TodayView({
   const clients = useLiveQuery(allClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []
   const dayPlan = useLiveQuery(() => getDayPlan(today), [today])
+  const events = useLiveQuery(() => calendarEventsOn(today), [today]) ?? []
 
   const clientMap = new Map(clients.map((c) => [c.id, c]))
   const projectMap = new Map(projects.map((p) => [p.id, p]))
@@ -122,7 +126,11 @@ export function TodayView({
                     </button>
                     <button
                       aria-label="Přijmout návrh"
-                      onClick={() => void decideDayPlanSuggestion(dayPlan.id, s.taskId, 'accepted')}
+                      onClick={() => {
+                        void decideDayPlanSuggestion(dayPlan.id, s.taskId, 'accepted')
+                        // přijatý návrh si zabere blok v kalendáři „Todo"
+                        void scheduleBlockForTask({ ...task, scheduledFor: today })
+                      }}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-card transition-transform duration-150 active:scale-90"
                     >
                       <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -132,6 +140,41 @@ export function TodayView({
                   </li>
                 )
               })}
+            </ul>
+          </section>
+        )
+      })()}
+
+      {(() => {
+        if (events.length === 0) return null
+        const timeFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
+        const busy: BusyInterval[] = events
+          .filter((e) => !e.allDay)
+          .map((e) => {
+            const s = new Date(e.start)
+            const en = new Date(e.end)
+            return { startMin: s.getHours() * 60 + s.getMinutes(), endMin: en.getHours() * 60 + en.getMinutes() }
+          })
+        const free = freeMinutes(busy)
+        return (
+          <section className="rise">
+            <h2 className="section-label mb-2">
+              kalendář · volno ~{minutesToLabel(free)}
+            </h2>
+            <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+              {events.map((e) => (
+                <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="w-24 shrink-0 text-[13px] tabular-nums text-ink-soft">
+                    {e.allDay
+                      ? 'celý den'
+                      : `${timeFmt.format(new Date(e.start))}–${timeFmt.format(new Date(e.end))}`}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[15px]">{e.title}</span>
+                  {e.isTodoBlock && (
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-accent" title="Blok z appky" />
+                  )}
+                </li>
+              ))}
             </ul>
           </section>
         )

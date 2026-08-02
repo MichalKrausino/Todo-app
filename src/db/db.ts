@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie'
-import type { Client, DayPlan, Project, Task, Template } from './types'
+import type { CalendarEvent, Client, DayPlan, Project, Task, Template } from './types'
 
 // Lokální stav synchronizace (kurzory pull/push, přihlášený účet).
 // Nesynchronizuje se — je to čistě lokální účetnictví.
@@ -16,6 +16,7 @@ export class TodoDB extends Dexie {
   templates!: Table<Template, string>
   dayPlans!: Table<DayPlan, string>
   syncState!: Table<SyncStateRow, string>
+  calendarEvents!: Table<CalendarEvent, string>
 
   constructor() {
     super('todo')
@@ -28,6 +29,9 @@ export class TodoDB extends Dexie {
     })
     this.version(2).stores({
       syncState: 'id',
+    })
+    this.version(3).stores({
+      calendarEvents: 'id, startDay',
     })
   }
 }

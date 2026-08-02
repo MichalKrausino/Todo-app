@@ -70,6 +70,22 @@ export interface Template extends BaseRecord {
   items: TemplateItem[]
 }
 
+// Lokální cache událostí z Google kalendáře (Fáze 3). Není to synchronizovaný
+// záznam — jen otisk serverových dat, aby schůzky byly vidět i offline.
+export interface CalendarEvent {
+  id: string // `${calendarId}:${eventId}`
+  calendarId: string
+  eventId: string
+  title: string
+  start: string // ISO datetime, u celodenních YYYY-MM-DD
+  end: string
+  startDay: string // YYYY-MM-DD (Europe/Prague)
+  endDay: string
+  allDay: boolean
+  isTodoBlock: boolean // událost z našeho kalendáře „Todo"
+  fetchedAt: string
+}
+
 export interface DayPlanSuggestion {
   taskId: string
   reason: string

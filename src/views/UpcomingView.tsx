@@ -1,8 +1,19 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Task } from '../db/types'
-import { allClients, allProjects, completeTask, openTasks, reopenTask, sortTasks } from '../db/repo'
-import { formatDayLabel, todayISO } from '../lib/dates'
+import {
+  allClients,
+  allProjects,
+  calendarEventsBetween,
+  completeTask,
+  openTasks,
+  reopenTask,
+  sortTasks,
+} from '../db/repo'
+import { addDays, formatDayLabel, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { TaskRow } from '../components/TaskRow'
+
+const plural = (n: number, one: string, few: string, many: string) =>
+  n === 1 ? one : n < 5 ? few : many
 
 const effectiveDate = (t: Task): string | undefined => {
   const dates = [t.scheduledFor, t.dueDate].filter((d): d is string => Boolean(d))
@@ -28,6 +39,14 @@ export function UpcomingView({ onOpenTask }: { onOpenTask: (t: Task) => void }) 
   }
   const dates = [...groups.keys()].sort()
   const inbox = sortTasks(open.filter((t) => !effectiveDate(t)))
+
+  const horizon = toISODate(addDays(fromISODate(today), 30))
+  const events = useLiveQuery(() => calendarEventsBetween(today, horizon), [today, horizon]) ?? []
+  const meetingsPerDay = new Map<string, number>()
+  for (const e of events) {
+    if (e.isTodoBlock) continue
+    meetingsPerDay.set(e.startDay, (meetingsPerDay.get(e.startDay) ?? 0) + 1)
+  }
 
   const toggle = (t: Task) => {
     void (t.status === 'done' ? reopenTask(t.id) : completeTask(t.id))
@@ -65,7 +84,11 @@ export function UpcomingView({ onOpenTask }: { onOpenTask: (t: Task) => void }) 
 
       {dates.map((d) => (
         <section key={d}>
-          <h2 className="section-label mb-2 first-letter:lowercase">{formatDayLabel(d)}</h2>
+          <h2 className="section-label mb-2 first-letter:lowercase">
+            {formatDayLabel(d)}
+            {(meetingsPerDay.get(d) ?? 0) > 0 &&
+              ` · ${meetingsPerDay.get(d)} ${plural(meetingsPerDay.get(d)!, 'schůzka', 'schůzky', 'schůzek')}`}
+          </h2>
           <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
             {sortTasks(groups.get(d)!).map((t) => row(t, false))}
           </ul>

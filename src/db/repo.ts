@@ -239,6 +239,17 @@ export const clientOpenTasks = (clientId: string) =>
     .filter((t) => !t.deletedAt && (t.status === 'inbox' || t.status === 'active'))
     .toArray()
 
+// ---------- Kalendář — čtení lokální cache (Fáze 3) ----------
+
+export const calendarEventsOn = (day: string) =>
+  db.calendarEvents
+    .filter((e) => e.startDay <= day && day <= e.endDay)
+    .toArray()
+    .then((es) => es.sort((a, b) => Number(a.allDay) - Number(b.allDay) || a.start.localeCompare(b.start)))
+
+export const calendarEventsBetween = (from: string, to: string) =>
+  db.calendarEvents.filter((e) => e.endDay >= from && e.startDay <= to).toArray()
+
 // ---------- Ranní návrh dne (Fáze 6) ----------
 
 export const getDayPlan = (date: string) =>
