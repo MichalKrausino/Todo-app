@@ -59,3 +59,27 @@ begin
   end loop;
 end;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- Fáze 6: push notifikace + ranní návrh dne
+-- (Na projektu už aplikováno migracemi; tady jako dokumentace stavu.)
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  endpoint text not null unique,
+  subscription jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.push_subscriptions enable row level security;
+-- policy „vlastni radky" stejně jako u ostatních tabulek
+
+-- VAPID klíče v schématu private (čte je jen service role přes RPC
+-- public.get_vapid_keys, execute má pouze service_role).
+
+-- Plánovač: pg_cron + pg_net; job „morning-plan" volá edge funkci
+-- /functions/v1/morning-plan denně v 5:00 UTC (7:00 léto / 6:00 zima).
+-- Funkce skóruje kandidáty (termíny, priority, odklady, zanedbaní klienti),
+-- uloží DayPlan do day_plans (sync ho stáhne do appky) a pošle push.

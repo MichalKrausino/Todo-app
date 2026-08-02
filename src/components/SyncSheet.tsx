@@ -1,5 +1,9 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import {
+  disablePush,
+  enablePush,
+  getPushEnabled,
+  isPushSupported,
   signInWithGoogle,
   signInWithPassword,
   signOutUser,
@@ -66,6 +70,8 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
               </div>
             </dl>
 
+            <PushToggle />
+
             {status.phase === 'error' && status.error && (
               <p className="rounded-2xl bg-danger-wash px-3 py-2 text-xs text-danger">{status.error}</p>
             )}
@@ -93,6 +99,67 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+// Ranní návrh dne chodí pushem v 7:00 — přepínač odběru pro tohle zařízení.
+function PushToggle() {
+  const [enabled, setEnabled] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void getPushEnabled().then(setEnabled)
+  }, [])
+
+  if (!isPushSupported()) {
+    return (
+      <p className="rounded-2xl bg-well px-3 py-2 text-xs text-ink-soft">
+        Ranní notifikace: na iPhonu přidej appku na plochu (Sdílet → Přidat na
+        plochu) a otevři ji z ikony — pak tu půjdou zapnout.
+      </p>
+    )
+  }
+
+  const toggle = async () => {
+    setBusy(true)
+    setError(null)
+    if (enabled) {
+      await disablePush()
+      setEnabled(false)
+    } else {
+      const err = await enablePush()
+      if (err) setError(err)
+      else setEnabled(true)
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3 rounded-2xl bg-well px-3 py-2.5">
+        <div className="text-sm">
+          <div className="font-medium">Ranní návrh dne</div>
+          <div className="text-xs text-ink-soft">Notifikace každý den v 7:00</div>
+        </div>
+        <button
+          onClick={() => void toggle()}
+          disabled={busy}
+          role="switch"
+          aria-checked={enabled}
+          className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200 ${
+            enabled ? 'bg-moss' : 'bg-ink-faint/40'
+          } disabled:opacity-50`}
+        >
+          <span
+            className={`absolute top-0.5 h-6 w-6 rounded-full bg-card shadow-card transition-[left] duration-200 ${
+              enabled ? 'left-[22px]' : 'left-0.5'
+            }`}
+          />
+        </button>
+      </div>
+      {error && <p className="rounded-2xl bg-danger-wash px-3 py-2 text-xs text-danger">{error}</p>}
     </div>
   )
 }

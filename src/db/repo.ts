@@ -239,6 +239,35 @@ export const clientOpenTasks = (clientId: string) =>
     .filter((t) => !t.deletedAt && (t.status === 'inbox' || t.status === 'active'))
     .toArray()
 
+// ---------- Ranní návrh dne (Fáze 6) ----------
+
+export const getDayPlan = (date: string) =>
+  db.dayPlans.filter((p) => !p.deletedAt && p.date === date).first()
+
+// Reakce na návrh (přijmout/zamítnout) — synchronizuje se zpět na server,
+// aby se z rozhodnutí dalo později učit (Fáze 5).
+export async function decideDayPlanSuggestion(
+  planId: string,
+  taskId: string,
+  decision: 'accepted' | 'rejected',
+): Promise<void> {
+  const plan = await db.dayPlans.get(planId)
+  if (!plan) return
+  const suggestions = plan.suggestions.map((s) => (s.taskId === taskId ? { ...s, decision } : s))
+  await db.dayPlans.update(planId, { suggestions, updatedAt: now() })
+  if (decision === 'accepted') {
+    const task = await db.tasks.get(taskId)
+    if (task && (task.status === 'inbox' || task.status === 'active')) {
+      await db.tasks.update(taskId, {
+        scheduledFor: plan.date,
+        status: 'active',
+        updatedAt: now(),
+      })
+    }
+  }
+  emitRepoWrite()
+}
+
 const PRIO_WEIGHT: Record<Priority, number> = { critical: 3, high: 2, normal: 1, low: 0 }
 
 export function sortTasks(tasks: Task[]): Task[] {

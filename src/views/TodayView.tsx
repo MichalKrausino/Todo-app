@@ -1,7 +1,17 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Task } from '../db/types'
-import { allClients, allProjects, completeTask, doneOn, openTasks, reopenTask, sortTasks } from '../db/repo'
+import {
+  allClients,
+  allProjects,
+  completeTask,
+  decideDayPlanSuggestion,
+  doneOn,
+  getDayPlan,
+  openTasks,
+  reopenTask,
+  sortTasks,
+} from '../db/repo'
 import { formatFullDate, fromISODate, todayISO } from '../lib/dates'
 import { computeSignals } from '../lib/signals'
 import { SignalsBlock } from '../components/SignalsBlock'
@@ -31,6 +41,7 @@ export function TodayView({
   const done = useLiveQuery(() => doneOn(today), [today]) ?? []
   const clients = useLiveQuery(allClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []
+  const dayPlan = useLiveQuery(() => getDayPlan(today), [today])
 
   const clientMap = new Map(clients.map((c) => [c.id, c]))
   const projectMap = new Map(projects.map((p) => [p.id, p]))
@@ -80,6 +91,51 @@ export function TodayView({
           </div>
         )}
       </header>
+
+      {(() => {
+        if (!dayPlan) return null
+        const taskById = new Map(open.map((t) => [t.id, t]))
+        const pending = dayPlan.suggestions.filter(
+          (s) => s.decision === 'ignored' && taskById.has(s.taskId),
+        )
+        if (pending.length === 0) return null
+        return (
+          <section className="rise">
+            <h2 className="section-label mb-2">ranní návrh · {pending.length}</h2>
+            <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+              {pending.map((s) => {
+                const task = taskById.get(s.taskId)!
+                return (
+                  <li key={s.taskId} className="flex items-center gap-3 px-4 py-3">
+                    <button className="min-w-0 flex-1 text-left" onClick={() => onOpenTask(task)}>
+                      <div className="text-[16px] leading-snug">{task.title}</div>
+                      <div className="mt-0.5 text-[13px] text-ink-soft">{s.reason}</div>
+                    </button>
+                    <button
+                      aria-label="Zamítnout návrh"
+                      onClick={() => void decideDayPlanSuggestion(dayPlan.id, s.taskId, 'rejected')}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-well text-ink-soft transition-transform duration-150 active:scale-90"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                        <path d="M6 6l12 12M18 6L6 18" />
+                      </svg>
+                    </button>
+                    <button
+                      aria-label="Přijmout návrh"
+                      onClick={() => void decideDayPlanSuggestion(dayPlan.id, s.taskId, 'accepted')}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-card transition-transform duration-150 active:scale-90"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 12.5l4.5 4.5L19 7.5" />
+                      </svg>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )
+      })()}
 
       {reviewDay && (
         <button

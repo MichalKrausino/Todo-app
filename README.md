@@ -43,6 +43,10 @@ instalace ani (v pozdější fázi) push notifikace.
 - Pravidelná připomínka kontroly klienta (týdně / každé 2 týdny / měsíčně):
   úkol „Zkontrolovat klienta“ se po odškrtnutí sám vrací — zapíná se při
   vytváření klienta nebo v jeho detailu
+- Ranní návrh dne: server každé ráno vybere 3–6 úkolů (termíny, priority,
+  odklady, zanedbaní klienti), pošle push notifikaci a v appce se návrhy
+  přijímají/zamítají jedním klepnutím. Zapíná se v panelu synchronizace
+  (obláček) — na iPhonu musí být appka přidaná na ploše
 
 ## Synchronizace (Fáze 2) — jednorázové nastavení
 

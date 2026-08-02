@@ -11,7 +11,7 @@ import { db } from '../db/db'
 import { onRepoWrite } from '../db/events'
 import { reconcileTemplates } from '../db/templates'
 import type { Table } from 'dexie'
-import { SUPABASE_ANON_KEY, SUPABASE_URL, isSupabaseConfigured } from './config'
+import { SUPABASE_ANON_KEY, SUPABASE_URL, VAPID_PUBLIC_KEY, isSupabaseConfigured } from './config'
 import {
   LOCAL_TABLE_NAMES,
   REMOTE_TABLES,
@@ -202,4 +202,54 @@ export async function signInWithGoogle(): Promise<void> {
 
 export async function signOutUser(): Promise<void> {
   await sb?.auth.signOut()
+}
+
+// ---------- Push notifikace (ranní návrh dne, Fáze 6) ----------
+
+export const isPushSupported = (): boolean =>
+  'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+
+function base64UrlToUint8Array(s: string): Uint8Array {
+  const pad = '='.repeat((4 - (s.length % 4)) % 4)
+  const raw = atob((s + pad).replace(/-/g, '+').replace(/_/g, '/'))
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0))
+}
+
+export async function getPushEnabled(): Promise<boolean> {
+  if (!isPushSupported() || Notification.permission !== 'granted') return false
+  const reg = await navigator.serviceWorker.ready
+  return (await reg.pushManager.getSubscription()) !== null
+}
+
+// Zapne odběr: povolení od systému → subscribe → uložit na server.
+// Vrací česky popsanou chybu, nebo null při úspěchu.
+export async function enablePush(): Promise<string | null> {
+  if (!sb) return 'Synchronizace není nakonfigurovaná.'
+  if (!isPushSupported()) {
+    return 'Tohle zařízení push nepodporuje. Na iPhonu musí být appka přidaná na ploše.'
+  }
+  const permission = await Notification.requestPermission()
+  if (permission !== 'granted') {
+    return 'Notifikace jsou zakázané. Povol je v nastavení systému.'
+  }
+  const reg = await navigator.serviceWorker.ready
+  const subscription =
+    (await reg.pushManager.getSubscription()) ??
+    (await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: base64UrlToUint8Array(VAPID_PUBLIC_KEY) as unknown as BufferSource,
+    }))
+  const { error } = await sb.from('push_subscriptions').upsert(
+    { endpoint: subscription.endpoint, subscription: subscription.toJSON() },
+    { onConflict: 'endpoint' },
+  )
+  return error ? error.message : null
+}
+
+export async function disablePush(): Promise<void> {
+  const reg = await navigator.serviceWorker.ready
+  const subscription = await reg.pushManager.getSubscription()
+  if (!subscription) return
+  await sb?.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint)
+  await subscription.unsubscribe()
 }
