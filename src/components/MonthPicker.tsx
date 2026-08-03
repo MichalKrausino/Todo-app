@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { calendarEventsBetween, openTasks } from '../db/repo'
-import { fromISODate, toISODate, todayISO } from '../lib/dates'
+import { addDays, fromISODate, toISODate, todayISO } from '../lib/dates'
 
 // Vlastní měsíční kalendářík s heatmapou vytížení dne — systémový
 // <input type="date"> obarvit nejde. Sytost podkladu = počet schůzek
@@ -43,7 +43,16 @@ export function MonthPicker({
 
   const load = new Map<string, number>()
   for (const e of events) {
-    if (!e.isTodoBlock) load.set(e.startDay, (load.get(e.startDay) ?? 0) + 1)
+    if (e.isTodoBlock) continue
+    // vícedenní událost se počítá do KAŽDÉHO dne, přes který běží
+    // (oříznuto na zobrazený měsíc; guard proti nesmyslným datům)
+    let d = e.startDay < first ? first : e.startDay
+    const end = (e.endDay ?? e.startDay) > last ? last : (e.endDay ?? e.startDay)
+    let guard = 0
+    while (d <= end && guard++ < 62) {
+      load.set(d, (load.get(d) ?? 0) + 1)
+      d = toISODate(addDays(fromISODate(d), 1))
+    }
   }
   for (const t of tasks) {
     for (const d of new Set([t.dueDate, t.scheduledFor].filter((x): x is string => Boolean(x)))) {
