@@ -91,13 +91,13 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
               <button
                 onClick={() => void syncNow()}
                 disabled={status.phase === 'syncing'}
-                className="flex-1 rounded-lg bg-accent py-2.5 text-sm font-medium text-card transition-transform duration-150 active:scale-[0.98] disabled:opacity-50"
+                className="flex-1 rounded-xl bg-accent py-2.5 text-sm font-medium text-card transition-transform duration-150 active:scale-[0.98] disabled:opacity-50"
               >
                 Synchronizovat teď
               </button>
               <button
                 onClick={() => void signOutUser()}
-                className="rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-[0.98]"
+                className="rounded-xl border border-line px-4 py-2.5 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-[0.98]"
               >
                 Odhlásit se
               </button>
@@ -319,7 +319,7 @@ function SignInForm() {
       <button
         type="submit"
         disabled={busy || !email.trim() || !password}
-        className="w-full rounded-lg bg-accent py-2.5 text-sm font-medium text-card disabled:opacity-40"
+        className="w-full rounded-xl bg-accent py-2.5 text-sm font-medium text-card disabled:opacity-40"
       >
         {busy ? 'Pracuji…' : 'Přihlásit se'}
       </button>
@@ -328,7 +328,7 @@ function SignInForm() {
           type="button"
           disabled={busy}
           onClick={() => void signUp()}
-          className="flex-1 rounded-lg border border-line py-2.5 text-sm font-medium text-ink-soft"
+          className="flex-1 rounded-xl border border-line py-2.5 text-sm font-medium text-ink-soft"
         >
           Vytvořit nový účet
         </button>
@@ -336,7 +336,7 @@ function SignInForm() {
           type="button"
           disabled={busy}
           onClick={() => void signInWithGoogle()}
-          className="flex-1 rounded-lg border border-line py-2.5 text-sm font-medium text-ink-soft"
+          className="flex-1 rounded-xl border border-line py-2.5 text-sm font-medium text-ink-soft"
         >
           Přes Google
         </button>

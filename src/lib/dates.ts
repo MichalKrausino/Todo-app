@@ -34,6 +34,7 @@ export function formatDayLabel(iso: string): string {
   const today = todayISO()
   if (iso === today) return 'Dnes'
   if (iso === toISODate(addDays(fromISODate(today), 1))) return 'Zítra'
+  if (iso === toISODate(addDays(fromISODate(today), -1))) return 'Včera'
   return dayFmt.format(fromISODate(iso))
 }
 

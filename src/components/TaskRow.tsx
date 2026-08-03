@@ -2,10 +2,17 @@ import { useRef, useState } from 'react'
 import type { Client, Priority, Project, Task } from '../db/types'
 import { formatDayLabel, todayISO } from '../lib/dates'
 
+// Priorita jako barevná pilulka — čitelnější než prostý text.
 const PRIO_BADGE: Partial<Record<Priority, { label: string; cls: string }>> = {
-  critical: { label: '‼ kritická', cls: 'font-semibold text-danger' },
-  high: { label: '! vysoká', cls: 'font-medium text-note-ink' },
-  low: { label: '↓ nízká', cls: 'text-ink-faint' },
+  critical: {
+    label: 'kritická',
+    cls: 'rounded-full bg-danger-wash px-2 py-px text-[11px] font-semibold text-danger',
+  },
+  high: {
+    label: 'vysoká',
+    cls: 'rounded-full bg-note px-2 py-px text-[11px] font-medium text-note-ink',
+  },
+  low: { label: 'nízká', cls: 'rounded-full bg-well px-2 py-px text-[11px] text-ink-faint' },
 }
 
 // Prodleva mezi ťuknutím a skutečným dokončením (jako iOS Připomínky):

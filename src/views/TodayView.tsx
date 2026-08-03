@@ -130,7 +130,8 @@ export function TodayView({
     void (t.status === 'done' ? reopenTask(t.id) : completeTask(t.id))
   }
 
-  const row = (t: Task) => (
+  // V sekci „dnes" je štítek data redundantní — skrývá se (showDate).
+  const row = (t: Task, showDate = true) => (
     <TaskRow
       key={t.id}
       task={t}
@@ -138,6 +139,7 @@ export function TodayView({
       project={t.projectId ? projectMap.get(t.projectId) : undefined}
       onToggle={toggle}
       onOpen={onOpenTask}
+      showDate={showDate}
     />
   )
 
@@ -148,7 +150,7 @@ export function TodayView({
         <p className="text-sm text-ink-soft first-letter:uppercase">{formatFullDate(new Date())}</p>
         {planned > 0 && (
           <div className="mt-3 flex items-center gap-2.5">
-            <div className="h-1 flex-1 overflow-hidden rounded-full bg-well">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-well">
               <div
                 className={`relative h-full overflow-hidden rounded-full transition-[width,background-color] duration-700 ease-glide ${
                   allDone ? 'bg-moss' : 'bg-accent'
@@ -167,7 +169,10 @@ export function TodayView({
           </div>
         )}
         {unfinished.length > 0 && (
-          <p className={`mt-2 text-xs ${overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'}`}>
+          <p className={`mt-2 flex items-center gap-1.5 text-xs ${overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'}`}>
+            <span
+              className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${overloaded ? 'bg-note-ink' : 'bg-moss'}`}
+            />
             práce ~{minutesToLabel(workMin)}
             {freeMin !== null && <> · volno ~{minutesToLabel(freeMin)}</>}
             {overloaded && ' · den je přeplněný — zvaž něco na zítra'}
@@ -375,14 +380,16 @@ export function TodayView({
       {visOverdue.length > 0 && (
         <section className="rise" style={stagger(5)}>
           <h2 className="section-label mb-2 !text-danger">po termínu · {visOverdue.length}</h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{visOverdue.map(row)}</ul>
+          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{visOverdue.map((t) => row(t))}</ul>
         </section>
       )}
 
       <section className="rise" style={stagger(6)}>
-        {visOverdue.length > 0 && visTodays.length > 0 && <h2 className="section-label mb-2">dnes</h2>}
+        {visTodays.length > 0 && <h2 className="section-label mb-2">dnes · {visTodays.length}</h2>}
         {visTodays.length > 0 ? (
-          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{visTodays.map(row)}</ul>
+          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+            {visTodays.map((t) => row(t, false))}
+          </ul>
         ) : batchClient ? (
           visOverdue.length === 0 && (
             <p className="rounded-2xl bg-card px-4 py-4 text-center text-sm text-ink-soft shadow-card">
@@ -414,7 +421,7 @@ export function TodayView({
         return (
           <section className="rise" style={stagger(7)}>
             <h2 className="section-label mb-2">bez termínu · {inbox.length}</h2>
-            <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{inbox.map(row)}</ul>
+            <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{inbox.map((t) => row(t))}</ul>
           </section>
         )
       })()}
@@ -422,7 +429,7 @@ export function TodayView({
       {done.length > 0 && (
         <section className="rise" style={stagger(8)}>
           <h2 className="section-label mb-2">hotovo · {done.length}</h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{done.map(row)}</ul>
+          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{done.map((t) => row(t))}</ul>
         </section>
       )}
 

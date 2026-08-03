@@ -491,7 +491,7 @@ function ToolbarButton({
       onPointerDown={(e) => e.preventDefault()}
       onClick={onTap}
       className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium transition-[background-color,color,transform] duration-150 active:scale-95 ${
-        active ? 'bg-accent-wash text-accent-deep' : 'bg-well/70 text-ink-soft'
+        active ? 'bg-accent-wash text-accent-deep' : 'bg-well/50 text-ink-soft'
       }`}
     >
       <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

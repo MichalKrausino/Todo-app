@@ -72,6 +72,9 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
     <Sheet onClose={onClose} className="space-y-3">
       {(close) => (
         <>
+        <header>
+          <h2 className="text-lg font-bold">Upravit úkol</h2>
+        </header>
         <div>
           <label className={label}>Úkol</label>
           <input className={field} value={title} onChange={(e) => setTitle(e.target.value)} />

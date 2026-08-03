@@ -111,7 +111,7 @@ export default function App() {
               key={t.id}
               onClick={() => setTab(t.id)}
               aria-current={tab === t.id ? 'page' : undefined}
-              className={`flex flex-1 flex-col items-center gap-1 py-1.5 text-[10px] font-medium transition-colors duration-200 active:scale-95 ${
+              className={`flex flex-1 flex-col items-center gap-1 py-1.5 text-[11px] font-medium transition-colors duration-200 active:scale-95 ${
                 tab === t.id ? 'text-accent' : 'text-ink-faint'
               }`}
             >
