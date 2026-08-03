@@ -284,9 +284,11 @@ export function TodayView({
                       : `${timeFmt.format(new Date(e.start))}–${timeFmt.format(new Date(e.end))}`}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-[15px]">{e.title}</span>
+                  {/* follow-up jen u schůzky s časem — celodenní událost
+                      (dovolená, svátek) není jednání k dotažení */}
                   {e.isTodoBlock ? (
                     <span className="h-2 w-2 shrink-0 rounded-full bg-accent" title="Blok z appky" />
-                  ) : followedUp.has(e.id) ? (
+                  ) : e.allDay ? null : followedUp.has(e.id) ? (
                     <span className="pop shrink-0 text-[12px] font-medium text-moss">✓ úkol</span>
                   ) : (
                     <button
@@ -306,7 +308,7 @@ export function TodayView({
                 </li>
               ))}
             </ul>
-            {events.some((e) => !e.isTodoBlock) && (
+            {events.some((e) => !e.isTodoBlock && !e.allDay) && (
               <p className="mt-1.5 px-1 text-xs text-ink-faint">
                 Plusko u schůzky založí úkol „Follow-up: …" na dnešek.
               </p>
