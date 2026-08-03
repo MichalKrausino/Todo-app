@@ -256,11 +256,17 @@ export function QuickAdd({
           <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: toISODate(nextMonday(fromISODate(today))) })} className={`${pill} bg-accent-wash text-accent-deep`}>
             Příští týden
           </button>
+          {/* iOS posílá change průběžně už během výběru — řádek se proto
+              NESMÍ hned zavřít (zavřel by i systémový kalendář navázaný
+              na tenhle input). Zavírá se až po dokončení výběru (blur). */}
           <input
             type="date"
             aria-label="Vybrat datum"
             value={effDueDate ?? ''}
-            onChange={(e) => e.target.value && setOv({ dueDate: e.target.value })}
+            onChange={(e) =>
+              e.target.value && setOverrides((o) => ({ ...o, dueDate: e.target.value }))
+            }
+            onBlur={() => setPicker(null)}
             className="h-8 shrink-0 rounded-full border border-line bg-card px-2.5 text-[13px] text-ink outline-none"
           />
           {(effDueDate || impliedToday) && (
