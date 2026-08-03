@@ -17,6 +17,35 @@ const REFRESH_MIN_INTERVAL_MS = 10 * 60_000
 let lastFetchAt = 0
 let refreshing = false
 
+// Stav propojení kalendáře pro UI (SyncSheet) — chyby se dřív polykaly
+// do konzole, kterou na iPhonu nikdo nevidí.
+export interface CalendarStatus {
+  lastSuccessAt?: string
+  eventCount?: number
+  lastError?: string
+}
+
+let calStatus: CalendarStatus = {}
+const calSubs = new Set<() => void>()
+
+function setCalStatus(patch: CalendarStatus): void {
+  calStatus = { ...calStatus, ...patch }
+  calSubs.forEach((fn) => fn())
+}
+
+export const getCalendarStatus = (): CalendarStatus => calStatus
+export function subscribeCalendarStatus(fn: () => void): () => void {
+  calSubs.add(fn)
+  return () => calSubs.delete(fn)
+}
+
+// Ruční test propojení: obejde throttle a hned obnoví cache; výsledek
+// (úspěch i doslovná chyba) skončí v getCalendarStatus.
+export async function testCalendar(): Promise<void> {
+  lastFetchAt = 0
+  await refreshCalendar()
+}
+
 export function initCalendar(): void {
   // Po každém úspěšném syncu (a při návratu do popředí) zkusit obnovit cache.
   subscribeSyncStatus(() => {
@@ -66,9 +95,11 @@ export async function refreshCalendar(): Promise<void> {
       await db.calendarEvents.clear()
       await db.calendarEvents.bulkAdd(events.map((e) => ({ ...e, fetchedAt })))
     })
+    setCalStatus({ lastSuccessAt: fetchedAt, eventCount: events.length, lastError: undefined })
   } catch (e) {
-    // typicky: kalendář ještě není propojený (bez Google přihlášení) — ticho
-    console.warn('kalendář:', e instanceof Error ? e.message : e)
+    const message = e instanceof Error ? e.message : String(e)
+    console.warn('kalendář:', message)
+    setCalStatus({ lastError: message })
   } finally {
     refreshing = false
   }

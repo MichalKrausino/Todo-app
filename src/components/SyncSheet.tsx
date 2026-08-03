@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { exportBackup, importBackup } from '../db/backup'
 import {
+  getCalendarStatus,
+  subscribeCalendarStatus,
+  testCalendar,
+} from '../sync/calendar'
+import {
   disablePush,
   enablePush,
+  getGoogleTokenError,
   getPushEnabled,
   isPushSupported,
   signInWithGoogle,
@@ -77,6 +83,7 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
             </dl>
 
             <PushToggle />
+            <CalendarSection />
 
             {status.phase === 'error' && status.error && (
               <p className="rounded-2xl bg-danger-wash px-3 py-2 text-xs text-danger">{status.error}</p>
@@ -189,6 +196,83 @@ function BackupSection() {
         appky z plochy nebo při výměně telefonu bez přihlášení.
       </p>
     </section>
+  )
+}
+
+// Rada k chybě kalendáře — doslovná hláška serveru přeložená na krok,
+// který ji řeší.
+function calendarHint(err: string): string | null {
+  if (/není propojený|přihlas se/i.test(err)) {
+    return 'Odhlas se níže a přihlas znovu tlačítkem „Přes Google" — Google se musí zeptat na přístup ke kalendáři.'
+  }
+  if (/invalid_grant|expired|revoked/i.test(err)) {
+    return 'Google přístup vypršel nebo byl odvolán. Přihlas se znovu přes Google. Pokud je tvá OAuth aplikace v Google Cloud Console v režimu „Testing", dej „Publish app" — testovací tokeny vyprší po 7 dnech.'
+  }
+  if (/google_oauth/i.test(err)) {
+    return 'Na serveru chybí Google OAuth údaje — v serverovém nastavení (nový chat s přiloženým textem) doběhl krok 2 špatně.'
+  }
+  if (/404|not.?found/i.test(err)) {
+    return 'Serverová funkce calendar není nasazená — v serverovém nastavení doběhl krok 3 špatně.'
+  }
+  return null
+}
+
+// Stav propojení Google kalendáře + ruční test. Chyby se dřív polykaly
+// do konzole — tady je vidět doslovná hláška i co s ní.
+function CalendarSection() {
+  const cal = useSyncExternalStore(subscribeCalendarStatus, getCalendarStatus)
+  const [busy, setBusy] = useState(false)
+  const tokenErr = getGoogleTokenError()
+
+  const test = async () => {
+    setBusy(true)
+    await testCalendar()
+    setBusy(false)
+  }
+
+  const timeLbl = cal.lastSuccessAt
+    ? new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' }).format(
+        new Date(cal.lastSuccessAt),
+      )
+    : null
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3 rounded-2xl bg-well px-3 py-2.5">
+        <div className="min-w-0 text-sm">
+          <div className="font-medium">Google kalendář</div>
+          <div className="text-xs text-ink-soft">
+            {busy
+              ? 'Zkouším propojení…'
+              : cal.lastError
+                ? 'Propojení selhalo'
+                : cal.lastSuccessAt
+                  ? `Propojeno · ${cal.eventCount ?? 0} událostí (14 dní) · ${timeLbl}`
+                  : 'Zatím nenačteno'}
+          </div>
+        </div>
+        <button
+          onClick={() => void test()}
+          disabled={busy}
+          className="shrink-0 rounded-full bg-accent-wash px-3 py-1.5 text-sm font-medium text-accent-deep transition-transform duration-150 active:scale-95 disabled:opacity-50"
+        >
+          Otestovat
+        </button>
+      </div>
+      {cal.lastError && !busy && (
+        <div className="space-y-1 rounded-2xl bg-danger-wash px-3 py-2 text-xs text-danger">
+          <div className="font-medium">{cal.lastError}</div>
+          {calendarHint(cal.lastError) && (
+            <div className="text-danger/80">{calendarHint(cal.lastError)}</div>
+          )}
+        </div>
+      )}
+      {tokenErr && (
+        <p className="rounded-2xl bg-danger-wash px-3 py-2 text-xs text-danger">
+          Uložení Google klíče selhalo: {tokenErr} — serverová migrace (krok 1) nejspíš neproběhla.
+        </p>
+      )}
+    </div>
   )
 }
 

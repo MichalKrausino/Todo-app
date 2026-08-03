@@ -32,6 +32,11 @@ let sb: SupabaseClient | null = null
 // Pro sesterské moduly sync vrstvy (kalendář) — komponenty klienta nepoužívají.
 export const getSupabase = (): SupabaseClient | null => sb
 
+// Chyba posledního uložení Google tokenu (RPC store_google_token) — UI ji
+// ukazuje v sekci Google kalendář, ať selhání není neviditelné.
+let googleTokenError: string | undefined
+export const getGoogleTokenError = (): string | undefined => googleTokenError
+
 let syncing = false
 let queued = false
 let debounceTimer: ReturnType<typeof setTimeout> | undefined
@@ -56,6 +61,7 @@ export function initSync(): void {
         void sb!
           .rpc('store_google_token', { token: session.provider_refresh_token })
           .then(({ error }) => {
+            googleTokenError = error?.message
             if (error) console.warn('store_google_token:', error.message)
           })
       }
