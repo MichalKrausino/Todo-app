@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Task } from './db/types'
 import { QuickAdd } from './components/QuickAdd'
+import { SearchSheet } from './components/SearchSheet'
 import { SyncButton, SyncSheet } from './components/SyncSheet'
 import { TaskEditSheet } from './components/TaskEditSheet'
 import { TodayView } from './views/TodayView'
@@ -48,6 +49,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('today')
   const [editing, setEditing] = useState<Task | null>(null)
   const [syncOpen, setSyncOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
   // Navigace z tichých signálů: otevřít konkrétního klienta na záložce Klienti.
   const [clientFocus, setClientFocus] = useState<string | null>(null)
 
@@ -77,9 +79,19 @@ export default function App() {
   return (
     <div className="app-shell relative mx-auto flex h-dvh max-w-lg flex-col bg-paper text-ink antialiased">
       <div
-        className="absolute right-4 z-40"
+        className="absolute right-4 z-40 flex items-center gap-2"
         style={{ top: 'calc(0.85rem + env(safe-area-inset-top))' }}
       >
+        <button
+          aria-label="Hledat"
+          onClick={() => setSearchOpen(true)}
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-card/80 text-ink-soft shadow-card backdrop-blur transition-transform duration-150 active:scale-90"
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="M15.8 15.8L20 20" />
+          </svg>
+        </button>
         <SyncButton onOpen={() => setSyncOpen(true)} />
       </div>
 
@@ -136,6 +148,13 @@ export default function App() {
         </nav>
       </footer>
 
+      {searchOpen && (
+        <SearchSheet
+          onClose={() => setSearchOpen(false)}
+          onOpenTask={setEditing}
+          onOpenClient={openClient}
+        />
+      )}
       {editing && <TaskEditSheet task={editing} onClose={() => setEditing(null)} />}
       {syncOpen && <SyncSheet onClose={() => setSyncOpen(false)} />}
     </div>

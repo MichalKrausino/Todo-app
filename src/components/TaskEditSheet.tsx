@@ -24,6 +24,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   const [projectId, setProjectId] = useState(task.projectId ?? '')
   const [priority, setPriority] = useState<Priority>(task.priority)
   const [dueDate, setDueDate] = useState(task.dueDate ?? '')
+  const [dueTime, setDueTime] = useState(task.dueTime ?? '')
   const [scheduledFor, setScheduledFor] = useState(task.scheduledFor ?? '')
   // 'none' | předvolba | 'custom' (existující pravidlo mimo předvolby zachovat)
   const initialRecurrence = task.recurrenceRule ? presetFromRule(task.recurrenceRule) : 'none'
@@ -51,6 +52,8 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
       projectId: projectId || undefined,
       priority,
       dueDate: dueDate || undefined,
+      // čas bez data nedává smysl — deadline s časem se váže na den
+      dueTime: dueDate && dueTime ? dueTime : undefined,
       scheduledFor: scheduledFor || undefined,
       recurrenceRule,
       status: task.status === 'inbox' && hasDate ? 'active' : task.status,
@@ -121,6 +124,17 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           <div>
             <label className={label}>Termín (dokdy)</label>
             <input type="date" className={field} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            <input
+              type="time"
+              aria-label="Čas termínu"
+              className={`${field} mt-1.5`}
+              value={dueTime}
+              onChange={(e) => {
+                setDueTime(e.target.value)
+                // čas na prázdném datu doplní dnešek, ať se neztratí
+                if (e.target.value && !dueDate) setDueDate(todayISO())
+              }}
+            />
           </div>
           <div>
             <label className={label}>Naplánováno na</label>

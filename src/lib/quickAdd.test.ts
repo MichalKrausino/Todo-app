@@ -183,4 +183,40 @@ describe('parseQuickAdd', () => {
     expect(r2.dueDate).toBe('2026-07-30') // čtvrtek je z Wed nejblíž
     expect(r2.title).toBe('publikovat post')
   })
+
+  it('čas „do 14:00" — čas bez dne znamená dnešek', () => {
+    const r = parseQuickAdd('zavolat Pepovi do 14:00', [], TODAY)
+    expect(r.title).toBe('zavolat Pepovi')
+    expect(r.dueTime).toBe('14:00')
+    expect(r.dueDate).toBe('2026-07-29')
+  })
+
+  it('čas se kombinuje s datem i klientem', () => {
+    const r = parseQuickAdd('zítra v 9:30 poslat report @acme', CLIENTS, TODAY)
+    expect(r.title).toBe('poslat report')
+    expect(r.dueDate).toBe('2026-07-30')
+    expect(r.dueTime).toBe('09:30')
+    expect(r.clientId).toBe('c2')
+  })
+
+  it('tvary „ve 14h" a „v 9 hod"', () => {
+    expect(parseQuickAdd('ve 14h brief', [], TODAY).dueTime).toBe('14:00')
+    expect(parseQuickAdd('v 9 hod brief', [], TODAY).dueTime).toBe('09:00')
+    expect(parseQuickAdd('ve 14h brief', [], TODAY).title).toBe('brief')
+  })
+
+  it('denní doby: ráno, poledne, večer', () => {
+    expect(parseQuickAdd('zítra ráno zavolat', [], TODAY).dueTime).toBe('09:00')
+    expect(parseQuickAdd('oběd v poledne', [], TODAY).dueTime).toBe('12:00')
+    expect(parseQuickAdd('do večera odeslat podklady', [], TODAY).dueTime).toBe('19:00')
+    expect(parseQuickAdd('zítra ráno zavolat', [], TODAY).title).toBe('zavolat')
+  })
+
+  it('nesmyslný čas se ignoruje a slova s časem uvnitř nechytá', () => {
+    expect(parseQuickAdd('kód 25:99 doplnit', [], TODAY).dueTime).toBeUndefined()
+    // „večeře" není „večer" — titulek zůstává celý
+    const r = parseQuickAdd('koupit suroviny na večeři', [], TODAY)
+    expect(r.dueTime).toBeUndefined()
+    expect(r.title).toBe('koupit suroviny na večeři')
+  })
 })

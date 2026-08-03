@@ -130,6 +130,7 @@ export async function addTask(input: {
   projectId?: string
   priority?: Priority
   dueDate?: string
+  dueTime?: string
   scheduledFor?: string
   notes?: string
   recurrenceRule?: string
@@ -271,6 +272,9 @@ export const openTasks = () =>
 // Všechny živé úkoly včetně dokončených — podklad týdenní zpětné vazby.
 export const allLiveTasks = () => db.tasks.filter((t) => !t.deletedAt).toArray()
 
+// Pro globální vyhledávání — všechny nesmazané úkoly včetně hotových.
+export const allTasks = () => db.tasks.filter((t) => !t.deletedAt).toArray()
+
 export const doneOn = (dateISO: string) =>
   db.tasks
     .where('status')
@@ -335,6 +339,7 @@ export function sortTasks(tasks: Task[]): Task[] {
     (a, b) =>
       PRIO_WEIGHT[b.priority] - PRIO_WEIGHT[a.priority] ||
       (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') ||
+      (a.dueTime ?? '99:99').localeCompare(b.dueTime ?? '99:99') ||
       a.createdAt.localeCompare(b.createdAt),
   )
 }

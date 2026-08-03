@@ -1,7 +1,8 @@
 // Parser rychlého zadávání — běží čistě v prohlížeči, bez sítě a bez modelu.
 // Rozumí: „ve čtvrtek poslat report @klientx #web !vysoká“, „za 3 dny“,
 // „příští týden“, „15.9.“, „15. srpna“, „do pátku“, „víkend“, „koncem měsíce“,
-// „každý všední den“, „!!“ (vysoká) / „!!!“ (kritická), poznámka za „//“.
+// „každý všední den“, „!!“ (vysoká) / „!!!“ (kritická), poznámka za „//“,
+// časy „do 14:00“, „ve 14h“, „ráno/poledne/večer“ (čas bez dne = dnešek).
 // Funguje i bez diakritiky. Co nepochopí, nechá v názvu úkolu.
 
 import type { Priority } from '../db/types'
@@ -22,6 +23,7 @@ export interface ProjectRef {
 export interface QuickAddParse {
   title: string
   dueDate?: string
+  dueTime?: string // HH:MM — „do 14:00", „ve 14h", „ráno"
   priority: Priority
   clientId?: string
   clientName?: string
@@ -134,11 +136,55 @@ const RE_RELWORD = /(?<=^|\s)(dneska|dnes|zejtra|zitra|pozitri)(?=$|[\s,.;])/
 const RE_RECUR = new RegExp(
   `(?<=^|\\s)kazd(?:y|a|e|ou|ych)\\s+(?:(den|tyden|mesic|rok)|(\\d{1,2})\\s+(dni|dny|dnu|tydny|tydnu|mesice|mesicu)|(vsedni|pracovni)\\s+den|((?:${WD})(?:\\s+a\\s+(?:${WD}))*))(?=$|[\\s,.;])`,
 )
+// čas deadlineu: „do 14:00", „ve 14:00", samotné „14:00"
+const RE_TIME_COLON = /(?<=^|\s)(?:(?:do|ve|v|od)\s+)?(\d{1,2}):(\d{2})(?=$|[\s,.;!?])/
+// „do 14h", „ve 14 h", „v 9 hod"
+const RE_TIME_H = /(?<=^|\s)(?:do|ve|v|od)\s+(\d{1,2})\s?h(?:od(?:in)?)?(?=$|[\s,.;!?])/
+// denní doby — orientační časy (ráno 9:00, poledne 12:00, večer 19:00…)
+const RE_TIME_WORD =
+  /(?<=^|\s)(?:(?:do|k|na|v)\s+)?(dopoledne|odpoledne|poledne|podvecer|vecera|vecer|rano)(?=$|[\s,.;!?])/
+const TIME_WORDS: Record<string, string> = {
+  rano: '09:00',
+  dopoledne: '10:00',
+  poledne: '12:00',
+  odpoledne: '15:00',
+  podvecer: '17:00',
+  vecer: '19:00',
+  vecera: '19:00',
+}
+
 // poznámka: všechno za „ //“ (mezera chrání URL typu https://…)
 const RE_NOTES = /(^|\s)\/\/\s?/
 
 type DateHit = { iso: string; start: number; end: number }
 type RecurHit = { rule: string; dueDate: string; start: number; end: number }
+type TimeHit = { time: string; start: number; end: number }
+
+// Rozpoznání času deadlineu. Nejdřív přesné tvary, pak denní doby.
+function parseTime(norm: string): TimeHit | null {
+  let m = RE_TIME_COLON.exec(norm)
+  if (m) {
+    const h = Number(m[1])
+    const min = Number(m[2])
+    if (h <= 23 && min <= 59) {
+      return {
+        time: `${String(h).padStart(2, '0')}:${m[2]}`,
+        start: m.index,
+        end: m.index + m[0].length,
+      }
+    }
+  }
+  m = RE_TIME_H.exec(norm)
+  if (m) {
+    const h = Number(m[1])
+    if (h <= 23) {
+      return { time: `${String(h).padStart(2, '0')}:00`, start: m.index, end: m.index + m[0].length }
+    }
+  }
+  m = RE_TIME_WORD.exec(norm)
+  if (m) return { time: TIME_WORDS[m[1]], start: m.index, end: m.index + m[0].length }
+  return null
+}
 
 // Nejbližší výskyt dne v týdnu, dnešek se počítá.
 const nearestDow = (today: Date, dow: number) => addDays(today, (dow - today.getDay() + 7) % 7)
@@ -416,10 +462,19 @@ export function parseQuickAdd(
     }
   }
 
+  let dueTime: string | undefined
+  const tm = parseTime(norm)
+  if (tm) {
+    dueTime = tm.time
+    spans.push([tm.start, tm.end])
+    // čas bez dne znamená dnešek — „do 14:00" je dnešní deadline
+    if (!dueDate) dueDate = toISODate(today)
+  }
+
   const title = removeSpans(input, spans)
     .replace(/\s{2,}/g, ' ')
     .trim()
     .replace(/^[,;\s]+|[,;\s]+$/g, '')
 
-  return { title, dueDate, priority, clientId, clientName, projectId, projectName, recurrenceRule, notes }
+  return { title, dueDate, dueTime, priority, clientId, clientName, projectId, projectName, recurrenceRule, notes }
 }

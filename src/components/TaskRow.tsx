@@ -146,7 +146,13 @@ export function TaskRow({
     }
   }
 
-  const overdue = !visualDone && !!task.dueDate && task.dueDate < todayISO()
+  // Prošlé je i dnešní datum s deadlinem, který už minul (do 14:00 v 15:10).
+  const nowHM = new Date().toTimeString().slice(0, 5)
+  const overdue =
+    !visualDone &&
+    !!task.dueDate &&
+    (task.dueDate < todayISO() ||
+      (task.dueDate === todayISO() && !!task.dueTime && task.dueTime <= nowHM))
   const prio = PRIO_BADGE[task.priority]
   const fullPull = dragging && dx < -SWIPE_FULL // Zítra expanduje přes celou šířku
 
@@ -239,7 +245,7 @@ export function TaskRow({
           >
             {task.title}
           </div>
-          {(client || project || (showDate && task.dueDate) || prio || task.recurrenceRule || task.sourceTemplateItemId) && (
+          {(client || project || (showDate && task.dueDate) || task.dueTime || prio || task.recurrenceRule || task.sourceTemplateItemId) && (
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
               {client && (
                 <span className="inline-flex items-center gap-1.5 text-ink-soft">
@@ -251,6 +257,13 @@ export function TaskRow({
               {showDate && task.dueDate && !visualDone && (
                 <span className={overdue ? 'font-medium text-danger' : 'text-ink-soft'}>
                   {formatDayLabel(task.dueDate)}
+                  {task.dueTime ? ` do ${task.dueTime}` : ''}
+                </span>
+              )}
+              {/* na Dnes (datum se neukazuje) stojí čas deadlineu samostatně */}
+              {!(showDate && task.dueDate) && task.dueTime && !visualDone && (
+                <span className={overdue ? 'font-medium text-danger' : 'text-ink-soft'}>
+                  do {task.dueTime}
                 </span>
               )}
               {(task.recurrenceRule || task.sourceTemplateItemId) && (

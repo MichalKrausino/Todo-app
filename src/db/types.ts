@@ -43,6 +43,7 @@ export interface Task extends BaseRecord {
   notes?: string
   priority: Priority
   dueDate?: string // dokdy to musí být (YYYY-MM-DD)
+  dueTime?: string // HH:MM — čas deadlineu v rámci dne (volitelné upřesnění dueDate)
   scheduledFor?: string // na kdy jsem si to naplánoval (YYYY-MM-DD)
   calendarEventId?: string // blok v Google kalendáři (Fáze 3)
   status: TaskStatus

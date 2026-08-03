@@ -22,6 +22,7 @@ const RE_MENTION = /(^|\s)([@#])(\S*)$/
 // undefined = neurčeno (platí text), null = vědomě odebráno.
 interface Overrides {
   dueDate?: string | null
+  dueTime?: string | null
   clientId?: string | null
   projectId?: string | null
   priority?: Priority | null
@@ -65,6 +66,7 @@ export function QuickAdd({
 
   // Efektivní hodnoty: ruční výběr má přednost před textem.
   const effDueDate = overrides.dueDate === undefined ? parsed?.dueDate : (overrides.dueDate ?? undefined)
+  const effDueTime = overrides.dueTime === undefined ? parsed?.dueTime : (overrides.dueTime ?? undefined)
   const effClientId = overrides.clientId === undefined ? parsed?.clientId : (overrides.clientId ?? undefined)
   const effProjectId = overrides.projectId === undefined ? parsed?.projectId : (overrides.projectId ?? undefined)
   const effPriority: Priority =
@@ -151,6 +153,7 @@ export function QuickAdd({
     const task = await addTask({
       title: parsed.title,
       dueDate: effDueDate,
+      dueTime: effDueTime,
       scheduledFor: impliedToday ? todayISO() : undefined,
       clientId: effClientId,
       projectId: effProjectId,
@@ -241,10 +244,11 @@ export function QuickAdd({
               type="button"
               onPointerDown={keepFocus}
               onClick={() => setPicker(picker === 'date' ? null : 'date')}
-              key={`d:${effDueDate ?? 'dnes'}`}
+              key={`d:${effDueDate ?? 'dnes'}:${effDueTime ?? ''}`}
               className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}
             >
               {formatDayLabel(effDueDate ?? today)}
+              {effDueTime ? ` · ${effDueTime}` : ''}
             </button>
           )}
           {parsed?.recurrenceRule && (
@@ -309,7 +313,7 @@ export function QuickAdd({
               Příští týden
             </button>
             {(effDueDate || impliedToday) && (
-              <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: null })} className={`${pill} bg-well text-ink-soft`}>
+              <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: null, dueTime: null })} className={`${pill} bg-well text-ink-soft`}>
                 ✕ Bez termínu
               </button>
             )}
@@ -320,6 +324,49 @@ export function QuickAdd({
             value={effDueDate}
             onSelect={(iso) => setOverrides((o) => ({ ...o, dueDate: iso }))}
           />
+
+          {/* čas deadlineu — volitelný; výběr času bez dne míří na dnešek */}
+          <div className="rise -mx-1 mb-2 flex items-center gap-1.5 overflow-x-auto px-1" style={{ scrollbarWidth: 'none' }}>
+            <span className="shrink-0 pl-1 text-[12px] font-medium text-ink-faint">Čas</span>
+            {['9:00', '12:00', '14:00', '16:00'].map((t) => {
+              const v = t.padStart(5, '0')
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onPointerDown={keepFocus}
+                  onClick={() =>
+                    setOverrides((o) => ({
+                      ...o,
+                      dueTime: effDueTime === v ? null : v,
+                      dueDate: effDueDate ?? today,
+                    }))
+                  }
+                  className={`${pill} ${effDueTime === v ? 'bg-ink text-paper' : 'bg-well text-ink'}`}
+                >
+                  {t}
+                </button>
+              )
+            })}
+            <input
+              type="time"
+              aria-label="Čas termínu"
+              value={effDueTime ?? ''}
+              onChange={(e) =>
+                setOverrides((o) => ({
+                  ...o,
+                  dueTime: e.target.value || null,
+                  dueDate: e.target.value ? (effDueDate ?? today) : effDueDate,
+                }))
+              }
+              className="shrink-0 rounded-full border border-transparent bg-well px-3 py-1 text-[13px] font-medium text-ink outline-none focus:border-accent/50"
+            />
+            {effDueTime && (
+              <button type="button" onPointerDown={keepFocus} onClick={() => setOverrides((o) => ({ ...o, dueTime: null }))} className={`${pill} bg-well text-ink-soft`}>
+                ✕
+              </button>
+            )}
+          </div>
 
           {/* mini agenda vybraného dne: schůzky z kalendáře + úkoly + volno */}
           {previewDay && (
