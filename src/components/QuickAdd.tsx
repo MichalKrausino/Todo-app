@@ -9,13 +9,17 @@ import { humanizeRule } from '../lib/rrule'
 // Rozepsaný @klient / #projekt na konci textu → našeptávač nad polem.
 const RE_MENTION = /(^|\s)([@#])(\S*)$/
 
-export function QuickAdd() {
+export function QuickAdd({ onShowUpcoming }: { onShowUpcoming?: () => void }) {
   const [text, setText] = useState('')
   // Počítadlo přidaných úkolů — mění key tlačítka, takže po každém
   // přidání proběhne potvrzovací pop (hmatová odezva bez haptiky).
   const [addedCount, setAddedCount] = useState(0)
   // Pojistka proti špatnému parsování: pár vteřin po přidání jde úkol vrátit.
-  const [lastAdded, setLastAdded] = useState<{ id: string; title: string } | null>(null)
+  // dueDate říká, kam úkol šel — bez termínu skončil v inboxu (Plán),
+  // což bez vysvětlení vypadá, jako by se nic nestalo.
+  const [lastAdded, setLastAdded] = useState<{ id: string; title: string; dueDate?: string } | null>(
+    null,
+  )
   const undoTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const clients = useLiveQuery(activeClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []
@@ -65,9 +69,9 @@ export function QuickAdd() {
     })
     setText('')
     setAddedCount((n) => n + 1)
-    setLastAdded({ id: task.id, title: task.title })
+    setLastAdded({ id: task.id, title: task.title, dueDate: task.dueDate })
     clearTimeout(undoTimer.current)
-    undoTimer.current = setTimeout(() => setLastAdded(null), 5000)
+    undoTimer.current = setTimeout(() => setLastAdded(null), 6000)
   }
 
   const undo = async () => {
@@ -85,9 +89,22 @@ export function QuickAdd() {
       {lastAdded && (
         <div className="pointer-events-none absolute inset-x-0 -top-12 z-30 flex justify-center">
           <div className="pop pointer-events-auto flex items-center gap-2 rounded-full bg-ink/90 py-1.5 pl-4 pr-1.5 shadow-float backdrop-blur">
-            <span className="max-w-52 truncate text-[13px] text-paper">
-              Přidáno „{lastAdded.title}“
+            <span className="max-w-48 truncate text-[13px] text-paper">
+              {lastAdded.dueDate
+                ? `${formatDayLabel(lastAdded.dueDate)} — „${lastAdded.title}“`
+                : `Do inboxu — „${lastAdded.title}“`}
             </span>
+            {!lastAdded.dueDate && onShowUpcoming && (
+              <button
+                onClick={() => {
+                  setLastAdded(null)
+                  onShowUpcoming()
+                }}
+                className="rounded-full bg-paper/15 px-3 py-1 text-[13px] font-semibold text-paper transition-transform duration-150 active:scale-95"
+              >
+                Zobrazit
+              </button>
+            )}
             <button
               onClick={() => void undo()}
               className="rounded-full bg-paper/15 px-3 py-1 text-[13px] font-semibold text-paper transition-transform duration-150 active:scale-95"
