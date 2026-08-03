@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseQuickAdd } from './quickAdd'
+import { parseQuickAdd, parseTemplateItem } from './quickAdd'
 
 // Středa 29. 7. 2026
 const TODAY = new Date(2026, 6, 29)
@@ -160,6 +160,18 @@ describe('parseQuickAdd', () => {
     const r2 = parseQuickAdd('banery @klientx #kamp', CLIENTS, TODAY, projects)
     expect(r2.projectId).toBe('p2')
     expect(r2.clientId).toBe('c1')
+  })
+
+  it('parseTemplateItem: položka šablony přirozeným jazykem', () => {
+    const r = parseTemplateItem('každé pondělí kontrola kampaní !vysoká #PPC', TODAY)
+    expect(r.title).toBe('kontrola kampaní')
+    expect(r.recurrenceRule).toBe('FREQ=WEEKLY;BYDAY=MO')
+    expect(r.priority).toBe('high')
+    expect(r.projectName).toBe('PPC')
+    // #token si drží původní diakritiku a velikost písmen
+    expect(parseTemplateItem('každý den standup #Sítě', TODAY).projectName).toBe('Sítě')
+    // bez opakování se pravidlo nevrací — UI si řekne o doplnění
+    expect(parseTemplateItem('kontrola kampaní', TODAY).recurrenceRule).toBeUndefined()
   })
 
   it('každý všední den a výčet dnů', () => {

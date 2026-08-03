@@ -24,17 +24,28 @@ const now = () => new Date().toISOString()
 
 // ---------- CRUD šablon ----------
 
-export async function addTemplate(name: string): Promise<Template> {
+export async function addTemplate(name: string, items: TemplateItem[] = []): Promise<Template> {
   const template: Template = {
     id: crypto.randomUUID(),
     createdAt: now(),
     updatedAt: now(),
     name,
-    items: [],
+    items,
   }
   await db.templates.add(template)
   emitRepoWrite()
   return template
+}
+
+// Kopie šablony s čerstvými id položek — pro odladění varianty
+// (např. „Správa PPC — malý klient") bez rozbití té nasazené.
+export async function duplicateTemplate(id: string): Promise<Template | null> {
+  const original = await db.templates.get(id)
+  if (!original || original.deletedAt) return null
+  return addTemplate(
+    `${original.name} (kopie)`,
+    original.items.map(({ id: _dropped, ...rest }) => newTemplateItem(rest)),
+  )
 }
 
 export async function updateTemplate(id: string, patch: Partial<Template>): Promise<void> {

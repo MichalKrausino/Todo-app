@@ -320,6 +320,28 @@ function removeSpans(s: string, spans: Array<[number, number]>): string {
   return out
 }
 
+// Položka šablony stejným jazykem jako rychlé zadávání:
+// „každé pondělí kontrola kampaní !vysoká #PPC". Šablona je nezávislá
+// na klientovi, takže #token je volný název projektu (ne párování).
+// Bez opakování vrací recurrenceRule undefined — UI si řekne o doplnění.
+export interface TemplateItemParse {
+  title: string
+  recurrenceRule?: string
+  priority: Priority
+  projectName?: string
+}
+
+export function parseTemplateItem(input: string, today: Date = new Date()): TemplateItemParse {
+  let projectName: string | undefined
+  const pm = RE_PROJECT.exec(normalizeAligned(input))
+  if (pm) {
+    projectName = input.slice(pm.index + 1, pm.index + pm[0].length)
+    input = `${input.slice(0, pm.index)} ${input.slice(pm.index + pm[0].length)}`
+  }
+  const r = parseQuickAdd(input, [], today, [])
+  return { title: r.title, recurrenceRule: r.recurrenceRule, priority: r.priority, projectName }
+}
+
 export function parseQuickAdd(
   input: string,
   clients: ClientRef[],
