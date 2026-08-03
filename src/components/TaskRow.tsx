@@ -61,7 +61,7 @@ export function TaskRow({
   const prio = PRIO_BADGE[task.priority]
 
   return (
-    <li className="rise flex items-start gap-3 bg-card px-4 py-3 transition-colors duration-150 active:bg-well/60">
+    <li className="rise flex items-start gap-3 bg-card px-4 py-3 transition-colors duration-150 hover:bg-well/40 active:bg-well/60">
       <button
         aria-label={visualDone ? 'Vrátit mezi nehotové' : 'Označit jako hotové'}
         onClick={handleToggle}

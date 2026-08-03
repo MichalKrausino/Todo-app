@@ -173,15 +173,16 @@ export function TodayView({
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-well">
               <div
                 className={`relative h-full overflow-hidden rounded-full transition-[width,background-color] duration-700 ease-glide ${
-                  allDone ? 'bg-moss' : 'bg-accent'
+                  allDone ? 'bg-moss' : 'progress-fill'
                 }`}
                 style={{ width: `${Math.round(progress * 100)}%` }}
               >
                 {allDone && <span className="shimmer" />}
+                {!allDone && done.length > 0 && <span key={done.length} className="bar-pulse" />}
               </div>
             </div>
             <span className="text-xs font-medium text-ink-soft">
-              <span key={done.length} className="pop-soft inline-block">
+              <span key={done.length} className="roll-in">
                 {done.length}
               </span>{' '}
               z {planned}
@@ -322,7 +323,7 @@ export function TodayView({
           style={stagger(3)}
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-wash text-accent">
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg viewBox="0 0 24 24" className="breathe h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z" />
             </svg>
           </span>
@@ -384,10 +385,10 @@ export function TodayView({
           </button>
           {batchClients.map((c) => (
             <button
-              key={c.id}
+              key={`${c.id}:${batchClient === c.id}`}
               onClick={() => setBatchClient(batchClient === c.id ? null : c.id)}
               className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-transform duration-150 active:scale-95 ${
-                batchClient === c.id ? 'bg-ink text-paper' : 'bg-well text-ink-soft'
+                batchClient === c.id ? 'pop-soft bg-ink text-paper' : 'bg-well text-ink-soft'
               }`}
             >
               <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />

@@ -60,7 +60,10 @@ export function MonthPicker({
     }
   }
 
+  // směr listování — nový měsíc přijíždí ze strany, kam se listuje
+  const [dir, setDir] = useState(0)
   const shift = (delta: number) => {
+    setDir(delta)
     const d = new Date(firstDate.getFullYear(), firstDate.getMonth() + delta, 1)
     setMonth(toISODate(d).slice(0, 7))
   }
@@ -98,7 +101,11 @@ export function MonthPicker({
         </button>
       </div>
 
-      <div key={`g${month}`} className="rise grid grid-cols-7 gap-y-0 text-center">
+      <div
+        key={`g${month}`}
+        className="view-enter grid grid-cols-7 gap-y-0 text-center"
+        style={{ '--vx': dir === 0 ? '0px' : dir > 0 ? '18px' : '-18px' } as React.CSSProperties}
+      >
         {WEEKDAYS.map((w) => (
           <span key={w} className="text-[10px] font-medium text-ink-faint">
             {w}
