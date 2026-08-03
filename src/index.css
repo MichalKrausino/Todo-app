@@ -73,15 +73,22 @@
 html {
   -webkit-tap-highlight-color: transparent;
   color-scheme: light dark;
+  /* stabilní fullscreen: žádný horizontální posun ani gumování do stran,
+     žádné přeškálování textu při otočení, dvojťuk nezoomuje */
+  overflow-x: clip;
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
 }
 
 body {
-  overscroll-behavior-y: none;
+  overscroll-behavior: none;
+  overflow-x: clip;
   font-family: var(--font-sans);
   background: var(--color-paper);
   color: var(--color-ink);
   font-feature-settings: 'tnum' 1; /* tabulkové číslice v celé appce */
   text-rendering: optimizeLegibility;
+  overflow-wrap: break-word; /* dlouhé slovo/URL v názvu nesmí roztáhnout layout */
 }
 
 /* velké titulky ve stylu iOS Large Title */
@@ -109,6 +116,9 @@ input,
 textarea,
 select {
   accent-color: var(--color-accent);
+  /* pod 16 px si iOS Safari pole při fokusu přizoomuje — pojistka
+     k maximum-scale=1 ve viewport metě */
+  font-size: 16px;
 }
 
 /* ---------------------------------------------------------------------------

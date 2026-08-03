@@ -41,7 +41,7 @@ export function Sheet({
       onClick={close}
     >
       <div
-        className={`sheet-panel max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-[28px] p-4 shadow-sheet ${
+        className={`sheet-panel max-h-[90dvh] w-full max-w-lg overflow-y-auto overflow-x-hidden rounded-t-[28px] p-4 shadow-sheet ${
           tone === 'paper' ? 'bg-paper' : 'bg-card'
         } ${className}`}
         style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}

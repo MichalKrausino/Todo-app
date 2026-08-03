@@ -77,7 +77,7 @@ export default function App() {
       </div>
 
       <main
-        className="flex-1 overflow-y-auto px-4 pb-6"
+        className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6"
         style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top))' }}
       >
         {/* key vynutí novou instanci pohledu → nástupní animace při přepnutí */}
