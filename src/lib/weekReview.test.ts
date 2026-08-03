@@ -48,8 +48,28 @@ describe('computeWeekStats', () => {
     ]
     const s = computeWeekStats([c], tasks, SUNDAY)
     expect(s.completedCount).toBe(3)
-    expect(s.completedByClient[0]).toEqual({ client: c, count: 2 })
+    expect(s.completedByClient[0]).toEqual({ client: c, count: 2, projects: [] })
     expect(s.completedByClient[1].client).toBeUndefined()
+  })
+
+  it('rozepíše dokončené i podle projektů klienta', () => {
+    const c = client({ id: 'c1' })
+    const projects = [
+      { id: 'p1', clientId: 'c1', name: 'Web', status: 'active' as const, order: 0, createdAt: '2026-07-01T10:00:00.000Z', updatedAt: '2026-07-01T10:00:00.000Z' },
+      { id: 'p2', clientId: 'c1', name: 'Kampaň', status: 'active' as const, order: 1, createdAt: '2026-07-01T10:00:00.000Z', updatedAt: '2026-07-01T10:00:00.000Z' },
+    ]
+    const tasks = [
+      task({ status: 'done', completedAt: '2026-07-30T09:00:00.000Z', clientId: 'c1', projectId: 'p1' }),
+      task({ status: 'done', completedAt: '2026-07-30T10:00:00.000Z', clientId: 'c1', projectId: 'p1' }),
+      task({ status: 'done', completedAt: '2026-07-31T09:00:00.000Z', clientId: 'c1', projectId: 'p2' }),
+      task({ status: 'done', completedAt: '2026-07-31T10:00:00.000Z', clientId: 'c1' }), // bez projektu
+    ]
+    const s = computeWeekStats([c], tasks, SUNDAY, projects)
+    expect(s.completedByClient[0].count).toBe(4)
+    expect(s.completedByClient[0].projects).toEqual([
+      { name: 'Web', count: 2 },
+      { name: 'Kampaň', count: 1 },
+    ])
   })
 
   it('plán vs. realita počítá jen úkoly s dnem v týdnu', () => {

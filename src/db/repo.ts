@@ -67,6 +67,21 @@ export const archivedClients = () =>
 
 export const allClients = () => db.clients.filter((c) => !c.deletedAt).toArray()
 
+// Projekt „bez klienta" bydlí v oblasti Interní/Osobní. Když oblast ještě
+// neexistuje, tiše se založí — uživatel jen vybere, kam projekt patří.
+const AREA_DEFAULTS: Record<'internal' | 'personal', { name: string; color: string }> = {
+  internal: { name: 'Interní', color: '#5856D6' }, // indigo z CLIENT_COLORS
+  personal: { name: 'Osobní', color: '#34C759' }, // zelená z CLIENT_COLORS
+}
+
+export async function ensureAreaClient(kind: 'internal' | 'personal'): Promise<Client> {
+  const existing = await db.clients
+    .filter((c) => !c.deletedAt && c.status === 'active' && c.kind === kind)
+    .first()
+  if (existing) return existing
+  return addClient({ kind, ...AREA_DEFAULTS[kind] })
+}
+
 // ---------- Projekty ----------
 
 export async function addProject(input: {

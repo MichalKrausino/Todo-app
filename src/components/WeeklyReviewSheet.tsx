@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { allClients, allLiveTasks } from '../db/repo'
+import { allClients, allLiveTasks, allProjects } from '../db/repo'
 import { fromISODate, todayISO } from '../lib/dates'
 import { computeWeekStats } from '../lib/weekReview'
 import { Sheet } from './Sheet'
@@ -12,7 +12,8 @@ const DAY_INITIALS = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So']
 export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
   const clients = useLiveQuery(allClients, []) ?? []
   const tasks = useLiveQuery(allLiveTasks, []) ?? []
-  const stats = computeWeekStats(clients, tasks, todayISO())
+  const projects = useLiveQuery(allProjects, []) ?? []
+  const stats = computeWeekStats(clients, tasks, todayISO(), projects)
 
   const rate =
     stats.plannedCount > 0 ? Math.round((stats.plannedDoneCount / stats.plannedCount) * 100) : null
@@ -57,16 +58,23 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
           <section className="rise" style={stagger(3)}>
             <h3 className="section-label mb-2">komu šla práce</h3>
             <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
-              {stats.completedByClient.slice(0, 5).map(({ client, count }) => (
-                <li key={client?.id ?? 'none'} className="flex items-center gap-2.5 px-4 py-2.5">
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ background: client?.color ?? 'var(--color-ink-faint)' }}
-                  />
-                  <span className="min-w-0 flex-1 truncate text-[15px]">
-                    {client?.name ?? 'Bez klienta'}
-                  </span>
-                  <span className="text-sm font-semibold text-ink-soft">{count}</span>
+              {stats.completedByClient.slice(0, 5).map(({ client, count, projects: byProject }) => (
+                <li key={client?.id ?? 'none'} className="px-4 py-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ background: client?.color ?? 'var(--color-ink-faint)' }}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[15px]">
+                      {client?.name ?? 'Bez klienta'}
+                    </span>
+                    <span className="text-sm font-semibold text-ink-soft">{count}</span>
+                  </div>
+                  {byProject.length > 0 && (
+                    <div className="mt-0.5 truncate pl-5 text-[12px] text-ink-faint">
+                      {byProject.map((p) => `${p.name} ${p.count}`).join(' · ')}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

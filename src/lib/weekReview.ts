@@ -3,15 +3,20 @@
 // u koho bylo ticho, a jak vypadá příštích 7 dní. Porovnání odhadu času
 // a skutečnosti přibude s Fází 5 (estimateMinutes).
 
-import type { Client, Task } from '../db/types'
+import type { Client, Project, Task } from '../db/types'
 import { addDays, fromISODate, mondayOf, toISODate } from './dates'
 
 export interface WeekStats {
   weekStart: string // pondělí
   weekEnd: string // neděle
   completedCount: number
-  /** dokončené úkoly podle klienta, sestupně; clientId undefined = bez klienta */
-  completedByClient: Array<{ client: Client | undefined; count: number }>
+  /** dokončené úkoly podle klienta, sestupně; clientId undefined = bez klienta;
+      projects = rozpad na projekty klienta (jen ty s aspoň jedním dokončeným) */
+  completedByClient: Array<{
+    client: Client | undefined
+    count: number
+    projects: Array<{ name: string; count: number }>
+  }>
   /** úkoly s termínem/plánem v týdnu (mimo zahozené) */
   plannedCount: number
   /** z nich skutečně dokončené */
@@ -35,7 +40,12 @@ export function reviewWeekStart(today: string): string {
   return mondayOf(isMonday ? toISODate(addDays(fromISODate(today), -1)) : today)
 }
 
-export function computeWeekStats(clients: Client[], tasks: Task[], today: string): WeekStats {
+export function computeWeekStats(
+  clients: Client[],
+  tasks: Task[],
+  today: string,
+  projects: Project[] = [],
+): WeekStats {
   const weekStart = reviewWeekStart(today)
   const weekEnd = toISODate(addDays(fromISODate(weekStart), 6))
   const live = tasks.filter((t) => !t.deletedAt)
@@ -50,8 +60,24 @@ export function computeWeekStats(clients: Client[], tasks: Task[], today: string
     byClient.set(t.clientId, (byClient.get(t.clientId) ?? 0) + 1)
   }
   const clientById = new Map(clients.map((c) => [c.id, c]))
+  const projectById = new Map(projects.filter((p) => !p.deletedAt).map((p) => [p.id, p]))
   const completedByClient = [...byClient.entries()]
-    .map(([clientId, count]) => ({ client: clientId ? clientById.get(clientId) : undefined, count }))
+    .map(([clientId, count]) => {
+      // rozpad na projekty klienta — jen pojmenované projekty s dokončeným úkolem
+      const byProject = new Map<string, number>()
+      for (const t of completed) {
+        if (t.clientId !== clientId || !t.projectId) continue
+        const p = projectById.get(t.projectId)
+        if (p) byProject.set(p.name, (byProject.get(p.name) ?? 0) + 1)
+      }
+      return {
+        client: clientId ? clientById.get(clientId) : undefined,
+        count,
+        projects: [...byProject.entries()]
+          .map(([name, n]) => ({ name, count: n }))
+          .sort((a, b) => b.count - a.count),
+      }
+    })
     .sort((a, b) => b.count - a.count)
 
   const planned = live.filter((t) => {

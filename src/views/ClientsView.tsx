@@ -6,10 +6,12 @@ import {
   addClient,
   addProject,
   addTask,
+  allProjects,
   archivedClients,
   clientOpenTasks,
   clientProjects,
   completeTask,
+  ensureAreaClient,
   getClient,
   openTasks,
   removeClient,
@@ -138,6 +140,9 @@ function ClientList({
         </div>
       )}
 
+      <ProjectsOverview clients={clients} open={open} onSelect={onSelect} />
+
+      {clients.length > 0 && <h2 className="section-label -mb-2">klienti a oblasti</h2>}
       <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{clients.map(item)}</ul>
 
       {archived.length > 0 && (
@@ -149,6 +154,152 @@ function ClientList({
         </section>
       )}
     </div>
+  )
+}
+
+// Přehled rozjetých projektů napříč klienty i oblastmi — projekty jsou
+// vidět bez proklikávání do detailů. Odsud jde založit projekt „bez
+// klienta": vybere se oblast Interní/Osobní a ta se případně tiše založí.
+function ProjectsOverview({
+  clients,
+  open,
+  onSelect,
+}: {
+  clients: Client[]
+  open: Task[]
+  onSelect: (clientId: string) => void
+}) {
+  const projects = useLiveQuery(allProjects, []) ?? []
+  const [adding, setAdding] = useState(false)
+
+  const clientById = new Map(clients.map((c) => [c.id, c]))
+  const active = projects
+    .filter((p) => p.status === 'active' && clientById.has(p.clientId))
+    .sort(
+      (a, b) =>
+        clientById.get(a.clientId)!.name.localeCompare(clientById.get(b.clientId)!.name, 'cs') ||
+        a.order - b.order,
+    )
+
+  const openByProject = new Map<string, number>()
+  for (const t of open) {
+    if (t.projectId) openByProject.set(t.projectId, (openByProject.get(t.projectId) ?? 0) + 1)
+  }
+
+  if (active.length === 0 && !adding) {
+    // Bez projektů jen nenápadná nabídka — blok si na nic nehraje.
+    return (
+      <button onClick={() => setAdding(true)} className="text-sm font-medium text-accent">
+        + Nový projekt
+      </button>
+    )
+  }
+
+  return (
+    <section className="rise">
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="section-label">rozjeté projekty · {active.length}</h2>
+        <button
+          onClick={() => setAdding((v) => !v)}
+          className="px-1 text-sm font-medium text-accent"
+        >
+          {adding ? 'Zavřít' : '+ Nový'}
+        </button>
+      </div>
+
+      {adding && <NewProjectForm clients={clients} onDone={() => setAdding(false)} />}
+
+      {active.length > 0 && (
+        <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+          {active.map((p) => {
+            const client = clientById.get(p.clientId)!
+            const openCount = openByProject.get(p.id) ?? 0
+            return (
+              <li key={p.id}>
+                <button
+                  onClick={() => onSelect(p.clientId)}
+                  className="flex w-full items-center gap-3 bg-card px-4 py-3 text-left transition-colors duration-150 active:bg-well/60"
+                >
+                  <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: client.color }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-medium">{p.name}</span>
+                    <span className="text-xs text-ink-faint">{client.name}</span>
+                  </span>
+                  {openCount > 0 ? (
+                    <span className="rounded-full bg-well px-2 py-0.5 text-xs font-medium text-ink-soft">
+                      {openCount}
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-note px-2 py-0.5 text-xs font-semibold text-note-ink">
+                      chybí další krok
+                    </span>
+                  )}
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint/70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 6l6 6-6 6" />
+                  </svg>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+// Založení projektu odkudkoli: cílem je klient, nebo oblast Interní/Osobní
+// (když oblast neexistuje, ensureAreaClient ji tiše vytvoří).
+function NewProjectForm({ clients, onDone }: { clients: Client[]; onDone: () => void }) {
+  const [name, setName] = useState('')
+  const hasInternal = clients.some((c) => c.kind === 'internal')
+  const hasPersonal = clients.some((c) => c.kind === 'personal')
+  const [target, setTarget] = useState(clients[0]?.id ?? '__internal')
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) return
+    let clientId = target
+    if (target === '__internal' || target === '__personal') {
+      clientId = (await ensureAreaClient(target === '__internal' ? 'internal' : 'personal')).id
+    }
+    await addProject({ clientId, name: name.trim() })
+    setName('')
+    onDone()
+  }
+
+  return (
+    <form onSubmit={submit} className="rise mb-3 space-y-2 rounded-xl bg-card p-3 shadow-card">
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Název projektu"
+        className="w-full rounded-lg border border-line bg-card px-3 py-2 text-[15px] outline-none focus:border-accent/60"
+      />
+      <div className="flex gap-2">
+        <select
+          value={target}
+          onChange={(e) => setTarget(e.target.value)}
+          className="min-w-0 flex-1 rounded-lg border border-line bg-card px-2 py-2 text-[15px] outline-none focus:border-accent/60"
+        >
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+              {c.kind !== 'client' ? ` (${KIND_LABELS[c.kind].toLowerCase()})` : ''}
+            </option>
+          ))}
+          {!hasInternal && <option value="__internal">Interní (oblast se založí)</option>}
+          {!hasPersonal && <option value="__personal">Osobní (oblast se založí)</option>}
+        </select>
+        <button
+          type="submit"
+          disabled={!name.trim()}
+          className="rounded-lg bg-accent px-4 text-sm font-medium text-card transition-transform duration-150 active:scale-95 disabled:opacity-30"
+        >
+          OK
+        </button>
+      </div>
+    </form>
   )
 }
 
