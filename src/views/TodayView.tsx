@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Task } from '../db/types'
 import {
+  addMeetingFollowUp,
   allClients,
   allProjects,
   calendarEventsOn,
@@ -46,6 +47,8 @@ export function TodayView({
   const [leavingSuggestions, setLeavingSuggestions] = useState<
     Record<string, 'accepted' | 'rejected'>
   >({})
+  // Schůzky, ze kterých už v tomhle otevření vznikl follow-up (ukáže ✓).
+  const [followedUp, setFollowedUp] = useState<Set<string>>(new Set())
 
   // Nedělní push (#review) vede rovnou do týdenního ohlédnutí.
   useEffect(() => {
@@ -215,12 +218,33 @@ export function TodayView({
                       : `${timeFmt.format(new Date(e.start))}–${timeFmt.format(new Date(e.end))}`}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-[15px]">{e.title}</span>
-                  {e.isTodoBlock && (
+                  {e.isTodoBlock ? (
                     <span className="h-2 w-2 shrink-0 rounded-full bg-accent" title="Blok z appky" />
+                  ) : followedUp.has(e.id) ? (
+                    <span className="pop shrink-0 text-[12px] font-medium text-moss">✓ úkol</span>
+                  ) : (
+                    <button
+                      aria-label={`Vytvořit follow-up ke schůzce ${e.title}`}
+                      title="Follow-up úkol ze schůzky"
+                      onClick={() => {
+                        void addMeetingFollowUp(e)
+                        setFollowedUp((s) => new Set(s).add(e.id))
+                      }}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-well text-ink-soft transition-transform duration-150 active:scale-90"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 6v12M6 12h12" />
+                      </svg>
+                    </button>
                   )}
                 </li>
               ))}
             </ul>
+            {events.some((e) => !e.isTodoBlock) && (
+              <p className="mt-1.5 px-1 text-xs text-ink-faint">
+                Plusko u schůzky založí úkol „Follow-up: …" na dnešek.
+              </p>
+            )}
           </section>
         )
       })()}

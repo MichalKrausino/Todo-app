@@ -6,6 +6,7 @@ import { emitRepoWrite } from './events'
 import type { Client, ClientKind, Priority, Project, Task, TaskStatus } from './types'
 import { deterministicUuid } from '../lib/deterministicId'
 import { todayISO } from '../lib/dates'
+import { estimateTaskMinutes } from '../lib/estimate'
 import { nextOccurrence } from '../lib/rrule'
 
 const now = () => new Date().toISOString()
@@ -140,6 +141,8 @@ export async function addTask(input: {
     priority: input.priority ?? 'normal',
     order: 0,
     status,
+    // tichý odhad času (Fáze 5) — jen pro délku bloku v kalendáři
+    estimateMinutes: estimateTaskMinutes(input.title),
     ...input,
   }
   await db.tasks.add(task)
@@ -228,6 +231,34 @@ export async function removeTask(id: string): Promise<void> {
   const t = now()
   await db.tasks.update(id, { deletedAt: t, updatedAt: t })
   emitRepoWrite()
+}
+
+// Follow-up ze schůzky (dokončení Fáze 3): úkol „Follow-up: <schůzka>"
+// na dnešek. Deterministické id (událost + den) — opakované ťuknutí ani
+// druhé zařízení nevyrobí duplikát; tombstone smazaného follow-upu vyhrává.
+export async function addMeetingFollowUp(event: {
+  id: string
+  title: string
+}): Promise<Task | null> {
+  const day = todayISO()
+  const id = await deterministicUuid('followup', event.id, day)
+  const existing = await db.tasks.get(id)
+  if (existing) return null // už existuje (nebo byl vědomě smazán)
+  const t = new Date().toISOString()
+  const task: Task = {
+    id,
+    createdAt: t,
+    updatedAt: t,
+    title: `Follow-up: ${event.title}`,
+    priority: 'normal',
+    order: 0,
+    status: 'active',
+    scheduledFor: day,
+    estimateMinutes: 30,
+  }
+  await db.tasks.add(task)
+  emitRepoWrite()
+  return task
 }
 
 export const openTasks = () =>
