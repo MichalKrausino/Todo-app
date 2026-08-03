@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import type { Priority } from '../db/types'
-import { activeClients, addTask, allProjects, removeTask } from '../db/repo'
+import type { CalendarEvent, Priority, Task } from '../db/types'
+import { activeClients, addTask, allProjects, calendarEventsOn, openTasks, removeTask } from '../db/repo'
 import { formatDayLabel, fromISODate, addDays, nextMonday, toISODate, todayISO } from '../lib/dates'
+import { freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { PRIORITY_LABELS } from '../lib/labels'
 import { foldToken, mentionToken, parseQuickAdd } from '../lib/quickAdd'
 import { humanizeRule } from '../lib/rrule'
+
+const plural = (n: number, one: string, few: string, many: string) =>
+  n === 1 ? one : n < 5 ? few : many
 
 // Rozepsaný @klient / #projekt na konci textu → našeptávač nad polem.
 const RE_MENTION = /(^|\s)([@#])(\S*)$/
@@ -94,6 +98,38 @@ export function QuickAdd({
     if (!mention) return
     setText(text.slice(0, mention.start) + mention.marker + mentionToken(name) + ' ')
   }
+
+  // Náhled vytížení vybraného dne (schůzky z kalendáře + už naplánované
+  // úkoly + volno) — živě se mění při vybírání data. Dotazy běží jen
+  // s otevřeným výběrem termínu.
+  const previewDay = picker === 'date' ? (effDueDate ?? todayISO()) : null
+  const previewEvents =
+    useLiveQuery(
+      () => (previewDay ? calendarEventsOn(previewDay) : Promise.resolve<CalendarEvent[]>([])),
+      [previewDay],
+    ) ?? []
+  const previewOpen =
+    useLiveQuery(
+      () => (previewDay ? openTasks() : Promise.resolve<Task[]>([])),
+      [previewDay],
+    ) ?? []
+  const previewTasks = previewDay
+    ? previewOpen.filter((t) => {
+        const d = [t.scheduledFor, t.dueDate].filter(Boolean).sort()[0]
+        return d === previewDay
+      })
+    : []
+  const previewBusy: BusyInterval[] = previewEvents
+    .filter((e) => !e.allDay)
+    .map((e) => {
+      const s = new Date(e.start)
+      const en = new Date(e.end)
+      return { startMin: s.getHours() * 60 + s.getMinutes(), endMin: en.getHours() * 60 + en.getMinutes() }
+    })
+  // cache kalendáře drží jen 14denní okno — dál appka schůzky nevidí
+  const beyondCalendarWindow = Boolean(
+    previewDay && previewDay > toISODate(addDays(fromISODate(todayISO()), 14)),
+  )
 
   const setOv = (patch: Overrides) => {
     setOverrides((o) => ({ ...o, ...patch }))
@@ -246,35 +282,77 @@ export function QuickAdd({
 
       {/* výběr po ťuknutí na tlačítko lišty nebo chip */}
       {picker === 'date' && (
-        <div className="rise -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
-          <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: today })} className={`${pill} bg-accent-wash text-accent-deep`}>
-            Dnes
-          </button>
-          <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: toISODate(addDays(fromISODate(today), 1)) })} className={`${pill} bg-accent-wash text-accent-deep`}>
-            Zítra
-          </button>
-          <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: toISODate(nextMonday(fromISODate(today))) })} className={`${pill} bg-accent-wash text-accent-deep`}>
-            Příští týden
-          </button>
-          {/* iOS posílá change průběžně už během výběru — řádek se proto
-              NESMÍ hned zavřít (zavřel by i systémový kalendář navázaný
-              na tenhle input). Zavírá se až po dokončení výběru (blur). */}
-          <input
-            type="date"
-            aria-label="Vybrat datum"
-            value={effDueDate ?? ''}
-            onChange={(e) =>
-              e.target.value && setOverrides((o) => ({ ...o, dueDate: e.target.value }))
-            }
-            onBlur={() => setPicker(null)}
-            className="h-8 shrink-0 rounded-full border border-line bg-card px-2.5 text-[13px] text-ink outline-none"
-          />
-          {(effDueDate || impliedToday) && (
-            <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: null })} className={`${pill} bg-well text-ink-soft`}>
-              ✕ Bez termínu
+        <>
+          {/* výběr dne nezavírá řádek — náhled vytížení níže se mění živě */}
+          <div className="rise -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
+            <button type="button" onPointerDown={keepFocus} onClick={() => setOverrides((o) => ({ ...o, dueDate: today }))} className={`${pill} bg-accent-wash text-accent-deep`}>
+              Dnes
             </button>
+            <button type="button" onPointerDown={keepFocus} onClick={() => setOverrides((o) => ({ ...o, dueDate: toISODate(addDays(fromISODate(today), 1)) }))} className={`${pill} bg-accent-wash text-accent-deep`}>
+              Zítra
+            </button>
+            <button type="button" onPointerDown={keepFocus} onClick={() => setOverrides((o) => ({ ...o, dueDate: toISODate(nextMonday(fromISODate(today))) }))} className={`${pill} bg-accent-wash text-accent-deep`}>
+              Příští týden
+            </button>
+            {/* iOS posílá change průběžně už během výběru — řádek se proto
+                NESMÍ hned zavřít (zavřel by i systémový kalendář navázaný
+                na tenhle input). Zavírá se až po dokončení výběru (blur). */}
+            <input
+              type="date"
+              aria-label="Vybrat datum"
+              value={effDueDate ?? ''}
+              onChange={(e) =>
+                e.target.value && setOverrides((o) => ({ ...o, dueDate: e.target.value }))
+              }
+              onBlur={() => setPicker(null)}
+              className="h-8 shrink-0 rounded-full border border-line bg-card px-2.5 text-[13px] text-ink outline-none"
+            />
+            {(effDueDate || impliedToday) && (
+              <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: null })} className={`${pill} bg-well text-ink-soft`}>
+                ✕ Bez termínu
+              </button>
+            )}
+          </div>
+
+          {/* co už v ten den mám: schůzky z Google kalendáře + úkoly + volno */}
+          {previewDay && (
+            <div className="rise mb-2 rounded-xl bg-well/60 px-3 py-2.5 text-[13px]">
+              <div className="font-medium text-ink first-letter:uppercase">
+                {formatDayLabel(previewDay)}
+                {' · '}
+                {previewEvents.length > 0
+                  ? `${previewEvents.length} ${plural(previewEvents.length, 'schůzka', 'schůzky', 'schůzek')}`
+                  : beyondCalendarWindow
+                    ? 'kalendář dohlédne jen 14 dní'
+                    : 'bez schůzek'}
+                {' · '}
+                {previewTasks.length > 0
+                  ? `${previewTasks.length} ${plural(previewTasks.length, 'úkol', 'úkoly', 'úkolů')}`
+                  : 'zatím bez úkolů'}
+                {previewEvents.length > 0 && ` · volno ~${minutesToLabel(freeMinutes(previewBusy))}`}
+              </div>
+              {previewEvents.slice(0, 3).map((e) => (
+                <div key={e.id} className="mt-1 flex gap-2 text-ink-soft">
+                  <span className="w-24 shrink-0 whitespace-nowrap tabular-nums">
+                    {e.allDay
+                      ? 'celý den'
+                      : `${new Date(e.start).getHours()}:${String(new Date(e.start).getMinutes()).padStart(2, '0')}–${new Date(e.end).getHours()}:${String(new Date(e.end).getMinutes()).padStart(2, '0')}`}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{e.title}</span>
+                </div>
+              ))}
+              {previewEvents.length > 3 && (
+                <div className="mt-1 text-ink-faint">…a {previewEvents.length - 3} dalších</div>
+              )}
+              {previewTasks.length > 0 && (
+                <div className="mt-1 truncate text-ink-faint">
+                  Úkoly: {previewTasks.slice(0, 3).map((t) => t.title).join(' · ')}
+                  {previewTasks.length > 3 && ` …+${previewTasks.length - 3}`}
+                </div>
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
       {picker === 'client' && (
         <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
