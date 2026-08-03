@@ -11,14 +11,14 @@ import { fromISODate, toISODate, todayISO } from '../lib/dates'
 const WEEKDAYS = ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne']
 const monthFmt = new Intl.DateTimeFormat('cs-CZ', { month: 'long', year: 'numeric' })
 
-// Tři úrovně sytosti stačí — víc by přestalo být čitelné. První úroveň
-// používá accent-wash (navržený pro světlý i tmavý režim), aby byla
-// zřetelná i na bílé kartě.
+// Semaforová škála — barva rovnou říká, jak moc je den plný:
+// modrá = pár věcí, oranžová = nabito, červená = plno. Wash odstíny
+// jsou definované pro světlý i tmavý režim.
 function heatClass(count: number): string {
   if (count <= 0) return ''
   if (count <= 2) return 'bg-accent-wash text-accent-deep'
-  if (count <= 4) return 'bg-accent/40'
-  return 'bg-accent/70 text-card'
+  if (count <= 4) return 'bg-note text-note-ink'
+  return 'bg-danger-wash font-medium text-danger'
 }
 
 export function MonthPicker({
@@ -133,9 +133,19 @@ export function MonthPicker({
         })}
       </div>
 
-      <p className="mt-1 text-center text-[10px] text-ink-faint">
-        sytost pozadí = vytížení dne (schůzky + úkoly)
-      </p>
+      {/* vizuální legenda — barvy rovnou s významem */}
+      <div className="mt-1 flex items-center justify-center gap-3 text-[10px] text-ink-faint">
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2.5 w-2.5 rounded-full bg-accent-wash" /> 1–2
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2.5 w-2.5 rounded-full bg-note" /> 3–4
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2.5 w-2.5 rounded-full bg-danger-wash" /> 5+
+        </span>
+        <span>schůzek a úkolů za den</span>
+      </div>
     </div>
   )
 }
