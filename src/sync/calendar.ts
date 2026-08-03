@@ -11,7 +11,9 @@ import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config'
 import { getSupabase } from './engine'
 import { getSyncStatus, subscribeSyncStatus } from './status'
 
-const FETCH_WINDOW_DAYS = 14
+// Okno cache: půl roku dopředu — heatmapa i agenda tak vidí i vzdálené
+// plány (svatby, dovolené, konference), ne jen nejbližší dny.
+export const FETCH_WINDOW_DAYS = 180
 const REFRESH_MIN_INTERVAL_MS = 10 * 60_000
 
 let lastFetchAt = 0

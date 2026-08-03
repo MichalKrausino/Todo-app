@@ -7,6 +7,7 @@ import { freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { PRIORITY_LABELS } from '../lib/labels'
 import { foldToken, mentionToken, parseQuickAdd } from '../lib/quickAdd'
 import { humanizeRule } from '../lib/rrule'
+import { FETCH_WINDOW_DAYS } from '../sync/calendar'
 import { MonthPicker } from './MonthPicker'
 
 const plural = (n: number, one: string, few: string, many: string) =>
@@ -132,9 +133,9 @@ export function QuickAdd({
       const en = new Date(e.end)
       return { startMin: s.getHours() * 60 + s.getMinutes(), endMin: en.getHours() * 60 + en.getMinutes() }
     })
-  // cache kalendáře drží jen 14denní okno — dál appka schůzky nevidí
+  // cache kalendáře drží okno FETCH_WINDOW_DAYS — dál appka schůzky nevidí
   const beyondCalendarWindow = Boolean(
-    previewDay && previewDay > toISODate(addDays(fromISODate(todayISO()), 14)),
+    previewDay && previewDay > toISODate(addDays(fromISODate(todayISO()), FETCH_WINDOW_DAYS)),
   )
   // prázdná cache = kalendář ještě není propojený — říct to na rovinu
   const calendarConnected = (useLiveQuery(calendarCacheCount, []) ?? 0) > 0
@@ -383,7 +384,8 @@ export function QuickAdd({
               )}
               {calendarConnected && beyondCalendarWindow && (
                 <div className="border-t border-line px-3 py-1.5 text-[11px] text-ink-faint">
-                  Kalendář dohlédne jen 14 dní dopředu — úkoly platí, schůzky nemusí být vidět.
+                  Kalendář dohlédne ~{Math.round(FETCH_WINDOW_DAYS / 30)} měsíců dopředu —
+                  úkoly platí, schůzky dál nemusí být vidět.
                 </div>
               )}
             </div>

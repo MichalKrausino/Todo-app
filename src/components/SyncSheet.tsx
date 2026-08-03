@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { exportBackup, importBackup } from '../db/backup'
 import {
+  FETCH_WINDOW_DAYS,
   getCalendarStatus,
   subscribeCalendarStatus,
   testCalendar,
@@ -247,7 +248,7 @@ function CalendarSection() {
               : cal.lastError
                 ? 'Propojení selhalo'
                 : cal.lastSuccessAt
-                  ? `Propojeno · ${cal.eventCount ?? 0} událostí (14 dní) · ${timeLbl}`
+                  ? `Propojeno · ${cal.eventCount ?? 0} událostí (${Math.round(FETCH_WINDOW_DAYS / 30)} měs.) · ${timeLbl}`
                   : 'Zatím nenačteno'}
           </div>
         </div>

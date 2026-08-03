@@ -162,15 +162,25 @@ async function fetchEvents(
   const timeMax = `${toDay}T23:59:59+02:00`
   const out: NormalizedEvent[] = []
   for (const cal of calendars) {
-    const params = new URLSearchParams({
-      timeMin,
-      timeMax,
-      singleEvents: 'true',
-      orderBy: 'startTime',
-      maxResults: '250',
-    })
-    const data = await gcal(token, `/calendars/${encodeURIComponent(cal.id)}/events?${params}`)
-    for (const ev of (data.items ?? []) as Rec[]) {
+    // stránkování: delší okno (půl roku) se do jedné stránky nevejde;
+    // strop 4 × 2500 na kalendář je pojistka proti nekonečné smyčce
+    let pageToken: string | undefined
+    const items: Rec[] = []
+    for (let page = 0; page < 4; page++) {
+      const params = new URLSearchParams({
+        timeMin,
+        timeMax,
+        singleEvents: 'true',
+        orderBy: 'startTime',
+        maxResults: '2500',
+      })
+      if (pageToken) params.set('pageToken', pageToken)
+      const data = await gcal(token, `/calendars/${encodeURIComponent(cal.id)}/events?${params}`)
+      items.push(...((data.items ?? []) as Rec[]))
+      pageToken = data.nextPageToken as string | undefined
+      if (!pageToken) break
+    }
+    for (const ev of items) {
       if (ev.status === 'cancelled') continue
       const start = ev.start as Rec | undefined
       const end = ev.end as Rec | undefined
