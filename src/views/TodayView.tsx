@@ -15,9 +15,11 @@ import {
   sortTasks,
 } from '../db/repo'
 import { scheduleBlockForTask } from '../sync/calendar'
+import { isOverloaded, plannedMinutes } from '../lib/capacity'
 import { formatFullDate, fromISODate, todayISO } from '../lib/dates'
 import { freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { computeSignals } from '../lib/signals'
+import { ShutdownSheet } from '../components/ShutdownSheet'
 import { SignalsBlock } from '../components/SignalsBlock'
 import { TaskRow } from '../components/TaskRow'
 import { WeeklyReviewSheet } from '../components/WeeklyReviewSheet'
@@ -49,6 +51,14 @@ export function TodayView({
   >({})
   // Schůzky, ze kterých už v tomhle otevření vznikl follow-up (ukáže ✓).
   const [followedUp, setFollowedUp] = useState<Set<string>>(new Set())
+  // Batching podle klienta: přepínání kontextu žere výkon — filtr drží
+  // jednoho klienta v kuse. Jen lokální stav, nikam se neukládá.
+  const [batchClient, setBatchClient] = useState<string | null>(null)
+  // Večerní uzávěrka (shutdown ritual) — uzavření dne se pamatuje do půlnoci.
+  const [shutdownOpen, setShutdownOpen] = useState(false)
+  const [dayClosed, setDayClosed] = useState(
+    () => localStorage.getItem('todo.dayClosed') === todayISO(),
+  )
 
   // Nedělní push (#review) vede rovnou do týdenního ohlédnutí.
   useEffect(() => {
@@ -84,6 +94,37 @@ export function TodayView({
   const planned = todays.length + done.length
   const progress = planned > 0 ? done.length / planned : 0
   const allDone = planned > 0 && done.length === planned && overdue.length === 0
+
+  // Kapacita dne: tichý součet odhadů vs. volno v kalendáři (když je).
+  const unfinished = [...overdue, ...todays]
+  const busy: BusyInterval[] = events
+    .filter((e) => !e.allDay)
+    .map((e) => {
+      const s = new Date(e.start)
+      const en = new Date(e.end)
+      return { startMin: s.getHours() * 60 + s.getMinutes(), endMin: en.getHours() * 60 + en.getMinutes() }
+    })
+  const freeMin = events.length > 0 ? freeMinutes(busy) : null
+  const workMin = plannedMinutes(unfinished)
+  const overloaded = unfinished.length > 0 && isOverloaded(workMin, freeMin)
+
+  // Batching: klienti dnešních úkolů (chipy se ukážou od dvou různých)
+  const batchClients = [
+    ...new Map(
+      unfinished
+        .filter((t) => t.clientId && clientMap.has(t.clientId))
+        .map((t) => [t.clientId!, clientMap.get(t.clientId!)!]),
+    ).values(),
+  ]
+  const byBatch = (t: Task) => !batchClient || t.clientId === batchClient
+  const visOverdue = overdue.filter(byBatch)
+  const visTodays = todays.filter(byBatch)
+
+  const isEvening = new Date().getHours() >= 16
+  const closeDay = () => {
+    localStorage.setItem('todo.dayClosed', today)
+    setDayClosed(true)
+  }
 
   const toggle = (t: Task) => {
     void (t.status === 'done' ? reopenTask(t.id) : completeTask(t.id))
@@ -124,6 +165,13 @@ export function TodayView({
               z {planned}
             </span>
           </div>
+        )}
+        {unfinished.length > 0 && (
+          <p className={`mt-2 text-xs ${overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'}`}>
+            práce ~{minutesToLabel(workMin)}
+            {freeMin !== null && <> · volno ~{minutesToLabel(freeMin)}</>}
+            {overloaded && ' · den je přeplněný — zvaž něco na zítra'}
+          </p>
         )}
       </header>
 
@@ -196,18 +244,10 @@ export function TodayView({
       {(() => {
         if (events.length === 0) return null
         const timeFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
-        const busy: BusyInterval[] = events
-          .filter((e) => !e.allDay)
-          .map((e) => {
-            const s = new Date(e.start)
-            const en = new Date(e.end)
-            return { startMin: s.getHours() * 60 + s.getMinutes(), endMin: en.getHours() * 60 + en.getMinutes() }
-          })
-        const free = freeMinutes(busy)
         return (
           <section className="rise" style={stagger(2)}>
             <h2 className="section-label mb-2">
-              kalendář · volno ~{minutesToLabel(free)}
+              kalendář · volno ~{minutesToLabel(freeMin ?? 0)}
             </h2>
             <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
               {events.map((e) => (
@@ -249,6 +289,35 @@ export function TodayView({
         )
       })()}
 
+      {/* Večerní uzávěrka: od 16:00, dokud zbývá nedokončené a den není zavřený */}
+      {isEvening && !dayClosed && unfinished.length > 0 && (
+        <button
+          onClick={() => setShutdownOpen(true)}
+          className="rise flex w-full items-center gap-3 rounded-xl bg-card px-4 py-3 text-left shadow-card transition-[background-color,transform] duration-150 active:scale-[0.99] active:bg-well/60"
+          style={stagger(3)}
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-wash text-accent">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z" />
+            </svg>
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold">Uzávěrka dne</span>
+            <span className="text-[13px] text-ink-soft">
+              {unfinished.length}{' '}
+              {unfinished.length === 1 ? 'nedokončený úkol' : unfinished.length < 5 ? 'nedokončené úkoly' : 'nedokončených úkolů'}{' '}
+              — zavři den s čistou hlavou
+            </span>
+          </span>
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint/70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
+      )}
+      {isEvening && dayClosed && (
+        <p className="rise px-1 text-sm font-medium text-moss">✓ Den uzavřen — večer je tvůj.</p>
+      )}
+
       {reviewDay && (
         <button
           onClick={() => setReviewOpen(true)}
@@ -277,17 +346,49 @@ export function TodayView({
         onOpenInbox={onOpenInbox}
       />
 
-      {overdue.length > 0 && (
+      {/* Batching podle klienta — jeden klient v kuse, méně přepínání kontextu */}
+      {batchClients.length >= 2 && (
+        <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1" style={{ scrollbarWidth: 'none' }}>
+          <button
+            onClick={() => setBatchClient(null)}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium transition-transform duration-150 active:scale-95 ${
+              batchClient === null ? 'bg-ink text-paper' : 'bg-well text-ink-soft'
+            }`}
+          >
+            Vše
+          </button>
+          {batchClients.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setBatchClient(batchClient === c.id ? null : c.id)}
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-transform duration-150 active:scale-95 ${
+                batchClient === c.id ? 'bg-ink text-paper' : 'bg-well text-ink-soft'
+              }`}
+            >
+              <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {visOverdue.length > 0 && (
         <section className="rise" style={stagger(5)}>
-          <h2 className="section-label mb-2 !text-danger">po termínu · {overdue.length}</h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{overdue.map(row)}</ul>
+          <h2 className="section-label mb-2 !text-danger">po termínu · {visOverdue.length}</h2>
+          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{visOverdue.map(row)}</ul>
         </section>
       )}
 
       <section className="rise" style={stagger(6)}>
-        {overdue.length > 0 && todays.length > 0 && <h2 className="section-label mb-2">dnes</h2>}
-        {todays.length > 0 ? (
-          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{todays.map(row)}</ul>
+        {visOverdue.length > 0 && visTodays.length > 0 && <h2 className="section-label mb-2">dnes</h2>}
+        {visTodays.length > 0 ? (
+          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{visTodays.map(row)}</ul>
+        ) : batchClient ? (
+          visOverdue.length === 0 && (
+            <p className="rounded-2xl bg-card px-4 py-4 text-center text-sm text-ink-soft shadow-card">
+              U tohohle klienta dnes nic nezbývá.
+            </p>
+          )
         ) : (
           overdue.length === 0 && (
             <div className="rounded-2xl bg-card px-6 py-10 text-center shadow-card">
@@ -314,6 +415,14 @@ export function TodayView({
       )}
 
       {reviewOpen && <WeeklyReviewSheet onClose={() => setReviewOpen(false)} />}
+      {shutdownOpen && (
+        <ShutdownSheet
+          tasks={unfinished}
+          onOpenTask={onOpenTask}
+          onCloseDay={closeDay}
+          onClose={() => setShutdownOpen(false)}
+        />
+      )}
     </div>
   )
 }
