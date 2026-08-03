@@ -1,13 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import type { Priority } from '../db/types'
 import { activeClients, addTask, allProjects, removeTask } from '../db/repo'
-import { formatDayLabel, todayISO } from '../lib/dates'
+import { formatDayLabel, fromISODate, addDays, nextMonday, toISODate, todayISO } from '../lib/dates'
 import { PRIORITY_LABELS } from '../lib/labels'
 import { foldToken, mentionToken, parseQuickAdd } from '../lib/quickAdd'
 import { humanizeRule } from '../lib/rrule'
 
 // Rozepsaný @klient / #projekt na konci textu → našeptávač nad polem.
 const RE_MENTION = /(^|\s)([@#])(\S*)$/
+
+// Ruční výběry z lišty (Termín/Klient/Projekt/Priorita) přebíjejí parser:
+// undefined = neurčeno (platí text), null = vědomě odebráno.
+interface Overrides {
+  dueDate?: string | null
+  clientId?: string | null
+  projectId?: string | null
+  priority?: Priority | null
+}
+
+type PickerKind = 'date' | 'client' | 'project' | 'priority' | null
+
+const pill = 'shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium transition-transform duration-150 active:scale-95'
+const chip = 'rounded-full px-2.5 py-0.5 font-medium'
 
 // defaultToToday: na obrazovce Dnes jde úkol bez data na dnešek (scheduledFor)
 // — kdo píše na Dnes, myslí „udělám to dnes". Jinde bez data → inbox.
@@ -19,12 +34,12 @@ export function QuickAdd({
   defaultToToday?: boolean
 }) {
   const [text, setText] = useState('')
+  const [overrides, setOverrides] = useState<Overrides>({})
+  const [picker, setPicker] = useState<PickerKind>(null)
   // Počítadlo přidaných úkolů — mění key tlačítka, takže po každém
   // přidání proběhne potvrzovací pop (hmatová odezva bez haptiky).
   const [addedCount, setAddedCount] = useState(0)
   // Pojistka proti špatnému parsování: pár vteřin po přidání jde úkol vrátit.
-  // dueDate říká, kam úkol šel — bez termínu skončil v inboxu (Plán),
-  // což bez vysvětlení vypadá, jako by se nic nestalo.
   const [lastAdded, setLastAdded] = useState<{ id: string; title: string; dueDate?: string } | null>(
     null,
   )
@@ -37,6 +52,23 @@ export function QuickAdd({
   const parsed = useMemo(
     () => (text.trim() ? parseQuickAdd(text, clients, new Date(), projects) : null),
     [text, clients, projects],
+  )
+
+  // Efektivní hodnoty: ruční výběr má přednost před textem.
+  const effDueDate = overrides.dueDate === undefined ? parsed?.dueDate : (overrides.dueDate ?? undefined)
+  const effClientId = overrides.clientId === undefined ? parsed?.clientId : (overrides.clientId ?? undefined)
+  const effProjectId = overrides.projectId === undefined ? parsed?.projectId : (overrides.projectId ?? undefined)
+  const effPriority: Priority =
+    (overrides.priority === undefined ? parsed?.priority : overrides.priority) ?? 'normal'
+
+  const effClient = effClientId ? clients.find((c) => c.id === effClientId) : undefined
+  const effProject = effProjectId ? projects.find((p) => p.id === effProjectId) : undefined
+  const projectPool = effClientId ? projects.filter((p) => p.clientId === effClientId) : projects
+
+  // Na Dnes dostane úkol bez data plán na dnešek — vidět předem jako chip.
+  // Vědomé „bez termínu" z výběru (null) default vypíná.
+  const impliedToday = Boolean(
+    defaultToToday && parsed && !parsed.recurrenceRule && !effDueDate && overrides.dueDate === undefined,
   )
 
   // Našeptávač: fragment za @/# na konci textu, nabídka podle prefixu.
@@ -63,25 +95,27 @@ export function QuickAdd({
     setText(text.slice(0, mention.start) + mention.marker + mentionToken(name) + ' ')
   }
 
-  // Na Dnes dostane úkol bez data plán na dnešek — vidět předem jako chip.
-  const impliedToday = Boolean(
-    defaultToToday && parsed && !parsed.dueDate && !parsed.recurrenceRule,
-  )
+  const setOv = (patch: Overrides) => {
+    setOverrides((o) => ({ ...o, ...patch }))
+    setPicker(null)
+  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!parsed || !parsed.title) return
     const task = await addTask({
       title: parsed.title,
-      dueDate: parsed.dueDate,
+      dueDate: effDueDate,
       scheduledFor: impliedToday ? todayISO() : undefined,
-      clientId: parsed.clientId,
-      projectId: parsed.projectId,
-      priority: parsed.priority,
+      clientId: effClientId,
+      projectId: effProjectId,
+      priority: effPriority,
       recurrenceRule: parsed.recurrenceRule,
       notes: parsed.notes,
     })
     setText('')
+    setOverrides({})
+    setPicker(null)
     setAddedCount((n) => n + 1)
     setLastAdded({ id: task.id, title: task.title, dueDate: task.scheduledFor ?? task.dueDate })
     clearTimeout(undoTimer.current)
@@ -95,8 +129,11 @@ export function QuickAdd({
     setLastAdded(null)
   }
 
-  const client = parsed?.clientId ? clients.find((c) => c.id === parsed.clientId) : undefined
-  const chip = 'rounded-full px-2.5 py-0.5 font-medium'
+  const today = todayISO()
+  const keepFocus = (e: React.PointerEvent) => e.preventDefault()
+  const hasChips =
+    effDueDate || impliedToday || effClient || effProject || effPriority !== 'normal' ||
+    parsed?.recurrenceRule || parsed?.notes
 
   return (
     <div className="relative px-3 pt-2.5">
@@ -135,9 +172,9 @@ export function QuickAdd({
             <button
               key={item.id}
               type="button"
-              onPointerDown={(e) => e.preventDefault() /* nebrat fokus inputu */}
+              onPointerDown={keepFocus}
               onClick={() => pickMention(item.name)}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-well px-3 py-1.5 text-[13px] font-medium text-ink transition-transform duration-150 active:scale-95"
+              className={`${pill} inline-flex items-center gap-1.5 bg-well text-ink`}
             >
               {item.color && <span className="h-2 w-2 rounded-full" style={{ background: item.color }} />}
               {item.name}
@@ -146,47 +183,191 @@ export function QuickAdd({
         </div>
       )}
 
-      {parsed && (parsed.dueDate || impliedToday || client || parsed.projectId || parsed.priority !== 'normal' || parsed.recurrenceRule || parsed.notes) && (
+      {/* náhled — chipy jsou klikací, ťuknutí otevře příslušný výběr */}
+      {hasChips && (
         <div className="flex flex-wrap gap-1.5 px-1 pb-2 text-[11px]">
-          {(parsed.dueDate || impliedToday) && (
-            <span key={`d:${parsed.dueDate ?? 'dnes'}`} className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}>
-              {formatDayLabel(parsed.dueDate ?? todayISO())}
-            </span>
+          {(effDueDate || impliedToday) && (
+            <button
+              type="button"
+              onPointerDown={keepFocus}
+              onClick={() => setPicker(picker === 'date' ? null : 'date')}
+              key={`d:${effDueDate ?? 'dnes'}`}
+              className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}
+            >
+              {formatDayLabel(effDueDate ?? today)}
+            </button>
           )}
-          {parsed.recurrenceRule && (
+          {parsed?.recurrenceRule && (
             <span key={`r:${parsed.recurrenceRule}`} className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}>
               ↻ {humanizeRule(parsed.recurrenceRule)}
             </span>
           )}
-          {/* při rozepsaném @/# chip skrýt — našeptávač by ho jen zdvojoval */}
-          {client && mention?.marker !== '@' && (
-            <span key={`c:${client.id}`} className={`${chip} pop-soft inline-flex items-center gap-1.5 bg-well text-ink-soft`}>
-              <span className="h-2 w-2 rounded-full" style={{ background: client.color }} />
-              {client.name}
-            </span>
+          {effClient && mention?.marker !== '@' && (
+            <button
+              type="button"
+              onPointerDown={keepFocus}
+              onClick={() => setPicker(picker === 'client' ? null : 'client')}
+              key={`c:${effClient.id}`}
+              className={`${chip} pop-soft inline-flex items-center gap-1.5 bg-well text-ink-soft`}
+            >
+              <span className="h-2 w-2 rounded-full" style={{ background: effClient.color }} />
+              {effClient.name}
+            </button>
           )}
-          {parsed.projectName && mention?.marker !== '#' && (
-            <span key={`j:${parsed.projectId}`} className={`${chip} pop-soft inline-block bg-well text-ink-soft`}>
-              ▸ {parsed.projectName}
-            </span>
+          {effProject && mention?.marker !== '#' && (
+            <button
+              type="button"
+              onPointerDown={keepFocus}
+              onClick={() => setPicker(picker === 'project' ? null : 'project')}
+              key={`j:${effProject.id}`}
+              className={`${chip} pop-soft inline-block bg-well text-ink-soft`}
+            >
+              ▸ {effProject.name}
+            </button>
           )}
-          {parsed.priority !== 'normal' && (
-            <span key={`p:${parsed.priority}`} className={`${chip} pop-soft inline-block bg-well text-ink-soft`}>
-              {PRIORITY_LABELS[parsed.priority]}
-            </span>
+          {effPriority !== 'normal' && (
+            <button
+              type="button"
+              onPointerDown={keepFocus}
+              onClick={() => setPicker(picker === 'priority' ? null : 'priority')}
+              key={`p:${effPriority}`}
+              className={`${chip} pop-soft inline-block bg-well text-ink-soft`}
+            >
+              {PRIORITY_LABELS[effPriority]}
+            </button>
           )}
-          {parsed.notes && (
+          {parsed?.notes && (
             <span key="n" className={`${chip} pop-soft inline-block max-w-40 truncate bg-well text-ink-soft`}>
               ✎ {parsed.notes}
             </span>
           )}
         </div>
       )}
+
+      {/* výběr po ťuknutí na tlačítko lišty nebo chip */}
+      {picker === 'date' && (
+        <div className="rise -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
+          <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: today })} className={`${pill} bg-accent-wash text-accent-deep`}>
+            Dnes
+          </button>
+          <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: toISODate(addDays(fromISODate(today), 1)) })} className={`${pill} bg-accent-wash text-accent-deep`}>
+            Zítra
+          </button>
+          <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: toISODate(nextMonday(fromISODate(today))) })} className={`${pill} bg-accent-wash text-accent-deep`}>
+            Příští týden
+          </button>
+          <input
+            type="date"
+            aria-label="Vybrat datum"
+            value={effDueDate ?? ''}
+            onChange={(e) => e.target.value && setOv({ dueDate: e.target.value })}
+            className="h-8 shrink-0 rounded-full border border-line bg-card px-2.5 text-[13px] text-ink outline-none"
+          />
+          {(effDueDate || impliedToday) && (
+            <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: null })} className={`${pill} bg-well text-ink-soft`}>
+              ✕ Bez termínu
+            </button>
+          )}
+        </div>
+      )}
+      {picker === 'client' && (
+        <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
+          {clients.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onPointerDown={keepFocus}
+              onClick={() => setOv({ clientId: c.id, projectId: effProject && effProject.clientId !== c.id ? null : overrides.projectId })}
+              className={`${pill} inline-flex items-center gap-1.5 ${effClientId === c.id ? 'bg-ink text-paper' : 'bg-well text-ink'}`}
+            >
+              <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />
+              {c.name}
+            </button>
+          ))}
+          {effClientId && (
+            <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ clientId: null, projectId: null })} className={`${pill} bg-well text-ink-soft`}>
+              ✕ Bez klienta
+            </button>
+          )}
+          {clients.length === 0 && (
+            <span className="px-1 py-1.5 text-[13px] text-ink-faint">Zatím žádní klienti — založ je v záložce Klienti.</span>
+          )}
+        </div>
+      )}
+      {picker === 'project' && (
+        <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
+          {projectPool.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onPointerDown={keepFocus}
+              onClick={() => setOv({ projectId: p.id, clientId: effClientId ?? p.clientId })}
+              className={`${pill} ${effProjectId === p.id ? 'bg-ink text-paper' : 'bg-well text-ink'}`}
+            >
+              ▸ {p.name}
+            </button>
+          ))}
+          {effProjectId && (
+            <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ projectId: null })} className={`${pill} bg-well text-ink-soft`}>
+              ✕ Bez projektu
+            </button>
+          )}
+          {projectPool.length === 0 && (
+            <span className="px-1 py-1.5 text-[13px] text-ink-faint">
+              {effClient ? `${effClient.name} nemá projekty.` : 'Zatím žádné projekty.'}
+            </span>
+          )}
+        </div>
+      )}
+      {picker === 'priority' && (
+        <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
+          {(Object.keys(PRIORITY_LABELS) as Priority[]).map((p) => (
+            <button
+              key={p}
+              type="button"
+              onPointerDown={keepFocus}
+              onClick={() => setOv({ priority: p === 'normal' ? null : p })}
+              className={`${pill} ${effPriority === p ? 'bg-ink text-paper' : 'bg-well text-ink'}`}
+            >
+              {PRIORITY_LABELS[p]}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* lišta rychlých voleb — vše na jedno ťuknutí, bez znalosti syntaxe */}
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
+        <ToolbarButton
+          label="Termín"
+          active={picker === 'date' || Boolean(effDueDate)}
+          onTap={() => setPicker(picker === 'date' ? null : 'date')}
+          icon={<path d="M4.5 6.5h15v13h-15zM4.5 10h15M8.5 4v4M15.5 4v4" />}
+        />
+        <ToolbarButton
+          label="Klient"
+          active={picker === 'client' || Boolean(effClientId)}
+          onTap={() => setPicker(picker === 'client' ? null : 'client')}
+          icon={<><circle cx="12" cy="8.5" r="3.5" /><path d="M5.5 19.5c.8-3.4 3.4-5.25 6.5-5.25s5.7 1.85 6.5 5.25" /></>}
+        />
+        <ToolbarButton
+          label="Projekt"
+          active={picker === 'project' || Boolean(effProjectId)}
+          onTap={() => setPicker(picker === 'project' ? null : 'project')}
+          icon={<path d="M4 7.5a2 2 0 012-2h4l2 2.5h6a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2z" />}
+        />
+        <ToolbarButton
+          label="Priorita"
+          active={picker === 'priority' || effPriority !== 'normal'}
+          onTap={() => setPicker(picker === 'priority' ? null : 'priority')}
+          icon={<path d="M12 5v9M12 17.5v1" />}
+        />
+      </div>
+
       <form onSubmit={submit} className="flex items-center gap-2">
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Např. „ve čtvrtek poslat report @klient !vysoká“"
+          placeholder="Např. „zítra poslat report @klient“"
           enterKeyHint="done"
           className="min-w-0 flex-1 rounded-full border border-transparent bg-well px-4 py-2.5 text-[15px] text-ink outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus:bg-card"
         />
@@ -206,5 +387,33 @@ export function QuickAdd({
         </button>
       </form>
     </div>
+  )
+}
+
+function ToolbarButton({
+  label,
+  active,
+  onTap,
+  icon,
+}: {
+  label: string
+  active: boolean
+  onTap: () => void
+  icon: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onPointerDown={(e) => e.preventDefault()}
+      onClick={onTap}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium transition-[background-color,color,transform] duration-150 active:scale-95 ${
+        active ? 'bg-accent-wash text-accent-deep' : 'bg-well/70 text-ink-soft'
+      }`}
+    >
+      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        {icon}
+      </svg>
+      {label}
+    </button>
   )
 }
