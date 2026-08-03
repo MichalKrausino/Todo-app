@@ -104,7 +104,7 @@ export default function App() {
         className="border-t border-line/80 bg-card/85 backdrop-blur-xl"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <QuickAdd onShowUpcoming={() => setTab('upcoming')} />
+        <QuickAdd onShowUpcoming={() => setTab('upcoming')} defaultToToday={tab === 'today'} />
         <nav className="flex px-2 pb-1 pt-0.5">
           {TABS.map((t) => (
             <button

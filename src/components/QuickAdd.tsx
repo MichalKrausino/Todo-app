@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { activeClients, addTask, allProjects, removeTask } from '../db/repo'
-import { formatDayLabel } from '../lib/dates'
+import { formatDayLabel, todayISO } from '../lib/dates'
 import { PRIORITY_LABELS } from '../lib/labels'
 import { foldToken, mentionToken, parseQuickAdd } from '../lib/quickAdd'
 import { humanizeRule } from '../lib/rrule'
@@ -9,7 +9,15 @@ import { humanizeRule } from '../lib/rrule'
 // Rozepsaný @klient / #projekt na konci textu → našeptávač nad polem.
 const RE_MENTION = /(^|\s)([@#])(\S*)$/
 
-export function QuickAdd({ onShowUpcoming }: { onShowUpcoming?: () => void }) {
+// defaultToToday: na obrazovce Dnes jde úkol bez data na dnešek (scheduledFor)
+// — kdo píše na Dnes, myslí „udělám to dnes". Jinde bez data → inbox.
+export function QuickAdd({
+  onShowUpcoming,
+  defaultToToday = false,
+}: {
+  onShowUpcoming?: () => void
+  defaultToToday?: boolean
+}) {
   const [text, setText] = useState('')
   // Počítadlo přidaných úkolů — mění key tlačítka, takže po každém
   // přidání proběhne potvrzovací pop (hmatová odezva bez haptiky).
@@ -55,12 +63,18 @@ export function QuickAdd({ onShowUpcoming }: { onShowUpcoming?: () => void }) {
     setText(text.slice(0, mention.start) + mention.marker + mentionToken(name) + ' ')
   }
 
+  // Na Dnes dostane úkol bez data plán na dnešek — vidět předem jako chip.
+  const impliedToday = Boolean(
+    defaultToToday && parsed && !parsed.dueDate && !parsed.recurrenceRule,
+  )
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!parsed || !parsed.title) return
     const task = await addTask({
       title: parsed.title,
       dueDate: parsed.dueDate,
+      scheduledFor: impliedToday ? todayISO() : undefined,
       clientId: parsed.clientId,
       projectId: parsed.projectId,
       priority: parsed.priority,
@@ -69,7 +83,7 @@ export function QuickAdd({ onShowUpcoming }: { onShowUpcoming?: () => void }) {
     })
     setText('')
     setAddedCount((n) => n + 1)
-    setLastAdded({ id: task.id, title: task.title, dueDate: task.dueDate })
+    setLastAdded({ id: task.id, title: task.title, dueDate: task.scheduledFor ?? task.dueDate })
     clearTimeout(undoTimer.current)
     undoTimer.current = setTimeout(() => setLastAdded(null), 6000)
   }
@@ -132,11 +146,11 @@ export function QuickAdd({ onShowUpcoming }: { onShowUpcoming?: () => void }) {
         </div>
       )}
 
-      {parsed && (parsed.dueDate || client || parsed.projectId || parsed.priority !== 'normal' || parsed.recurrenceRule || parsed.notes) && (
+      {parsed && (parsed.dueDate || impliedToday || client || parsed.projectId || parsed.priority !== 'normal' || parsed.recurrenceRule || parsed.notes) && (
         <div className="flex flex-wrap gap-1.5 px-1 pb-2 text-[11px]">
-          {parsed.dueDate && (
-            <span key={`d:${parsed.dueDate}`} className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}>
-              {formatDayLabel(parsed.dueDate)}
+          {(parsed.dueDate || impliedToday) && (
+            <span key={`d:${parsed.dueDate ?? 'dnes'}`} className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}>
+              {formatDayLabel(parsed.dueDate ?? todayISO())}
             </span>
           )}
           {parsed.recurrenceRule && (
