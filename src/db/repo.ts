@@ -216,6 +216,7 @@ async function respawnRecurring(task: Task | undefined, t: string): Promise<void
     completedAt: undefined,
     calendarEventId: undefined,
     postponeCount: undefined, // nový výskyt začíná s čistým štítem
+    subtasks: task.subtasks?.map((s) => ({ ...s, done: false })), // checklist znovu od nuly
   }
   await db.tasks.add(successor)
 }

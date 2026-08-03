@@ -36,6 +36,14 @@ export interface Project extends BaseRecord {
   order: number
 }
 
+// Podúkol — drobný krok uvnitř úkolu (checklist). Žije vnořený v Tasku,
+// synchronizuje se s ním jako celek (LWW přes updatedAt úkolu).
+export interface Subtask {
+  id: string
+  title: string
+  done: boolean
+}
+
 export interface Task extends BaseRecord {
   clientId?: string
   projectId?: string
@@ -53,6 +61,7 @@ export interface Task extends BaseRecord {
   sourceTemplateItemId?: string
   completedAt?: string
   postponeCount?: number // kolikrát byl termín posunut na později (signál odkládání)
+  subtasks?: Subtask[] // checklist — po respawnu opakování se nuluje na nehotové
   isClientCheck?: boolean // pravidelná připomínka „zkontrolovat klienta" (marker přežívá respawn)
   order: number
 }

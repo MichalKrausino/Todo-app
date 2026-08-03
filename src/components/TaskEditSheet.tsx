@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import type { Priority, Project, Task } from '../db/types'
+import type { Priority, Project, Subtask, Task } from '../db/types'
 import { activeClients, clientProjects, removeTask, updateTask } from '../db/repo'
 import { Sheet } from './Sheet'
 import { deleteBlockForTask } from '../sync/calendar'
@@ -29,6 +29,23 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   // 'none' | předvolba | 'custom' (existující pravidlo mimo předvolby zachovat)
   const initialRecurrence = task.recurrenceRule ? presetFromRule(task.recurrenceRule) : 'none'
   const [recurrence, setRecurrence] = useState<string>(initialRecurrence)
+  // Checklist se ukládá hned při každé změně (jako iOS Připomínky) —
+  // odškrtnutí podúkolu nesmí čekat na „Uložit". Save ho neposílá,
+  // Dexie update mění jen zaslaná pole.
+  const [subtasks, setSubtasks] = useState<Subtask[]>(task.subtasks ?? [])
+  const [newSub, setNewSub] = useState('')
+
+  const persistSubtasks = (list: Subtask[]) => {
+    setSubtasks(list)
+    void updateTask(task.id, { subtasks: list })
+  }
+
+  const addSubtask = () => {
+    const title = newSub.trim()
+    if (!title) return
+    persistSubtasks([...subtasks, { id: crypto.randomUUID(), title, done: false }])
+    setNewSub('')
+  }
 
   const clients = useLiveQuery(activeClients, []) ?? []
   const projects =
@@ -171,6 +188,85 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
                 <option value="custom">Vlastní ({humanizeRule(task.recurrenceRule)})</option>
               )}
             </select>
+          </div>
+        </div>
+
+        <div>
+          <label className={label}>
+            Podúkoly
+            {subtasks.length > 0 && ` · ${subtasks.filter((s) => s.done).length}/${subtasks.length}`}
+          </label>
+          {subtasks.length > 0 && (
+            <ul className="mb-1.5 divide-y divide-line overflow-hidden rounded-lg border border-line">
+              {subtasks.map((s) => (
+                <li key={s.id} className="flex items-center gap-2.5 bg-card px-3 py-2">
+                  <button
+                    type="button"
+                    aria-label={s.done ? `Vrátit podúkol ${s.title}` : `Dokončit podúkol ${s.title}`}
+                    onClick={() =>
+                      persistSubtasks(
+                        subtasks.map((x) => (x.id === s.id ? { ...x, done: !x.done } : x)),
+                      )
+                    }
+                    className="-m-1.5 shrink-0 p-1.5 transition-transform duration-150 active:scale-90"
+                  >
+                    <span
+                      key={String(s.done)}
+                      className={`pop flex h-[18px] w-[18px] items-center justify-center rounded-full border-[1.5px] transition-colors duration-200 ${
+                        s.done ? 'border-accent bg-accent text-card' : 'border-ink-faint text-transparent'
+                      }`}
+                    >
+                      <svg viewBox="0 0 20 20" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4.5 10.5l3.8 3.8 7.2-8.6" />
+                      </svg>
+                    </span>
+                  </button>
+                  <span
+                    className={`min-w-0 flex-1 truncate text-[14px] ${
+                      s.done ? 'text-ink-faint line-through' : 'text-ink'
+                    }`}
+                  >
+                    {s.title}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Smazat podúkol ${s.title}`}
+                    onClick={() => persistSubtasks(subtasks.filter((x) => x.id !== s.id))}
+                    className="-m-1 shrink-0 p-1 text-ink-faint transition-transform duration-150 active:scale-90"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-1.5">
+            <input
+              className={`${field} min-w-0 flex-1`}
+              placeholder="Přidat podúkol…"
+              value={newSub}
+              enterKeyHint="done"
+              onChange={(e) => setNewSub(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  addSubtask()
+                }
+              }}
+            />
+            <button
+              type="button"
+              aria-label="Přidat podúkol"
+              disabled={!newSub.trim()}
+              onClick={addSubtask}
+              className="flex w-10 shrink-0 items-center justify-center rounded-lg bg-well text-ink-soft transition-transform duration-150 active:scale-90 disabled:opacity-30"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
           </div>
         </div>
 

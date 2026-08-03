@@ -147,6 +147,25 @@ describe('počítání odkladů (updateTask)', () => {
       .first()
     expect(successor?.postponeCount).toBeUndefined()
   })
+
+  it('respawn nuluje checklist podúkolů na nehotové', async () => {
+    const { addTask } = await import('./repo')
+    const t = await addTask({ title: 'Publikace', dueDate: '2026-07-31' })
+    await db.tasks.update(t.id, {
+      recurrenceRule: 'FREQ=DAILY',
+      subtasks: [
+        { id: 's1', title: 'návrh', done: true },
+        { id: 's2', title: 'export', done: false },
+      ],
+    })
+    await completeTask(t.id)
+
+    const successor = await db.tasks
+      .filter((x) => !x.deletedAt && x.status === 'active')
+      .first()
+    expect(successor?.subtasks?.length).toBe(2)
+    expect(successor?.subtasks?.every((s) => !s.done)).toBe(true)
+  })
 })
 
 describe('opakování samostatného úkolu (respawn)', () => {

@@ -154,6 +154,8 @@ export function TaskRow({
     (task.dueDate < todayISO() ||
       (task.dueDate === todayISO() && !!task.dueTime && task.dueTime <= nowHM))
   const prio = PRIO_BADGE[task.priority]
+  const subs = task.subtasks ?? []
+  const subsDone = subs.filter((s) => s.done).length
   const fullPull = dragging && dx < -SWIPE_FULL // Zítra expanduje přes celou šířku
 
   return (
@@ -245,7 +247,7 @@ export function TaskRow({
           >
             {task.title}
           </div>
-          {(client || project || (showDate && task.dueDate) || task.dueTime || prio || task.recurrenceRule || task.sourceTemplateItemId) && (
+          {(client || project || (showDate && task.dueDate) || task.dueTime || subs.length > 0 || prio || task.recurrenceRule || task.sourceTemplateItemId) && (
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
               {client && (
                 <span className="inline-flex items-center gap-1.5 text-ink-soft">
@@ -264,6 +266,19 @@ export function TaskRow({
               {!(showDate && task.dueDate) && task.dueTime && !visualDone && (
                 <span className={overdue ? 'font-medium text-danger' : 'text-ink-soft'}>
                   do {task.dueTime}
+                </span>
+              )}
+              {/* progres checklistu — zelený, jakmile je celý hotový */}
+              {subs.length > 0 && !visualDone && (
+                <span
+                  className={`inline-flex items-center gap-1 ${subsDone === subs.length ? 'text-moss' : 'text-ink-soft'}`}
+                  title="Podúkoly"
+                >
+                  <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 7l2 2 3.5-4M4 16l2 2 3.5-4" />
+                    <path d="M13 8h7M13 17h7" />
+                  </svg>
+                  {subsDone}/{subs.length}
                 </span>
               )}
               {(task.recurrenceRule || task.sourceTemplateItemId) && (
