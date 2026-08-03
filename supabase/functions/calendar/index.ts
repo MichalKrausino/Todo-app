@@ -21,7 +21,16 @@ const admin = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 )
 
-const json = (body: Rec, status = 200) => Response.json(body, { status })
+// CORS: appka běží na github.io a volá supabase.co — prohlížeč posílá
+// preflight OPTIONS a bez těchto hlaviček celé volání zařízne
+// („Load failed" v Safari). Autorizaci řeší JWT, origin může být *.
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
+const json = (body: Rec, status = 200) => Response.json(body, { status, headers: CORS })
 
 // --- volná okna (kopie src/lib/freeSlot.ts) ---
 
@@ -190,6 +199,7 @@ async function fetchEvents(
 }
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
   try {
     const jwt = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
     if (!jwt) return json({ error: 'chybí autorizace' }, 401)
