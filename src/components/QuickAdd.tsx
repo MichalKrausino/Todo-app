@@ -7,6 +7,7 @@ import { freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { PRIORITY_LABELS } from '../lib/labels'
 import { foldToken, mentionToken, parseQuickAdd } from '../lib/quickAdd'
 import { humanizeRule } from '../lib/rrule'
+import { MonthPicker } from './MonthPicker'
 
 const plural = (n: number, one: string, few: string, many: string) =>
   n === 1 ? one : n < 5 ? few : many
@@ -294,8 +295,8 @@ export function QuickAdd({
 
       {/* výběr po ťuknutí na tlačítko lišty nebo chip */}
       {picker === 'date' && (
-        <>
-          {/* výběr dne nezavírá řádek — náhled vytížení níže se mění živě */}
+        <div className="max-h-[46vh] overflow-y-auto overflow-x-hidden overscroll-contain">
+          {/* výběr dne nezavírá sekci — heatmapa i agenda se mění živě */}
           <div className="rise -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
             <button type="button" onPointerDown={keepFocus} onClick={() => setOverrides((o) => ({ ...o, dueDate: today }))} className={`${pill} bg-accent-wash text-accent-deep`}>
               Dnes
@@ -306,25 +307,18 @@ export function QuickAdd({
             <button type="button" onPointerDown={keepFocus} onClick={() => setOverrides((o) => ({ ...o, dueDate: toISODate(nextMonday(fromISODate(today))) }))} className={`${pill} bg-accent-wash text-accent-deep`}>
               Příští týden
             </button>
-            {/* iOS posílá change průběžně a systémový kalendář překrývá
-                obrazovku — řádek se proto během výběru NEZAVÍRÁ vůbec:
-                po dokončení zůstane otevřený s agendou vybraného dne.
-                Zavře se tlačítkem Termín, přepnutím výběru nebo přidáním. */}
-            <input
-              type="date"
-              aria-label="Vybrat datum"
-              value={effDueDate ?? ''}
-              onChange={(e) =>
-                e.target.value && setOverrides((o) => ({ ...o, dueDate: e.target.value }))
-              }
-              className="h-8 shrink-0 rounded-full border border-line bg-card px-2.5 text-[13px] text-ink outline-none"
-            />
             {(effDueDate || impliedToday) && (
               <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: null })} className={`${pill} bg-well text-ink-soft`}>
                 ✕ Bez termínu
               </button>
             )}
           </div>
+
+          {/* vlastní kalendářík s heatmapou vytížení dnů */}
+          <MonthPicker
+            value={effDueDate}
+            onSelect={(iso) => setOverrides((o) => ({ ...o, dueDate: iso }))}
+          />
 
           {/* mini agenda vybraného dne: schůzky z kalendáře + úkoly + volno */}
           {previewDay && (
@@ -394,7 +388,7 @@ export function QuickAdd({
               )}
             </div>
           )}
-        </>
+        </div>
       )}
       {picker === 'client' && (
         <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
