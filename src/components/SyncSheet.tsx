@@ -1,4 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { exportBackup, importBackup } from '../db/backup'
 import {
   disablePush,
   enablePush,
@@ -48,7 +49,15 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
           </p>
         )}
 
-        {status.phase === 'signedOut' && <SignInForm />}
+        {status.phase === 'signedOut' && (
+          <>
+            <p className="rounded-2xl bg-note px-3 py-2 text-xs text-note-ink">
+              Bez přihlášení žijí data jen v tomhle zařízení. Přihlas se, ať se
+              zálohují na server — nebo si aspoň stáhni zálohu níže.
+            </p>
+            <SignInForm />
+          </>
+        )}
 
         {status.phase !== 'unconfigured' && status.phase !== 'signedOut' && (
           <>
@@ -95,9 +104,91 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
             </div>
           </>
         )}
+
+        <BackupSection />
         </>
       )}
     </Sheet>
+  )
+}
+
+// Záloha nezávislá na syncu: export všech dat do JSON souboru a obnova
+// z něj. Ukazuje i stav trvalého úložiště (persist brání systému data
+// vyčistit). Aktualizace appky se dat nedotýkají — tohle je pojistka
+// hlavně pro smazání appky z plochy nebo výměnu telefonu bez syncu.
+function BackupSection() {
+  const [persisted, setPersisted] = useState<boolean | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (navigator.storage?.persisted) {
+      void navigator.storage.persisted().then(setPersisted)
+    }
+  }, [])
+
+  const download = async () => {
+    const backup = await exportBackup()
+    const blob = new Blob([JSON.stringify(backup, null, 1)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `todo-zaloha-${backup.exportedAt.slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const restore = async (file: File) => {
+    setMessage(null)
+    try {
+      const count = await importBackup(JSON.parse(await file.text()))
+      setMessage(`Obnoveno ${count} záznamů. Při příštím syncu se srovnají se serverem.`)
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : 'Zálohu se nepodařilo přečíst.')
+    }
+  }
+
+  return (
+    <section className="space-y-2">
+      <h3 className="section-label">data</h3>
+      <div className="divide-y divide-line overflow-hidden rounded-2xl bg-well">
+        <div className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+          <span className="font-medium">Trvalé úložiště</span>
+          <span className="text-xs text-ink-soft">
+            {persisted === null ? '—' : persisted ? 'zapnuto' : 'nevynuceno (data drží systém)'}
+          </span>
+        </div>
+        <button
+          onClick={() => void download()}
+          className="block w-full px-3 py-2.5 text-left text-sm font-medium text-accent transition-colors duration-150 active:bg-line/40"
+        >
+          Stáhnout zálohu (JSON)
+        </button>
+        <button
+          onClick={() => fileRef.current?.click()}
+          className="block w-full px-3 py-2.5 text-left text-sm font-medium text-accent transition-colors duration-150 active:bg-line/40"
+        >
+          Obnovit ze zálohy…
+        </button>
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) void restore(f)
+          e.target.value = ''
+        }}
+      />
+      {message && <p className="rounded-2xl bg-note px-3 py-2 text-xs text-note-ink">{message}</p>}
+      <p className="px-1 text-[11px] leading-relaxed text-ink-faint">
+        Aktualizace appky se dat nedotýkají — data žijí v úložišti zařízení
+        a se zapnutým syncem i na serveru. Záloha se hodí před smazáním
+        appky z plochy nebo při výměně telefonu bez přihlášení.
+      </p>
+    </section>
   )
 }
 
