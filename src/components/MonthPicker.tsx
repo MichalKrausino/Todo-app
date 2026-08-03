@@ -11,12 +11,14 @@ import { fromISODate, toISODate, todayISO } from '../lib/dates'
 const WEEKDAYS = ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne']
 const monthFmt = new Intl.DateTimeFormat('cs-CZ', { month: 'long', year: 'numeric' })
 
-// Tři úrovně sytosti stačí — víc by přestalo být čitelné.
+// Tři úrovně sytosti stačí — víc by přestalo být čitelné. První úroveň
+// používá accent-wash (navržený pro světlý i tmavý režim), aby byla
+// zřetelná i na bílé kartě.
 function heatClass(count: number): string {
   if (count <= 0) return ''
-  if (count <= 2) return 'bg-accent/15'
-  if (count <= 4) return 'bg-accent/30'
-  return 'bg-accent/45'
+  if (count <= 2) return 'bg-accent-wash text-accent-deep'
+  if (count <= 4) return 'bg-accent/40'
+  return 'bg-accent/70 text-card'
 }
 
 export function MonthPicker({
@@ -57,8 +59,8 @@ export function MonthPicker({
   const keep = (e: React.PointerEvent) => e.preventDefault()
 
   return (
-    <div className="rise mb-2 rounded-xl bg-card p-3 shadow-card">
-      <div className="mb-1.5 flex items-center justify-between">
+    <div className="rise mb-2 rounded-xl bg-card p-2.5 shadow-card">
+      <div className="mb-1 flex items-center justify-between">
         <button
           type="button"
           onPointerDown={keep}
@@ -86,9 +88,9 @@ export function MonthPicker({
         </button>
       </div>
 
-      <div key={`g${month}`} className="rise grid grid-cols-7 gap-y-0.5 text-center">
+      <div key={`g${month}`} className="rise grid grid-cols-7 gap-y-0 text-center">
         {WEEKDAYS.map((w) => (
-          <span key={w} className="text-[11px] font-medium text-ink-faint">
+          <span key={w} className="text-[10px] font-medium text-ink-faint">
             {w}
           </span>
         ))}
@@ -101,6 +103,15 @@ export function MonthPicker({
           const selected = iso === value
           const isToday = iso === today
           const past = iso < today
+          const heat = heatClass(count)
+          const cls = selected
+            ? 'bg-accent font-semibold text-card'
+            : [
+                heat,
+                isToday ? 'border border-accent font-semibold' : '',
+                isToday && !heat ? 'text-accent' : '',
+                !heat && !isToday ? (past ? 'text-ink-faint' : 'text-ink') : '',
+              ].join(' ')
           return (
             <button
               key={iso}
@@ -110,20 +121,10 @@ export function MonthPicker({
               onPointerDown={keep}
               onClick={() => onSelect(iso)}
               aria-label={`${iso}${count > 0 ? `, ${count} položek` : ', volno'}`}
-              className="flex items-center justify-center py-0.5"
+              className="flex items-center justify-center"
             >
               <span
-                className={`flex h-8 w-8 items-center justify-center rounded-full text-[13px] tabular-nums transition-colors duration-150 ${
-                  selected
-                    ? 'bg-accent font-semibold text-card'
-                    : `${heatClass(count)} ${
-                        isToday
-                          ? 'border border-accent font-semibold text-accent'
-                          : past
-                            ? 'text-ink-faint'
-                            : 'text-ink'
-                      }`
-                }`}
+                className={`flex h-7 w-7 items-center justify-center rounded-full text-[12px] tabular-nums transition-colors duration-150 ${cls}`}
               >
                 {i + 1}
               </span>
@@ -132,7 +133,7 @@ export function MonthPicker({
         })}
       </div>
 
-      <p className="mt-1 text-center text-[11px] text-ink-faint">
+      <p className="mt-1 text-center text-[10px] text-ink-faint">
         sytost pozadí = vytížení dne (schůzky + úkoly)
       </p>
     </div>

@@ -295,7 +295,7 @@ export function QuickAdd({
 
       {/* výběr po ťuknutí na tlačítko lišty nebo chip */}
       {picker === 'date' && (
-        <div className="max-h-[46vh] overflow-y-auto overflow-x-hidden overscroll-contain">
+        <div className="max-h-[54vh] overflow-y-auto overflow-x-hidden overscroll-contain">
           {/* výběr dne nezavírá sekci — heatmapa i agenda se mění živě */}
           <div className="rise -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
             <button type="button" onPointerDown={keepFocus} onClick={() => setOverrides((o) => ({ ...o, dueDate: today }))} className={`${pill} bg-accent-wash text-accent-deep`}>
@@ -338,8 +338,8 @@ export function QuickAdd({
                 </span>
               </div>
 
-              {previewAgenda.slice(0, 4).map((e) => (
-                <div key={e.id} className="flex items-center gap-2 px-3 py-1.5 text-[13px]">
+              {previewAgenda.slice(0, 3).map((e) => (
+                <div key={e.id} className="flex items-center gap-2 px-3 py-1 text-[13px]">
                   <span className="w-[5.5rem] shrink-0 whitespace-nowrap tabular-nums text-ink-soft">
                     {e.allDay ? 'celý den' : `${timeFmt.format(new Date(e.start))}–${timeFmt.format(new Date(e.end))}`}
                   </span>
@@ -347,14 +347,14 @@ export function QuickAdd({
                   <span className="min-w-0 flex-1 truncate text-ink">{e.title}</span>
                 </div>
               ))}
-              {previewAgenda.length > 4 && (
+              {previewAgenda.length > 3 && (
                 <div className="px-3 pb-1 text-[12px] text-ink-faint">
-                  …a {previewAgenda.length - 4} {plural(previewAgenda.length - 4, 'další schůzka', 'další schůzky', 'dalších schůzek')}
+                  …a {previewAgenda.length - 3} {plural(previewAgenda.length - 3, 'další schůzka', 'další schůzky', 'dalších schůzek')}
                 </div>
               )}
 
-              {previewTasks.slice(0, 3).map((t) => (
-                <div key={t.id} className="flex items-center gap-2 px-3 py-1.5 text-[13px]">
+              {previewTasks.slice(0, 2).map((t) => (
+                <div key={t.id} className="flex items-center gap-2 px-3 py-1 text-[13px]">
                   <span className="w-[5.5rem] shrink-0 text-ink-faint">úkol</span>
                   <span
                     className="h-1.5 w-1.5 shrink-0 rounded-full"
@@ -367,9 +367,9 @@ export function QuickAdd({
                   <span className="min-w-0 flex-1 truncate text-ink">{t.title}</span>
                 </div>
               ))}
-              {previewTasks.length > 3 && (
+              {previewTasks.length > 2 && (
                 <div className="px-3 pb-1 text-[12px] text-ink-faint">
-                  …a {previewTasks.length - 3} {plural(previewTasks.length - 3, 'další úkol', 'další úkoly', 'dalších úkolů')}
+                  …a {previewTasks.length - 2} {plural(previewTasks.length - 2, 'další úkol', 'další úkoly', 'dalších úkolů')}
                 </div>
               )}
 
