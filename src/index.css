@@ -31,6 +31,7 @@
   --color-danger-wash: #ffebe9;
   --color-note: #fff3e0; /* oranžový nádech pro tiché signály */
   --color-note-ink: #8f5600;
+  --color-amber: #ff9500; /* plná iOS oranžová (heatmapa, akcenty varování) */
   --color-moss: #248a3d; /* ok / synchronizováno */
 
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
@@ -62,6 +63,7 @@
     --color-danger-wash: #3a1512;
     --color-note: #2e2410;
     --color-note-ink: #ffb340;
+    --color-amber: #ff9f0a;
     --color-moss: #30d158;
 
     --shadow-card: 0 0 #0000;

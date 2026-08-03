@@ -13,12 +13,13 @@ const monthFmt = new Intl.DateTimeFormat('cs-CZ', { month: 'long', year: 'numeri
 
 // Semaforová škála — barva rovnou říká, jak moc je den plný:
 // modrá = pár věcí, oranžová = nabito, červená = plno. Wash odstíny
-// jsou definované pro světlý i tmavý režim.
+// byly na displeji k nerozeznání od bílé (ověřeno pixelově), proto
+// průhledné varianty plných barev — viditelné v obou režimech.
 function heatClass(count: number): string {
   if (count <= 0) return ''
-  if (count <= 2) return 'bg-accent-wash text-accent-deep'
-  if (count <= 4) return 'bg-note text-note-ink'
-  return 'bg-danger-wash font-medium text-danger'
+  if (count <= 2) return 'bg-accent/30'
+  if (count <= 4) return 'bg-amber/40'
+  return 'bg-danger/40 font-medium'
 }
 
 export function MonthPicker({
@@ -136,13 +137,13 @@ export function MonthPicker({
       {/* vizuální legenda — barvy rovnou s významem */}
       <div className="mt-1 flex items-center justify-center gap-3 text-[10px] text-ink-faint">
         <span className="inline-flex items-center gap-1">
-          <span className="h-2.5 w-2.5 rounded-full bg-accent-wash" /> 1–2
+          <span className="h-2.5 w-2.5 rounded-full bg-accent/30" /> 1–2
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="h-2.5 w-2.5 rounded-full bg-note" /> 3–4
+          <span className="h-2.5 w-2.5 rounded-full bg-amber/40" /> 3–4
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="h-2.5 w-2.5 rounded-full bg-danger-wash" /> 5+
+          <span className="h-2.5 w-2.5 rounded-full bg-danger/40" /> 5+
         </span>
         <span>schůzek a úkolů za den</span>
       </div>
