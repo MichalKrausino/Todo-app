@@ -95,4 +95,80 @@ describe('parseQuickAdd', () => {
   it('bez „každý" se opakování nenastaví', () => {
     expect(parseQuickAdd('v pátek report', [], TODAY).recurrenceRule).toBeUndefined()
   })
+
+  it('rozpozná datum s měsícem slovem', () => {
+    expect(parseQuickAdd('15. srpna návrh', [], TODAY).dueDate).toBe('2026-08-15')
+    expect(parseQuickAdd('15 srpna návrh', [], TODAY).dueDate).toBe('2026-08-15')
+    expect(parseQuickAdd('1. února revize', [], TODAY).dueDate).toBe('2027-02-01')
+    expect(parseQuickAdd('24. prosince 2026 dárky', [], TODAY).dueDate).toBe('2026-12-24')
+    expect(parseQuickAdd('15. srpna návrh', [], TODAY).title).toBe('návrh')
+  })
+
+  it('rozpozná „do pátku" a další genitivy', () => {
+    expect(parseQuickAdd('do pátku poslat fakturu', [], TODAY).dueDate).toBe('2026-07-31')
+    expect(parseQuickAdd('do čtvrtka podklady', [], TODAY).dueDate).toBe('2026-07-30')
+    expect(parseQuickAdd('do pátku poslat fakturu', [], TODAY).title).toBe('poslat fakturu')
+  })
+
+  it('rozpozná víkend a koncem týdne/měsíce', () => {
+    expect(parseQuickAdd('o víkendu úklid', [], TODAY).dueDate).toBe('2026-08-01')
+    expect(parseQuickAdd('na víkend výlet', [], TODAY).dueDate).toBe('2026-08-01')
+    expect(parseQuickAdd('příští víkend chata', [], TODAY).dueDate).toBe('2026-08-08')
+    expect(parseQuickAdd('koncem týdne shrnutí', [], TODAY).dueDate).toBe('2026-07-31')
+    expect(parseQuickAdd('koncem měsíce fakturace', [], TODAY).dueDate).toBe('2026-07-31')
+  })
+
+  it('rozpozná příští měsíc a „za měsíc"', () => {
+    expect(parseQuickAdd('příští měsíc strategie', [], TODAY).dueDate).toBe('2026-08-01')
+    expect(parseQuickAdd('za měsíc kontrola', [], TODAY).dueDate).toBeUndefined() // „za měsíc" bez čísla neumíme
+    expect(parseQuickAdd('za 2 měsíce revize', [], TODAY).dueDate).toBe('2026-09-29')
+  })
+
+  it('rozpozná hovorové dneska/zejtra', () => {
+    expect(parseQuickAdd('dneska standup', [], TODAY).dueDate).toBe('2026-07-29')
+    expect(parseQuickAdd('zejtra volat', [], TODAY).dueDate).toBe('2026-07-30')
+  })
+
+  it('!! a !!! jako zkratky priority', () => {
+    expect(parseQuickAdd('poslat report !!', [], TODAY).priority).toBe('high')
+    expect(parseQuickAdd('hasit kampaň !!!', [], TODAY).priority).toBe('critical')
+    expect(parseQuickAdd('poslat report !!', [], TODAY).title).toBe('poslat report')
+    // slovní priorita má přednost
+    expect(parseQuickAdd('report !nízká', [], TODAY).priority).toBe('low')
+  })
+
+  it('poznámka za „//" jde do notes a neparsuje se', () => {
+    const r = parseQuickAdd('zítra poslat report @acme // čísla vzít z GA4, zítra ne', CLIENTS, TODAY)
+    expect(r.title).toBe('poslat report')
+    expect(r.dueDate).toBe('2026-07-30')
+    expect(r.clientId).toBe('c2')
+    expect(r.notes).toBe('čísla vzít z GA4, zítra ne')
+    // URL v textu poznámku nespustí
+    expect(parseQuickAdd('přečíst https://example.com/x', [], TODAY).notes).toBeUndefined()
+  })
+
+  it('#projekt přiřadí projekt a doplní klienta', () => {
+    const projects = [
+      { id: 'p1', name: 'Web redesign', clientId: 'c2' },
+      { id: 'p2', name: 'Kampaň léto', clientId: 'c1' },
+    ]
+    const r = parseQuickAdd('nakódovat hero #webredesign', CLIENTS, TODAY, projects)
+    expect(r.projectId).toBe('p1')
+    expect(r.clientId).toBe('c2')
+    expect(r.title).toBe('nakódovat hero')
+    // prefix stačí; projekt zadaného klienta má přednost
+    const r2 = parseQuickAdd('banery @klientx #kamp', CLIENTS, TODAY, projects)
+    expect(r2.projectId).toBe('p2')
+    expect(r2.clientId).toBe('c1')
+  })
+
+  it('každý všední den a výčet dnů', () => {
+    const r = parseQuickAdd('každý všední den standup', [], TODAY)
+    expect(r.recurrenceRule).toBe('FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR')
+    expect(r.dueDate).toBe('2026-07-29')
+    const r2 = parseQuickAdd('každé pondělí a čtvrtek publikovat post', [], TODAY)
+    expect(r2.recurrenceRule).toBe('FREQ=WEEKLY;BYDAY=MO,TH')
+    expect(r2.dueDate).toBe('2026-07-30') // čtvrtek je z Wed nejblíž
+    expect(r2.title).toBe('publikovat post')
+  })
 })

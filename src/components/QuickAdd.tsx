@@ -1,43 +1,121 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { activeClients, addTask } from '../db/repo'
+import { activeClients, addTask, allProjects, removeTask } from '../db/repo'
 import { formatDayLabel } from '../lib/dates'
 import { PRIORITY_LABELS } from '../lib/labels'
-import { parseQuickAdd } from '../lib/quickAdd'
+import { foldToken, mentionToken, parseQuickAdd } from '../lib/quickAdd'
 import { humanizeRule } from '../lib/rrule'
+
+// Rozepsaný @klient / #projekt na konci textu → našeptávač nad polem.
+const RE_MENTION = /(^|\s)([@#])(\S*)$/
 
 export function QuickAdd() {
   const [text, setText] = useState('')
   // Počítadlo přidaných úkolů — mění key tlačítka, takže po každém
   // přidání proběhne potvrzovací pop (hmatová odezva bez haptiky).
   const [addedCount, setAddedCount] = useState(0)
+  // Pojistka proti špatnému parsování: pár vteřin po přidání jde úkol vrátit.
+  const [lastAdded, setLastAdded] = useState<{ id: string; title: string } | null>(null)
+  const undoTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const clients = useLiveQuery(activeClients, []) ?? []
+  const projects = useLiveQuery(allProjects, []) ?? []
+
+  useEffect(() => () => clearTimeout(undoTimer.current), [])
 
   const parsed = useMemo(
-    () => (text.trim() ? parseQuickAdd(text, clients) : null),
-    [text, clients],
+    () => (text.trim() ? parseQuickAdd(text, clients, new Date(), projects) : null),
+    [text, clients, projects],
   )
+
+  // Našeptávač: fragment za @/# na konci textu, nabídka podle prefixu.
+  const mention = useMemo(() => {
+    const m = RE_MENTION.exec(text)
+    if (!m) return null
+    const kind = m[2] === '@' ? ('client' as const) : ('project' as const)
+    const frag = foldToken(m[3])
+    const pool =
+      kind === 'client'
+        ? clients.map((c) => ({ id: c.id, name: c.name, color: c.color as string | undefined }))
+        : (parsed?.clientId ? projects.filter((p) => p.clientId === parsed.clientId) : projects).map(
+            (p) => ({ id: p.id, name: p.name, color: undefined as string | undefined }),
+          )
+    const items = pool.filter((x) => foldToken(x.name).startsWith(frag)).slice(0, 4)
+    if (items.length === 0) return null
+    // jediná shoda, která už je dopsaná celá → nabídka by jen překážela
+    if (items.length === 1 && foldToken(items[0].name) === frag) return null
+    return { start: m.index + m[1].length, marker: m[2], items }
+  }, [text, clients, projects, parsed?.clientId])
+
+  const pickMention = (name: string) => {
+    if (!mention) return
+    setText(text.slice(0, mention.start) + mention.marker + mentionToken(name) + ' ')
+  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!parsed || !parsed.title) return
-    await addTask({
+    const task = await addTask({
       title: parsed.title,
       dueDate: parsed.dueDate,
       clientId: parsed.clientId,
+      projectId: parsed.projectId,
       priority: parsed.priority,
       recurrenceRule: parsed.recurrenceRule,
+      notes: parsed.notes,
     })
     setText('')
     setAddedCount((n) => n + 1)
+    setLastAdded({ id: task.id, title: task.title })
+    clearTimeout(undoTimer.current)
+    undoTimer.current = setTimeout(() => setLastAdded(null), 5000)
+  }
+
+  const undo = async () => {
+    if (!lastAdded) return
+    clearTimeout(undoTimer.current)
+    await removeTask(lastAdded.id)
+    setLastAdded(null)
   }
 
   const client = parsed?.clientId ? clients.find((c) => c.id === parsed.clientId) : undefined
   const chip = 'rounded-full px-2.5 py-0.5 font-medium'
 
   return (
-    <div className="px-3 pt-2.5">
-      {parsed && (parsed.dueDate || client || parsed.priority !== 'normal' || parsed.recurrenceRule) && (
+    <div className="relative px-3 pt-2.5">
+      {lastAdded && (
+        <div className="pointer-events-none absolute inset-x-0 -top-12 z-30 flex justify-center">
+          <div className="pop pointer-events-auto flex items-center gap-2 rounded-full bg-ink/90 py-1.5 pl-4 pr-1.5 shadow-float backdrop-blur">
+            <span className="max-w-52 truncate text-[13px] text-paper">
+              Přidáno „{lastAdded.title}“
+            </span>
+            <button
+              onClick={() => void undo()}
+              className="rounded-full bg-paper/15 px-3 py-1 text-[13px] font-semibold text-paper transition-transform duration-150 active:scale-95"
+            >
+              Zpět
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mention && (
+        <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
+          {mention.items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onPointerDown={(e) => e.preventDefault() /* nebrat fokus inputu */}
+              onClick={() => pickMention(item.name)}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-well px-3 py-1.5 text-[13px] font-medium text-ink transition-transform duration-150 active:scale-95"
+            >
+              {item.color && <span className="h-2 w-2 rounded-full" style={{ background: item.color }} />}
+              {item.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {parsed && (parsed.dueDate || client || parsed.projectId || parsed.priority !== 'normal' || parsed.recurrenceRule || parsed.notes) && (
         <div className="flex flex-wrap gap-1.5 px-1 pb-2 text-[11px]">
           {parsed.dueDate && (
             <span key={`d:${parsed.dueDate}`} className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}>
@@ -49,15 +127,26 @@ export function QuickAdd() {
               ↻ {humanizeRule(parsed.recurrenceRule)}
             </span>
           )}
-          {client && (
+          {/* při rozepsaném @/# chip skrýt — našeptávač by ho jen zdvojoval */}
+          {client && mention?.marker !== '@' && (
             <span key={`c:${client.id}`} className={`${chip} pop-soft inline-flex items-center gap-1.5 bg-well text-ink-soft`}>
               <span className="h-2 w-2 rounded-full" style={{ background: client.color }} />
               {client.name}
             </span>
           )}
+          {parsed.projectName && mention?.marker !== '#' && (
+            <span key={`j:${parsed.projectId}`} className={`${chip} pop-soft inline-block bg-well text-ink-soft`}>
+              ▸ {parsed.projectName}
+            </span>
+          )}
           {parsed.priority !== 'normal' && (
             <span key={`p:${parsed.priority}`} className={`${chip} pop-soft inline-block bg-well text-ink-soft`}>
               {PRIORITY_LABELS[parsed.priority]}
+            </span>
+          )}
+          {parsed.notes && (
+            <span key="n" className={`${chip} pop-soft inline-block max-w-40 truncate bg-well text-ink-soft`}>
+              ✎ {parsed.notes}
             </span>
           )}
         </div>
