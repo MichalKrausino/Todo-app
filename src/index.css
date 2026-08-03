@@ -179,11 +179,12 @@ select {
   animation: pop-soft 0.32s var(--ease-spring) both;
 }
 
-/* přechod mezi záložkami — jemné vynoření nového pohledu */
+/* přechod mezi záložkami — směrový: nový pohled přijíždí ze strany,
+   kterou uživatel v tab baru zvolil (--vx nastavuje App) */
 @keyframes view-in {
   from {
     opacity: 0;
-    transform: translateY(10px) scale(0.992);
+    transform: translate(var(--vx, 0px), 6px) scale(0.995);
   }
   to {
     opacity: 1;
@@ -193,6 +194,21 @@ select {
 
 .view-enter {
   animation: view-in 0.32s var(--ease-glide) both;
+}
+
+/* iOS push-back: obsah pod otevřeným sheetem couvne do hloubky.
+   Sheet je v portálu mimo .app-shell, takže transform nevadí fixed
+   pozici panelu; :has sleduje přítomnost backdropu. */
+.app-shell {
+  overflow: hidden;
+  transition:
+    transform 0.45s var(--ease-ios),
+    border-radius 0.45s var(--ease-ios);
+}
+
+body:has(.sheet-backdrop:not(.closing)) .app-shell {
+  transform: scale(0.965) translateY(10px);
+  border-radius: 24px;
 }
 
 /* ikona v tab baru poskočí při vybrání */
@@ -294,6 +310,66 @@ select {
   animation: shimmer 1.2s var(--ease-glide) 0.3s both;
 }
 
+/* prstencový záblesk při odškrtnutí — rozpíná se z fajfky */
+@keyframes ring-burst {
+  from {
+    transform: scale(0.6);
+    opacity: 0.55;
+  }
+  to {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.ring-burst {
+  position: absolute;
+  inset: -2px;
+  border-radius: 9999px;
+  border: 2px solid var(--color-accent);
+  pointer-events: none;
+  animation: ring-burst 0.5s var(--ease-glide) both;
+}
+
+/* tichá oslava splněného dne — pár teček vyletí z progress baru */
+@keyframes confetti {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--cx, 0px), var(--cy, -24px)) scale(0.3);
+    opacity: 0;
+  }
+}
+
+.confetti {
+  position: absolute;
+  top: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  pointer-events: none;
+  animation: confetti 0.9s var(--ease-glide) both;
+  animation-delay: calc(var(--stagger, 0) * 40ms);
+}
+
+/* odchod toastu — sklouzne dolů a prolne se */
+@keyframes toast-down {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+}
+
+.toast-out {
+  animation: toast-down 0.28s var(--ease-ios) both;
+}
+
 /* sluníčko prázdného stavu pomalu dýchá */
 @keyframes breathe {
   0%,
@@ -384,6 +460,9 @@ select {
   .shimmer,
   .breathe,
   .bar-grow,
+  .ring-burst,
+  .confetti,
+  .toast-out,
   .sheet-backdrop,
   .sheet-panel,
   .sheet-backdrop.closing,

@@ -61,19 +61,21 @@ export function TaskRow({
   const prio = PRIO_BADGE[task.priority]
 
   return (
-    <li className="flex items-start gap-3 bg-card px-4 py-3 transition-colors duration-150 active:bg-well/60">
+    <li className="rise flex items-start gap-3 bg-card px-4 py-3 transition-colors duration-150 active:bg-well/60">
       <button
         aria-label={visualDone ? 'Vrátit mezi nehotové' : 'Označit jako hotové'}
         onClick={handleToggle}
         className="-m-2 shrink-0 p-2 transition-transform duration-150 active:scale-90"
       >
         <span
-          className={`flex h-[22px] w-[22px] items-center justify-center rounded-full border-[1.5px] transition-colors duration-200 ${
+          className={`relative flex h-[22px] w-[22px] items-center justify-center rounded-full border-[1.5px] transition-colors duration-200 ${
             visualDone
               ? 'check-drawn pop border-accent bg-accent text-card'
               : 'border-ink-faint text-transparent'
           }`}
         >
+          {/* záblesk prstence při dokončení (nový element na každé odškrtnutí) */}
+          {visualDone && <span key="burst" className="ring-burst" />}
           <svg viewBox="0 0 20 20" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
             <path className="check-path" d="M4.5 10.5l3.8 3.8 7.2-8.6" />
           </svg>

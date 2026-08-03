@@ -33,6 +33,17 @@ const effectiveDate = (t: Task): string | undefined => {
 // Kaskáda nástupu sekcí (proměnnou čte animace .rise v index.css).
 const stagger = (i: number) => ({ '--stagger': i }) as React.CSSProperties
 
+// Pevně rozmístěné tečky oslavy splněného dne (žádná runtime náhoda —
+// deterministické, jen se přehrají při přepnutí allDone).
+const CONFETTI = [
+  { left: '12%', cx: '-14px', cy: '-30px', color: 'var(--color-accent)' },
+  { left: '28%', cx: '10px', cy: '-38px', color: 'var(--color-moss)' },
+  { left: '44%', cx: '-8px', cy: '-26px', color: 'var(--color-note-ink)' },
+  { left: '58%', cx: '14px', cy: '-34px', color: 'var(--color-accent)' },
+  { left: '72%', cx: '-12px', cy: '-40px', color: 'var(--color-moss)' },
+  { left: '86%', cx: '8px', cy: '-28px', color: 'var(--color-accent-deep)' },
+]
+
 export function TodayView({
   onOpenTask,
   onOpenClient,
@@ -149,7 +160,16 @@ export function TodayView({
         <h1 className="display text-[2.1rem] font-semibold leading-tight">Dnes</h1>
         <p className="text-sm text-ink-soft first-letter:uppercase">{formatFullDate(new Date())}</p>
         {planned > 0 && (
-          <div className="mt-3 flex items-center gap-2.5">
+          <div className="relative mt-3 flex items-center gap-2.5">
+            {/* tichá oslava: pár teček vyletí, když je den splněný */}
+            {allDone &&
+              CONFETTI.map((c, i) => (
+                <span
+                  key={i}
+                  className="confetti"
+                  style={{ left: c.left, background: c.color, '--cx': c.cx, '--cy': c.cy, '--stagger': i } as React.CSSProperties}
+                />
+              ))}
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-well">
               <div
                 className={`relative h-full overflow-hidden rounded-full transition-[width,background-color] duration-700 ease-glide ${

@@ -47,6 +47,7 @@ export function QuickAdd({
   const [lastAdded, setLastAdded] = useState<{ id: string; title: string; dueDate?: string } | null>(
     null,
   )
+  const [toastLeaving, setToastLeaving] = useState(false)
   const undoTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const clients = useLiveQuery(activeClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []
@@ -153,9 +154,14 @@ export function QuickAdd({
     setOverrides({})
     setPicker(null)
     setAddedCount((n) => n + 1)
+    setToastLeaving(false)
     setLastAdded({ id: task.id, title: task.title, dueDate: task.scheduledFor ?? task.dueDate })
     clearTimeout(undoTimer.current)
-    undoTimer.current = setTimeout(() => setLastAdded(null), 6000)
+    // toast odejde animovaně: nejdřív třída .toast-out, pak odmontování
+    undoTimer.current = setTimeout(() => {
+      setToastLeaving(true)
+      undoTimer.current = setTimeout(() => setLastAdded(null), 300)
+    }, 5700)
   }
 
   const undo = async () => {
@@ -175,7 +181,7 @@ export function QuickAdd({
     <div className="relative px-3 pt-2.5">
       {lastAdded && (
         <div className="pointer-events-none absolute inset-x-0 -top-12 z-30 flex justify-center">
-          <div className="pop pointer-events-auto flex items-center gap-2 rounded-full bg-ink/90 py-1.5 pl-4 pr-1.5 shadow-float backdrop-blur">
+          <div className={`${toastLeaving ? 'toast-out' : 'pop'} pointer-events-auto flex items-center gap-2 rounded-full bg-ink/90 py-1.5 pl-4 pr-1.5 shadow-float backdrop-blur`}>
             <span className="max-w-48 truncate text-[13px] text-paper">
               {lastAdded.dueDate
                 ? `${formatDayLabel(lastAdded.dueDate)} — „${lastAdded.title}“`

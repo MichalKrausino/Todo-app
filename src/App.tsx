@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Task } from './db/types'
 import { QuickAdd } from './components/QuickAdd'
 import { SyncButton, SyncSheet } from './components/SyncSheet'
@@ -56,6 +56,13 @@ export default function App() {
     setTab('clients')
   }
 
+  // Směr přechodu záložek: nový pohled přijíždí ze strany, kam se jde.
+  const prevTab = useRef<Tab>(tab)
+  const dir = TABS.findIndex((t) => t.id === tab) - TABS.findIndex((t) => t.id === prevTab.current)
+  useEffect(() => {
+    prevTab.current = tab
+  }, [tab])
+
   // Deep-link z nedělní push notifikace (#review): přepnout na Dnes,
   // samotné ohlédnutí si otevře TodayView (a hash uklidí).
   useEffect(() => {
@@ -68,7 +75,7 @@ export default function App() {
   }, [])
 
   return (
-    <div className="relative mx-auto flex h-dvh max-w-lg flex-col bg-paper text-ink antialiased">
+    <div className="app-shell relative mx-auto flex h-dvh max-w-lg flex-col bg-paper text-ink antialiased">
       <div
         className="absolute right-4 z-40"
         style={{ top: 'calc(0.85rem + env(safe-area-inset-top))' }}
@@ -80,8 +87,12 @@ export default function App() {
         className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6"
         style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top))' }}
       >
-        {/* key vynutí novou instanci pohledu → nástupní animace při přepnutí */}
-        <div key={tab} className="view-enter">
+        {/* key vynutí novou instanci pohledu → směrová nástupní animace */}
+        <div
+          key={tab}
+          className="view-enter"
+          style={{ '--vx': dir === 0 ? '0px' : dir > 0 ? '16px' : '-16px' } as React.CSSProperties}
+        >
           {tab === 'today' && (
             <TodayView
               onOpenTask={setEditing}
