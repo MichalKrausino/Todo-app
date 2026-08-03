@@ -414,6 +414,31 @@ export function TodayView({
         </section>
       )}
 
+      {/* Tichý odkaz na inbox — úkoly bez termínu nejsou na Dnes vidět
+          a bez téhle stopy vypadají jako ztracené. */}
+      {(() => {
+        const inboxCount = open.filter((t) => !effectiveDate(t)).length
+        if (inboxCount === 0) return null
+        return (
+          <button
+            onClick={onOpenInbox}
+            className="rise flex w-full items-center gap-2 px-1 py-1 text-left text-sm text-ink-soft transition-transform duration-150 active:scale-[0.99]"
+            style={stagger(8)}
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 13.5l2.5-7A2 2 0 018.4 5h7.2a2 2 0 011.9 1.5l2.5 7V17a2 2 0 01-2 2H6a2 2 0 01-2-2zM4 13.5h4.5a3.5 3.5 0 007 0H20" />
+            </svg>
+            <span className="min-w-0 flex-1">
+              V inboxu {inboxCount === 1 ? 'čeká 1 úkol' : inboxCount < 5 ? `čekají ${inboxCount} úkoly` : `čeká ${inboxCount} úkolů`}{' '}
+              bez termínu
+            </span>
+            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint/70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </button>
+        )
+      })()}
+
       {reviewOpen && <WeeklyReviewSheet onClose={() => setReviewOpen(false)} />}
       {shutdownOpen && (
         <ShutdownSheet
