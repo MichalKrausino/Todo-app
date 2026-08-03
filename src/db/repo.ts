@@ -287,6 +287,9 @@ export const clientOpenTasks = (clientId: string) =>
 
 // ---------- Kalendář — čtení lokální cache (Fáze 3) ----------
 
+// Má cache kalendáře vůbec nějaká data? (0 = kalendář ještě nepropojen)
+export const calendarCacheCount = () => db.calendarEvents.count()
+
 export const calendarEventsOn = (day: string) =>
   db.calendarEvents
     .filter((e) => e.startDay <= day && day <= e.endDay)

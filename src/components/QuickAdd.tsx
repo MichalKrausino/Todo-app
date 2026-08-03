@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { CalendarEvent, Priority, Task } from '../db/types'
-import { activeClients, addTask, allProjects, calendarEventsOn, openTasks, removeTask } from '../db/repo'
+import { activeClients, addTask, allProjects, calendarCacheCount, calendarEventsOn, openTasks, removeTask } from '../db/repo'
 import { formatDayLabel, fromISODate, addDays, nextMonday, toISODate, todayISO } from '../lib/dates'
 import { freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { PRIORITY_LABELS } from '../lib/labels'
@@ -10,6 +10,8 @@ import { humanizeRule } from '../lib/rrule'
 
 const plural = (n: number, one: string, few: string, many: string) =>
   n === 1 ? one : n < 5 ? few : many
+
+const timeFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
 
 // Rozepsaný @klient / #projekt na konci textu → našeptávač nad polem.
 const RE_MENTION = /(^|\s)([@#])(\S*)$/
@@ -114,12 +116,14 @@ export function QuickAdd({
       () => (previewDay ? openTasks() : Promise.resolve<Task[]>([])),
       [previewDay],
     ) ?? []
+  // úkoly dne = termín NEBO plán na ten den (ne jen „nejbližší den")
   const previewTasks = previewDay
-    ? previewOpen.filter((t) => {
-        const d = [t.scheduledFor, t.dueDate].filter(Boolean).sort()[0]
-        return d === previewDay
-      })
+    ? previewOpen.filter((t) => t.dueDate === previewDay || t.scheduledFor === previewDay)
     : []
+  // agenda seřazená jak den poběží: celodenní → schůzky podle času
+  const previewAgenda = [...previewEvents].sort((a, b) =>
+    a.allDay === b.allDay ? a.start.localeCompare(b.start) : a.allDay ? -1 : 1,
+  )
   const previewBusy: BusyInterval[] = previewEvents
     .filter((e) => !e.allDay)
     .map((e) => {
@@ -131,6 +135,8 @@ export function QuickAdd({
   const beyondCalendarWindow = Boolean(
     previewDay && previewDay > toISODate(addDays(fromISODate(todayISO()), 14)),
   )
+  // prázdná cache = kalendář ještě není propojený — říct to na rovinu
+  const calendarConnected = (useLiveQuery(calendarCacheCount, []) ?? 0) > 0
 
   const setOv = (patch: Overrides) => {
     setOverrides((o) => ({ ...o, ...patch }))
@@ -300,9 +306,10 @@ export function QuickAdd({
             <button type="button" onPointerDown={keepFocus} onClick={() => setOverrides((o) => ({ ...o, dueDate: toISODate(nextMonday(fromISODate(today))) }))} className={`${pill} bg-accent-wash text-accent-deep`}>
               Příští týden
             </button>
-            {/* iOS posílá change průběžně už během výběru — řádek se proto
-                NESMÍ hned zavřít (zavřel by i systémový kalendář navázaný
-                na tenhle input). Zavírá se až po dokončení výběru (blur). */}
+            {/* iOS posílá change průběžně a systémový kalendář překrývá
+                obrazovku — řádek se proto během výběru NEZAVÍRÁ vůbec:
+                po dokončení zůstane otevřený s agendou vybraného dne.
+                Zavře se tlačítkem Termín, přepnutím výběru nebo přidáním. */}
             <input
               type="date"
               aria-label="Vybrat datum"
@@ -310,7 +317,6 @@ export function QuickAdd({
               onChange={(e) =>
                 e.target.value && setOverrides((o) => ({ ...o, dueDate: e.target.value }))
               }
-              onBlur={() => setPicker(null)}
               className="h-8 shrink-0 rounded-full border border-line bg-card px-2.5 text-[13px] text-ink outline-none"
             />
             {(effDueDate || impliedToday) && (
@@ -320,40 +326,70 @@ export function QuickAdd({
             )}
           </div>
 
-          {/* co už v ten den mám: schůzky z Google kalendáře + úkoly + volno */}
+          {/* mini agenda vybraného dne: schůzky z kalendáře + úkoly + volno */}
           {previewDay && (
-            <div className="rise mb-2 rounded-xl bg-well/60 px-3 py-2.5 text-[13px]">
-              <div className="font-medium text-ink first-letter:uppercase">
-                {formatDayLabel(previewDay)}
-                {' · '}
-                {previewEvents.length > 0
-                  ? `${previewEvents.length} ${plural(previewEvents.length, 'schůzka', 'schůzky', 'schůzek')}`
-                  : beyondCalendarWindow
-                    ? 'kalendář dohlédne jen 14 dní'
-                    : 'bez schůzek'}
-                {' · '}
-                {previewTasks.length > 0
-                  ? `${previewTasks.length} ${plural(previewTasks.length, 'úkol', 'úkoly', 'úkolů')}`
-                  : 'zatím bez úkolů'}
-                {previewEvents.length > 0 && ` · volno ~${minutesToLabel(freeMinutes(previewBusy))}`}
+            <div className="rise mb-2 overflow-hidden rounded-xl bg-card shadow-card">
+              <div className="flex items-baseline justify-between gap-2 border-b border-line px-3 py-2">
+                <span className="text-[13px] font-semibold text-ink first-letter:uppercase">
+                  {formatDayLabel(previewDay)}
+                </span>
+                <span className="text-[12px] text-ink-soft">
+                  {previewEvents.length > 0 &&
+                    `${previewEvents.length} ${plural(previewEvents.length, 'schůzka', 'schůzky', 'schůzek')} · `}
+                  {previewTasks.length > 0
+                    ? `${previewTasks.length} ${plural(previewTasks.length, 'úkol', 'úkoly', 'úkolů')}`
+                    : 'bez úkolů'}
+                  {previewEvents.length > 0 &&
+                    ` · volno ~${minutesToLabel(freeMinutes(previewBusy))}`}
+                </span>
               </div>
-              {previewEvents.slice(0, 3).map((e) => (
-                <div key={e.id} className="mt-1 flex gap-2 text-ink-soft">
-                  <span className="w-24 shrink-0 whitespace-nowrap tabular-nums">
-                    {e.allDay
-                      ? 'celý den'
-                      : `${new Date(e.start).getHours()}:${String(new Date(e.start).getMinutes()).padStart(2, '0')}–${new Date(e.end).getHours()}:${String(new Date(e.end).getMinutes()).padStart(2, '0')}`}
+
+              {previewAgenda.slice(0, 4).map((e) => (
+                <div key={e.id} className="flex items-center gap-2 px-3 py-1.5 text-[13px]">
+                  <span className="w-[5.5rem] shrink-0 whitespace-nowrap tabular-nums text-ink-soft">
+                    {e.allDay ? 'celý den' : `${timeFmt.format(new Date(e.start))}–${timeFmt.format(new Date(e.end))}`}
                   </span>
-                  <span className="min-w-0 flex-1 truncate">{e.title}</span>
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent/60" />
+                  <span className="min-w-0 flex-1 truncate text-ink">{e.title}</span>
                 </div>
               ))}
-              {previewEvents.length > 3 && (
-                <div className="mt-1 text-ink-faint">…a {previewEvents.length - 3} dalších</div>
+              {previewAgenda.length > 4 && (
+                <div className="px-3 pb-1 text-[12px] text-ink-faint">
+                  …a {previewAgenda.length - 4} {plural(previewAgenda.length - 4, 'další schůzka', 'další schůzky', 'dalších schůzek')}
+                </div>
               )}
-              {previewTasks.length > 0 && (
-                <div className="mt-1 truncate text-ink-faint">
-                  Úkoly: {previewTasks.slice(0, 3).map((t) => t.title).join(' · ')}
-                  {previewTasks.length > 3 && ` …+${previewTasks.length - 3}`}
+
+              {previewTasks.slice(0, 3).map((t) => (
+                <div key={t.id} className="flex items-center gap-2 px-3 py-1.5 text-[13px]">
+                  <span className="w-[5.5rem] shrink-0 text-ink-faint">úkol</span>
+                  <span
+                    className="h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{
+                      background: t.clientId
+                        ? clients.find((c) => c.id === t.clientId)?.color ?? 'var(--color-ink-faint)'
+                        : 'var(--color-ink-faint)',
+                    }}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-ink">{t.title}</span>
+                </div>
+              ))}
+              {previewTasks.length > 3 && (
+                <div className="px-3 pb-1 text-[12px] text-ink-faint">
+                  …a {previewTasks.length - 3} {plural(previewTasks.length - 3, 'další úkol', 'další úkoly', 'dalších úkolů')}
+                </div>
+              )}
+
+              {previewAgenda.length === 0 && previewTasks.length === 0 && (
+                <div className="px-3 py-2 text-[13px] text-ink-soft">Den je zatím volný.</div>
+              )}
+              {!calendarConnected && (
+                <div className="border-t border-line px-3 py-1.5 text-[11px] text-ink-faint">
+                  Schůzky se ukážou po propojení Google kalendáře (Synchronizace).
+                </div>
+              )}
+              {calendarConnected && beyondCalendarWindow && (
+                <div className="border-t border-line px-3 py-1.5 text-[11px] text-ink-faint">
+                  Kalendář dohlédne jen 14 dní dopředu — úkoly platí, schůzky nemusí být vidět.
                 </div>
               )}
             </div>
