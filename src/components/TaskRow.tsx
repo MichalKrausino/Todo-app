@@ -40,6 +40,7 @@ export function TaskRow({
   onToggle,
   onOpen,
   showDate = true,
+  showPin = true,
 }: {
   task: Task
   client?: Client
@@ -47,6 +48,7 @@ export function TaskRow({
   onToggle: (task: Task) => void
   onOpen: (task: Task) => void
   showDate?: boolean
+  showPin?: boolean
 }) {
   const done = task.status === 'done'
   const [pendingDone, setPendingDone] = useState(false)
@@ -245,6 +247,14 @@ export function TaskRow({
               visualDone ? 'is-done text-ink-faint' : 'text-ink'
             }`}
           >
+            {/* špendlík „Top 3 dne" — jen mimo sekci Na čem záleží,
+                tam by se opakoval u každého řádku */}
+            {task.pinnedFor === todayISO() && !visualDone && showPin && (
+              <svg viewBox="0 0 24 24" className="mr-1 inline-block h-3.5 w-3.5 -translate-y-px text-accent" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 3.5h6l-.8 5.2 3.3 3.1H6.5l3.3-3.1z" />
+                <path d="M12 11.8V20.5" />
+              </svg>
+            )}
             {task.title}
           </div>
           {(client || project || (showDate && task.dueDate) || task.dueTime || subs.length > 0 || prio || task.recurrenceRule || task.sourceTemplateItemId) && (

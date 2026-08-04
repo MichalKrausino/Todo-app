@@ -61,6 +61,9 @@ export interface Task extends BaseRecord {
   sourceTemplateItemId?: string
   completedAt?: string
   postponeCount?: number // kolikrát byl termín posunut na později (signál odkládání)
+  // „Top 3 dne" — YYYY-MM-DD, na který den je úkol připíchnutý. Váže se
+  // ke dni (ne bool), takže špendlík zítra sám vyprchá a neuklízí se ručně.
+  pinnedFor?: string
   subtasks?: Subtask[] // checklist — po respawnu opakování se nuluje na nehotové
   isClientCheck?: boolean // pravidelná připomínka „zkontrolovat klienta" (marker přežívá respawn)
   order: number

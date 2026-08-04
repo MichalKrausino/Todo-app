@@ -179,6 +179,27 @@ export async function updateTask(id: string, patch: Partial<Task>): Promise<void
   emitRepoWrite()
 }
 
+// „Top 3 dne" — kolik úkolů smí být připíchnutých najednou. Tři je
+// záměrné: víc priorit než tři už není priorita.
+export const MAX_PINNED = 3
+
+// Připnutí/odepnutí na daný den. Vrací false, když je plno — UI to řekne
+// nahlas místo tichého ignorování.
+export async function togglePinned(id: string, day: string): Promise<boolean> {
+  const task = await db.tasks.get(id)
+  if (!task) return false
+  if (task.pinnedFor === day) {
+    await updateTask(id, { pinnedFor: undefined })
+    return true
+  }
+  const pinned = await db.tasks
+    .filter((t) => !t.deletedAt && t.pinnedFor === day && t.status !== 'done')
+    .count()
+  if (pinned >= MAX_PINNED) return false
+  await updateTask(id, { pinnedFor: day })
+  return true
+}
+
 export async function completeTask(id: string): Promise<void> {
   const t = now()
   await db.tasks.update(id, { status: 'done', completedAt: t, updatedAt: t })
@@ -217,6 +238,7 @@ async function respawnRecurring(task: Task | undefined, t: string): Promise<void
     calendarEventId: undefined,
     postponeCount: undefined, // nový výskyt začíná s čistým štítem
     subtasks: task.subtasks?.map((s) => ({ ...s, done: false })), // checklist znovu od nuly
+    pinnedFor: undefined, // špendlík patřil dnešku, ne dalšímu výskytu
   }
   await db.tasks.add(successor)
 }

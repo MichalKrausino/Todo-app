@@ -128,8 +128,12 @@ export function TodayView({
     ).values(),
   ]
   const byBatch = (t: Task) => !batchClient || t.clientId === batchClient
-  const visOverdue = overdue.filter(byBatch)
-  const visTodays = todays.filter(byBatch)
+  // „Top 3 dne" — připíchnuté úkoly stojí nahoře ve vlastní sekci a
+  // z ostatních seznamů zmizí, ať se nezdvojují.
+  const isPinned = (t: Task) => t.pinnedFor === today
+  const pinned = sortTasks(unfinished.filter(isPinned)).filter(byBatch)
+  const visOverdue = overdue.filter((t) => !isPinned(t)).filter(byBatch)
+  const visTodays = todays.filter((t) => !isPinned(t)).filter(byBatch)
 
   const isEvening = new Date().getHours() >= 16
   const closeDay = () => {
@@ -142,7 +146,8 @@ export function TodayView({
   }
 
   // V sekci „dnes" je štítek data redundantní — skrývá se (showDate).
-  const row = (t: Task, showDate = true) => (
+  // V sekci „na čem záleží" je zase redundantní špendlík (showPin).
+  const row = (t: Task, showDate = true, showPin = true) => (
     <TaskRow
       key={t.id}
       task={t}
@@ -151,6 +156,7 @@ export function TodayView({
       onToggle={toggle}
       onOpen={onOpenTask}
       showDate={showDate}
+      showPin={showPin}
     />
   )
 
@@ -400,6 +406,20 @@ export function TodayView({
         </div>
       )}
 
+      {/* Top 3 dne — co musí padnout, ať se stane cokoli. Stojí nahoře,
+          zvýrazněné rámečkem, ostatní sekce tyhle úkoly už neopakují. */}
+      {pinned.length > 0 && (
+        <section className="rise" style={stagger(4)}>
+          <h2 className="section-label mb-2 !text-accent-deep">
+            na čem záleží · {pinned.length}
+          </h2>
+          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card ring-1 ring-accent/35">
+            {/* datum jen u toho, co není z dneška (propadlé úkoly) */}
+            {pinned.map((t) => row(t, effectiveDate(t) !== today, false))}
+          </ul>
+        </section>
+      )}
+
       {visOverdue.length > 0 && (
         <section className="rise" style={stagger(5)}>
           <h2 className="section-label mb-2 !text-danger">po termínu · {visOverdue.length}</h2>
@@ -414,13 +434,15 @@ export function TodayView({
             {visTodays.map((t) => row(t, false))}
           </ul>
         ) : batchClient ? (
-          visOverdue.length === 0 && (
+          visOverdue.length === 0 &&
+          pinned.length === 0 && (
             <p className="rounded-2xl bg-card px-4 py-4 text-center text-sm text-ink-soft shadow-card">
               U tohohle klienta dnes nic nezbývá.
             </p>
           )
         ) : (
-          overdue.length === 0 && (
+          overdue.length === 0 &&
+          pinned.length === 0 && (
             <div className="rounded-2xl bg-card px-6 py-10 text-center shadow-card">
               <svg viewBox="0 0 48 48" className="breathe mx-auto h-12 w-12 text-accent/70" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="24" cy="24" r="15" />

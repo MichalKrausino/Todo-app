@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Priority, Project, Subtask, Task } from '../db/types'
-import { activeClients, clientProjects, removeTask, updateTask } from '../db/repo'
+import { MAX_PINNED, activeClients, clientProjects, removeTask, togglePinned, updateTask } from '../db/repo'
 import { Sheet } from './Sheet'
 import { deleteBlockForTask } from '../sync/calendar'
 import { todayISO } from '../lib/dates'
@@ -34,6 +34,21 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   // Dexie update mění jen zaslaná pole.
   const [subtasks, setSubtasks] = useState<Subtask[]>(task.subtasks ?? [])
   const [newSub, setNewSub] = useState('')
+  // Špendlík „Top 3 dne" se ukládá hned (jako checklist) — je to
+  // rozhodnutí o dnešku, ne editace, kterou by šlo zahodit přes Zrušit.
+  const [pinnedFor, setPinnedFor] = useState(task.pinnedFor)
+  const [pinFull, setPinFull] = useState(false)
+
+  const pinToday = async () => {
+    const day = todayISO()
+    const okPin = await togglePinned(task.id, day)
+    if (!okPin) {
+      setPinFull(true)
+      setTimeout(() => setPinFull(false), 2600)
+      return
+    }
+    setPinnedFor(pinnedFor === day ? undefined : day)
+  }
 
   const persistSubtasks = (list: Subtask[]) => {
     setSubtasks(list)
@@ -92,9 +107,28 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
     <Sheet onClose={onClose} className="space-y-3">
       {(close) => (
         <>
-        <header>
+        <header className="flex items-start justify-between gap-3">
           <h2 className="text-lg font-bold">Upravit úkol</h2>
+          <button
+            type="button"
+            aria-label={pinnedFor === todayISO() ? 'Odepnout z Top 3 dne' : 'Připnout mezi Top 3 dne'}
+            onClick={() => void pinToday()}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-[background-color,color,transform] duration-150 active:scale-95 ${
+              pinnedFor === todayISO() ? 'bg-accent text-card' : 'bg-well text-ink-soft'
+            }`}
+          >
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 3.5h6l-.8 5.2 3.3 3.1H6.5l3.3-3.1z" />
+              <path d="M12 11.8V20.5" />
+            </svg>
+            {pinnedFor === todayISO() ? 'Top 3 dne' : 'Připnout'}
+          </button>
         </header>
+        {pinFull && (
+          <p className="pop rounded-lg bg-note px-3 py-2 text-[13px] text-note-ink">
+            Top {MAX_PINNED} je plná — nejdřív něco odepni. Míň priorit, víc hotovo.
+          </p>
+        )}
         <div>
           <label className={label}>Úkol</label>
           <input className={field} value={title} onChange={(e) => setTitle(e.target.value)} />

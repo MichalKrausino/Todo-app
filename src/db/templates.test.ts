@@ -148,6 +148,39 @@ describe('počítání odkladů (updateTask)', () => {
     expect(successor?.postponeCount).toBeUndefined()
   })
 
+  it('Top 3 dne: připne nejvýš tři úkoly, čtvrtý odmítne', async () => {
+    const { addTask, togglePinned } = await import('./repo')
+    const day = '2026-08-03'
+    const ids: string[] = []
+    for (const title of ['a', 'b', 'c', 'd']) {
+      ids.push((await addTask({ title, dueDate: day })).id)
+    }
+
+    expect(await togglePinned(ids[0], day)).toBe(true)
+    expect(await togglePinned(ids[1], day)).toBe(true)
+    expect(await togglePinned(ids[2], day)).toBe(true)
+    expect(await togglePinned(ids[3], day)).toBe(false) // plno
+
+    // odepnutí uvolní místo
+    expect(await togglePinned(ids[0], day)).toBe(true)
+    expect((await db.tasks.get(ids[0]))?.pinnedFor).toBeUndefined()
+    expect(await togglePinned(ids[3], day)).toBe(true)
+    expect((await db.tasks.get(ids[3]))?.pinnedFor).toBe(day)
+  })
+
+  it('Top 3 dne: špendlík platí jen pro svůj den', async () => {
+    const { addTask, togglePinned } = await import('./repo')
+    const t = await addTask({ title: 'včerejší špendlík', dueDate: '2026-08-02' })
+    await togglePinned(t.id, '2026-08-02')
+
+    // jiný den má vlastní kapacitu — starý špendlík ji neblokuje
+    const others = []
+    for (const title of ['x', 'y', 'z']) {
+      others.push((await addTask({ title, dueDate: '2026-08-03' })).id)
+    }
+    for (const id of others) expect(await togglePinned(id, '2026-08-03')).toBe(true)
+  })
+
   it('respawn nuluje checklist podúkolů na nehotové', async () => {
     const { addTask } = await import('./repo')
     const t = await addTask({ title: 'Publikace', dueDate: '2026-07-31' })
@@ -165,6 +198,19 @@ describe('počítání odkladů (updateTask)', () => {
       .first()
     expect(successor?.subtasks?.length).toBe(2)
     expect(successor?.subtasks?.every((s) => !s.done)).toBe(true)
+  })
+
+  it('respawn nedědí špendlík Top 3 dne', async () => {
+    const { addTask, togglePinned } = await import('./repo')
+    const t = await addTask({ title: 'Denní kontrola', dueDate: '2026-07-31' })
+    await db.tasks.update(t.id, { recurrenceRule: 'FREQ=DAILY' })
+    await togglePinned(t.id, '2026-07-31')
+    await completeTask(t.id)
+
+    const successor = await db.tasks
+      .filter((x) => !x.deletedAt && x.status === 'active')
+      .first()
+    expect(successor?.pinnedFor).toBeUndefined()
   })
 })
 
