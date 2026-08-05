@@ -62,6 +62,24 @@ export function freeMinutes(
   return Math.max(0, free)
 }
 
+// Volná okna v pracovní době — doplněk k obsazeným intervalům.
+// Používá je časová osa na Dnes („volno 2 h" mezi schůzkami).
+export function freeGaps(
+  busy: BusyInterval[],
+  dayStart = WORK_START,
+  dayEnd = WORK_END,
+): BusyInterval[] {
+  const gaps: BusyInterval[] = []
+  let cursor = dayStart
+  for (const b of mergeBusy(busy)) {
+    if (b.endMin <= dayStart || b.startMin >= dayEnd) continue
+    if (b.startMin > cursor) gaps.push({ startMin: cursor, endMin: Math.min(b.startMin, dayEnd) })
+    cursor = Math.max(cursor, b.endMin)
+  }
+  if (cursor < dayEnd) gaps.push({ startMin: cursor, endMin: dayEnd })
+  return gaps.filter((g) => g.endMin > g.startMin)
+}
+
 export const minutesToLabel = (min: number): string => {
   const h = Math.floor(min / 60)
   const m = min % 60

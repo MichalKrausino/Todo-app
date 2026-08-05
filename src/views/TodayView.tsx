@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Task } from '../db/types'
 import {
@@ -17,7 +17,7 @@ import {
 import { scheduleBlockForTask } from '../sync/calendar'
 import { isOverloaded, plannedMinutes } from '../lib/capacity'
 import { formatFullDate, fromISODate, todayISO } from '../lib/dates'
-import { freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
+import { WORK_END, WORK_START, freeGaps, freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { computeSignals } from '../lib/signals'
 import { ShutdownSheet } from '../components/ShutdownSheet'
 import { SignalsBlock } from '../components/SignalsBlock'
@@ -32,6 +32,34 @@ const effectiveDate = (t: Task): string | undefined => {
 
 // Kaskáda nástupu sekcí (proměnnou čte animace .rise v index.css).
 const stagger = (i: number) => ({ '--stagger': i }) as React.CSSProperties
+
+const minutesOfDay = (iso: string) => {
+  const d = new Date(iso)
+  return d.getHours() * 60 + d.getMinutes()
+}
+
+// „za 25 min" / „za 1 h 20" — odpočet do nejbližší schůzky.
+const untilLabel = (min: number): string => {
+  if (min < 60) return `za ${min} min`
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m === 0 ? `za ${h} h` : `za ${h} h ${m} min`
+}
+
+// Kolikátý den vícedenní události dnes je („2. den ze 4").
+const dayIndex = (startDay: string, endDay: string, today: string) => {
+  const day = 86_400_000
+  const from = fromISODate(startDay).getTime()
+  const to = fromISODate(endDay).getTime()
+  const now = fromISODate(today).getTime()
+  const total = Math.round((to - from) / day) + 1
+  return { index: Math.round((now - from) / day) + 1, total }
+}
+
+// Kolik schůzek se ukáže, než se seznam sbalí.
+const EVENTS_PREVIEW = 4
+// Kratší okno než půl hodiny nemá cenu nabízet jako volný slot.
+const MIN_GAP_MIN = 30
 
 // Pevně rozmístěné tečky oslavy splněného dne (žádná runtime náhoda —
 // deterministické, jen se přehrají při přepnutí allDone).
@@ -70,6 +98,26 @@ export function TodayView({
   const [dayClosed, setDayClosed] = useState(
     () => localStorage.getItem('todo.dayClosed') === todayISO(),
   )
+  // Rozbalený seznam schůzek (jinak se ukáže jen prvních pár).
+  const [allEvents, setAllEvents] = useState(false)
+  // Živý čas — časová osa dne musí stárnout sama od sebe. Minutová
+  // kadence stačí; při návratu do popředí se dorovná okamžitě.
+  const [nowMin, setNowMin] = useState(() => {
+    const d = new Date()
+    return d.getHours() * 60 + d.getMinutes()
+  })
+  useEffect(() => {
+    const tick = () => {
+      const d = new Date()
+      setNowMin(d.getHours() * 60 + d.getMinutes())
+    }
+    const id = setInterval(tick, 60_000)
+    document.addEventListener('visibilitychange', tick)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', tick)
+    }
+  }, [])
 
   // Nedělní push (#review) vede rovnou do týdenního ohlédnutí.
   useEffect(() => {
@@ -115,7 +163,10 @@ export function TodayView({
       const en = new Date(e.end)
       return { startMin: s.getHours() * 60 + s.getMinutes(), endMin: en.getHours() * 60 + en.getMinutes() }
     })
-  const freeMin = events.length > 0 ? freeMinutes(busy) : null
+  // Volno se počítá od TEĎ do konce pracovní doby — ve dvě odpoledne
+  // nemá smysl hlásit celodenních osm hodin. Po pracovní době je nula.
+  const restStart = Math.min(Math.max(nowMin, WORK_START), WORK_END)
+  const freeMin = events.length > 0 ? freeMinutes(busy, restStart) : null
   const workMin = plannedMinutes(unfinished)
   const overloaded = unfinished.length > 0 && isOverloaded(workMin, freeMin)
 
@@ -276,43 +327,165 @@ export function TodayView({
       {(() => {
         if (events.length === 0) return null
         const timeFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
+
+        // Úkol stojící za blokem z appky — ať se na blok dá ťuknout.
+        const taskByEvent = new Map(
+          [...open, ...done]
+            .filter((t) => t.calendarEventId)
+            .map((t) => [t.calendarEventId!, t]),
+        )
+
+        // Volná okna zbývající do konce pracovní doby. Ta, co už uplynula,
+        // by jen zabírala místo — proto se počítají od teď.
+        const gaps = freeGaps(busy, restStart).filter(
+          (g) => g.endMin - g.startMin >= MIN_GAP_MIN && g.endMin > nowMin,
+        )
+
+        // Nejbližší budoucí schůzka — jen u ní se ukáže odpočet.
+        const nextStart = events
+          .filter((e) => !e.allDay)
+          .map((e) => minutesOfDay(e.start))
+          .filter((m) => m > nowMin)
+          .sort((a, b) => a - b)[0]
+
+        const shown = allEvents ? events : events.slice(0, EVENTS_PREVIEW)
+        const hidden = events.length - shown.length
+
         return (
           <section className="rise" style={stagger(2)}>
             <h2 className="section-label mb-2">
-              kalendář · volno ~{minutesToLabel(freeMin ?? 0)}
+              {/* po pracovní době už „volno" nedává smysl */}
+              kalendář{freeMin !== null && restStart < WORK_END && ` · zbývá ~${minutesToLabel(freeMin)}`}
             </h2>
             <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
-              {events.map((e) => (
-                <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <span className="w-24 shrink-0 text-[13px] tabular-nums text-ink-soft">
-                    {e.allDay
-                      ? 'celý den'
-                      : `${timeFmt.format(new Date(e.start))}–${timeFmt.format(new Date(e.end))}`}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[15px]">{e.title}</span>
-                  {/* follow-up jen u schůzky s časem — celodenní událost
-                      (dovolená, svátek) není jednání k dotažení */}
-                  {e.isTodoBlock ? (
-                    <span className="h-2 w-2 shrink-0 rounded-full bg-accent" title="Blok z appky" />
-                  ) : e.allDay ? null : followedUp.has(e.id) ? (
-                    <span className="pop shrink-0 text-[12px] font-medium text-moss">✓ úkol</span>
-                  ) : (
-                    <button
-                      aria-label={`Vytvořit follow-up ke schůzce ${e.title}`}
-                      title="Follow-up úkol ze schůzky"
-                      onClick={() => {
-                        void addMeetingFollowUp(e)
-                        setFollowedUp((s) => new Set(s).add(e.id))
-                      }}
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-well text-ink-soft transition-transform duration-150 active:scale-90"
+              {shown.map((e) => {
+                const startMin = e.allDay ? 0 : minutesOfDay(e.start)
+                const endMin = e.allDay ? 24 * 60 : minutesOfDay(e.end)
+                const past = !e.allDay && endMin <= nowMin
+                const running = !e.allDay && startMin <= nowMin && nowMin < endMin
+                const isNext = !e.allDay && startMin === nextStart
+                const task = e.isTodoBlock ? taskByEvent.get(e.eventId) : undefined
+                const span = e.startDay !== e.endDay ? dayIndex(e.startDay, e.endDay, today) : null
+                // volné okno, které končí přesně tam, kde schůzka začíná
+                const gapBefore = e.allDay ? undefined : gaps.find((g) => g.endMin === startMin)
+
+                return (
+                  <Fragment key={e.id}>
+                    {gapBefore && (
+                      <li className="flex items-center gap-3 bg-well/40 px-4 py-1.5">
+                        <span className="w-24 shrink-0 text-[12px] tabular-nums text-ink-faint">
+                          {timeFmt.format(new Date(0, 0, 1, 0, Math.max(gapBefore.startMin, nowMin)))}
+                        </span>
+                        <span className="text-[12px] text-ink-faint">
+                          volno {minutesToLabel(gapBefore.endMin - Math.max(gapBefore.startMin, nowMin))}
+                        </span>
+                      </li>
+                    )}
+                    <li
+                      className={`flex items-center gap-3 px-4 py-2.5 transition-opacity duration-300 ${
+                        past ? 'opacity-45' : ''
+                      } ${running ? 'bg-accent-wash/60' : ''}`}
                     >
-                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 6v12M6 12h12" />
-                      </svg>
-                    </button>
-                  )}
+                      <span className={`w-24 shrink-0 text-[13px] tabular-nums ${running ? 'font-semibold text-accent-deep' : 'text-ink-soft'}`}>
+                        {e.allDay
+                          ? 'celý den'
+                          : `${timeFmt.format(new Date(e.start))}–${timeFmt.format(new Date(e.end))}`}
+                      </span>
+
+                      {/* blok z appky je zástupce úkolu → ťuknutím se otevře */}
+                      {task ? (
+                        <button
+                          className="min-w-0 flex-1 truncate text-left text-[15px] transition-colors duration-150 active:text-accent"
+                          onClick={() => onOpenTask(task)}
+                        >
+                          <span className={task.status === 'done' ? 'text-ink-faint line-through' : ''}>
+                            {e.title}
+                          </span>
+                        </button>
+                      ) : (
+                        <span className="min-w-0 flex-1 truncate text-[15px]">
+                          {e.title}
+                          {span && (
+                            <span className="ml-1.5 text-[12px] text-ink-faint">
+                              {span.index}. den ze {span.total}
+                            </span>
+                          )}
+                        </span>
+                      )}
+
+                      {running && (
+                        <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-accent-deep">
+                          <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-accent align-middle breathe" />
+                          teď
+                        </span>
+                      )}
+                      {!running && isNext && (
+                        <span className="shrink-0 text-[12px] font-medium text-accent-deep">
+                          {untilLabel(startMin - nowMin)}
+                        </span>
+                      )}
+
+                      {/* follow-up jen u schůzky s časem — celodenní událost
+                          (dovolená, svátek) není jednání k dotažení */}
+                      {e.isTodoBlock ? (
+                        <span
+                          className={`h-2 w-2 shrink-0 rounded-full ${task?.status === 'done' ? 'bg-moss' : 'bg-accent'}`}
+                          title="Blok z appky"
+                        />
+                      ) : e.allDay ? null : followedUp.has(e.id) ? (
+                        <span className="pop shrink-0 text-[12px] font-medium text-moss">✓ úkol</span>
+                      ) : (
+                        <button
+                          aria-label={`Vytvořit follow-up ke schůzce ${e.title}`}
+                          title="Follow-up úkol ze schůzky"
+                          onClick={() => {
+                            void addMeetingFollowUp(e)
+                            setFollowedUp((s) => new Set(s).add(e.id))
+                          }}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-well text-ink-soft transition-transform duration-150 active:scale-90"
+                        >
+                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 6v12M6 12h12" />
+                          </svg>
+                        </button>
+                      )}
+                    </li>
+                  </Fragment>
+                )
+              })}
+
+              {/* volno po poslední schůzce dne */}
+              {allEvents || hidden === 0
+                ? (() => {
+                    const lastEnd = Math.max(
+                      restStart,
+                      ...events.filter((e) => !e.allDay).map((e) => minutesOfDay(e.end)),
+                    )
+                    const tail = gaps.find((g) => g.startMin >= lastEnd)
+                    if (!tail) return null
+                    return (
+                      <li className="flex items-center gap-3 bg-well/40 px-4 py-1.5">
+                        <span className="w-24 shrink-0 text-[12px] tabular-nums text-ink-faint">
+                          {timeFmt.format(new Date(0, 0, 1, 0, Math.max(tail.startMin, nowMin)))}
+                        </span>
+                        <span className="text-[12px] text-ink-faint">
+                          volno {minutesToLabel(tail.endMin - Math.max(tail.startMin, nowMin))} do konce dne
+                        </span>
+                      </li>
+                    )
+                  })()
+                : null}
+
+              {hidden > 0 && (
+                <li>
+                  <button
+                    onClick={() => setAllEvents(true)}
+                    className="w-full px-4 py-2 text-left text-[13px] font-medium text-accent transition-colors duration-150 active:bg-well/60"
+                  >
+                    …a další {hidden} {hidden === 1 ? 'schůzka' : hidden < 5 ? 'schůzky' : 'schůzek'}
+                  </button>
                 </li>
-              ))}
+              )}
             </ul>
             {events.some((e) => !e.isTodoBlock && !e.allDay) && (
               <p className="mt-1.5 px-1 text-xs text-ink-faint">

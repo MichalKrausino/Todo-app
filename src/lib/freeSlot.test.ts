@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findFreeSlot, freeMinutes, mergeBusy } from './freeSlot'
+import { findFreeSlot, freeGaps, freeMinutes, mergeBusy } from './freeSlot'
 
 const b = (startMin: number, endMin: number) => ({ startMin, endMin })
 
@@ -46,5 +46,37 @@ describe('freeMinutes', () => {
 
   it('plný den = 0', () => {
     expect(freeMinutes([b(540, 1020)])).toBe(0)
+  })
+
+  it('zbytek dne se počítá posunutým začátkem', () => {
+    // ve 13:00 (780) se schůzkou 9–10 zbývají 4 hodiny do pěti
+    expect(freeMinutes([b(540, 600)], 780)).toBe(240)
+  })
+})
+
+describe('freeGaps', () => {
+  it('prázdný den = jedno okno přes celou pracovní dobu', () => {
+    expect(freeGaps([])).toEqual([b(540, 1020)])
+  })
+
+  it('mezery kolem schůzek', () => {
+    // 10–11 a 13–14 → volno 9–10, 11–13, 14–17
+    expect(freeGaps([b(600, 660), b(780, 840)])).toEqual([
+      b(540, 600),
+      b(660, 780),
+      b(840, 1020),
+    ])
+  })
+
+  it('schůzky mimo pracovní dobu okna neukrajují', () => {
+    expect(freeGaps([b(420, 480), b(1080, 1140)])).toEqual([b(540, 1020)])
+  })
+
+  it('celý den obsazený = žádné okno', () => {
+    expect(freeGaps([b(500, 1100)])).toEqual([])
+  })
+
+  it('respektuje posunutý začátek (od teď)', () => {
+    expect(freeGaps([b(600, 660)], 700)).toEqual([b(700, 1020)])
   })
 })

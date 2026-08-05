@@ -321,7 +321,8 @@ export const calendarEventsOn = (day: string) =>
   db.calendarEvents
     .filter((e) => e.startDay <= day && day <= e.endDay)
     .toArray()
-    .then((es) => es.sort((a, b) => Number(a.allDay) - Number(b.allDay) || a.start.localeCompare(b.start)))
+    // celodenní nahoru — rámují celý den, časový sled začíná až pod nimi
+    .then((es) => es.sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start)))
 
 export const calendarEventsBetween = (from: string, to: string) =>
   db.calendarEvents.filter((e) => e.endDay >= from && e.startDay <= to).toArray()
