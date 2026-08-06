@@ -19,7 +19,7 @@ import { RULE_EPOCH, humanizeRule, occurrencesBetween } from '../lib/rrule'
 import { TEMPLATE_GALLERY } from '../lib/templateGallery'
 import { RecurrencePicker, buildRule } from '../components/RecurrencePicker'
 
-const field = 'w-full rounded-lg border border-line bg-card px-3 py-2 text-[15px] outline-none focus:border-accent/60'
+const field = 'w-full rounded-lg border border-line bg-card px-3 py-2 text-[16px] outline-none focus:border-accent/60'
 const chip = 'rounded-full px-2.5 py-0.5 font-medium'
 
 // Nejbližší výskyt pravidla (dnešek se počítá); nevalidní pravidlo → undefined.

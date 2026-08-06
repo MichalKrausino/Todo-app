@@ -68,7 +68,7 @@ export function SearchSheet({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Hledat úkoly, klienty, projekty…"
-            className="mt-2 w-full rounded-full border border-transparent bg-well px-4 py-2.5 text-[15px] text-ink outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus:bg-card"
+            className="mt-2 w-full rounded-full border border-transparent bg-well px-4 py-2.5 text-[16px] text-ink outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus:bg-card"
           />
 
           {!results && (

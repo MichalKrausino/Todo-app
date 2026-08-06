@@ -350,6 +350,9 @@ export function TodayView({
 
         const shown = allEvents ? events : events.slice(0, EVENTS_PREVIEW)
         const hidden = events.length - shown.length
+        // Dvě schůzky ve stejnou minutu by jinak vykreslily tentýž
+        // řádek volna dvakrát — každé okno se ukáže nejvýš jednou.
+        const usedGaps = new Set<number>()
 
         return (
           <section className="rise" style={stagger(2)}>
@@ -367,7 +370,10 @@ export function TodayView({
                 const task = e.isTodoBlock ? taskByEvent.get(e.eventId) : undefined
                 const span = e.startDay !== e.endDay ? dayIndex(e.startDay, e.endDay, today) : null
                 // volné okno, které končí přesně tam, kde schůzka začíná
-                const gapBefore = e.allDay ? undefined : gaps.find((g) => g.endMin === startMin)
+                const gapBefore = e.allDay
+                  ? undefined
+                  : gaps.find((g) => g.endMin === startMin && !usedGaps.has(g.startMin))
+                if (gapBefore) usedGaps.add(gapBefore.startMin)
 
                 return (
                   <Fragment key={e.id}>

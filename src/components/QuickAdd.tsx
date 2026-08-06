@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import type { CalendarEvent, Priority, Task } from '../db/types'
 import { activeClients, addTask, allProjects, calendarCacheCount, calendarEventsOn, openTasks, removeTask } from '../db/repo'
 import { formatDayLabel, fromISODate, addDays, nextMonday, toISODate, todayISO } from '../lib/dates'
-import { freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
+import { WORK_END, WORK_START, freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { PRIORITY_LABELS } from '../lib/labels'
 import { foldToken, mentionToken, parseQuickAdd } from '../lib/quickAdd'
 import { humanizeRule } from '../lib/rrule'
@@ -128,6 +128,12 @@ export function QuickAdd({
   const previewAgenda = [...previewEvents].sort((a, b) =>
     a.allDay === b.allDay ? a.start.localeCompare(b.start) : a.allDay ? -1 : 1,
   )
+  // U dneška se volno počítá od teď (stejně jako na Dnes) — jinak by
+  // stejný den hlásil na dvou místech dvě různá čísla.
+  const previewFrom =
+    previewDay === todayISO()
+      ? Math.min(Math.max(new Date().getHours() * 60 + new Date().getMinutes(), WORK_START), WORK_END)
+      : WORK_START
   const previewBusy: BusyInterval[] = previewEvents
     .filter((e) => !e.allDay)
     .map((e) => {
@@ -382,7 +388,7 @@ export function QuickAdd({
                     ? `${previewTasks.length} ${plural(previewTasks.length, 'úkol', 'úkoly', 'úkolů')}`
                     : 'bez úkolů'}
                   {previewEvents.length > 0 &&
-                    ` · volno ~${minutesToLabel(freeMinutes(previewBusy))}`}
+                    ` · ${previewDay === today ? 'zbývá' : 'volno'} ~${minutesToLabel(freeMinutes(previewBusy, previewFrom))}`}
                 </span>
               </div>
 
@@ -538,7 +544,7 @@ export function QuickAdd({
           onChange={(e) => setText(e.target.value)}
           placeholder="Např. „zítra poslat report @klient“"
           enterKeyHint="done"
-          className="min-w-0 flex-1 rounded-full border border-transparent bg-well px-4 py-2.5 text-[15px] text-ink outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus:bg-card"
+          className="min-w-0 flex-1 rounded-full border border-transparent bg-well px-4 py-2.5 text-[16px] text-ink outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus:bg-card"
         />
         {/* key po přidání → pop; plus se při stisku pootočí (group-active) */}
         <button

@@ -7,6 +7,10 @@ import { createPortal } from 'react-dom'
 // funguje na Macu. Zavírání řídí třída .closing na backdropu (index.css).
 // Renderuje se portálem do <body>, aby push-back transform obsahu
 // (.app-shell v index.css) nerozbil fixed pozici panelu.
+// Zásobník otevřených panelů — Escape smí zavřít jen ten navrchu.
+// Bez něj by jedno stisknutí zavřelo i vyhledávání pod detailem úkolu.
+const stack: symbol[] = []
+
 export function Sheet({
   onClose,
   tone = 'card',
@@ -35,11 +39,17 @@ export function Sheet({
   useEffect(() => () => clearTimeout(closeTimer.current), [])
 
   useEffect(() => {
+    const me = Symbol('sheet')
+    stack.push(me)
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close()
+      if (e.key === 'Escape' && stack[stack.length - 1] === me) close()
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      const i = stack.indexOf(me)
+      if (i !== -1) stack.splice(i, 1)
+    }
   }, [close])
 
   return createPortal(

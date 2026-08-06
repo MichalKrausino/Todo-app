@@ -284,9 +284,10 @@ export function TaskRow({
                   className={`inline-flex items-center gap-1 ${subsDone === subs.length ? 'text-moss' : 'text-ink-soft'}`}
                   title="Podúkoly"
                 >
-                  <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M4 7l2 2 3.5-4M4 16l2 2 3.5-4" />
-                    <path d="M13 8h7M13 17h7" />
+                  {/* jednoduchá fajfka v rámečku — víc čar je v 13 px kaše */}
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="4" y="4" width="16" height="16" rx="4" />
+                    <path d="M8.5 12.3l2.5 2.5 4.5-5.2" />
                   </svg>
                   {subsDone}/{subs.length}
                 </span>

@@ -14,7 +14,7 @@ import {
   type RecurrencePreset,
 } from '../lib/rrule'
 
-const field = 'w-full rounded-lg border border-line bg-card px-3 py-2 text-[15px] outline-none focus:border-accent/60'
+const field = 'w-full rounded-lg border border-line bg-card px-3 py-2 text-[16px] outline-none focus:border-accent/60'
 const label = 'mb-1 block text-xs font-medium text-ink-soft'
 
 export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => void }) {
@@ -175,17 +175,21 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           <div>
             <label className={label}>Termín (dokdy)</label>
             <input type="date" className={field} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-            <input
-              type="time"
-              aria-label="Čas termínu"
-              className={`${field} mt-1.5`}
-              value={dueTime}
-              onChange={(e) => {
-                setDueTime(e.target.value)
-                // čas na prázdném datu doplní dnešek, ať se neztratí
-                if (e.target.value && !dueDate) setDueDate(todayISO())
-              }}
-            />
+            {/* čas patří k termínu — bez popisku vypadal jako osiřelé pole */}
+            <label className="mt-1.5 flex items-center gap-2">
+              <span className="shrink-0 text-xs font-medium text-ink-soft">Čas</span>
+              <input
+                type="time"
+                aria-label="Čas termínu"
+                className={`${field} min-w-0 flex-1`}
+                value={dueTime}
+                onChange={(e) => {
+                  setDueTime(e.target.value)
+                  // čas na prázdném datu doplní dnešek, ať se neztratí
+                  if (e.target.value && !dueDate) setDueDate(todayISO())
+                }}
+              />
+            </label>
           </div>
           <div>
             <label className={label}>Naplánováno na</label>

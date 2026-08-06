@@ -50,6 +50,8 @@ export default function App() {
   const [editing, setEditing] = useState<Task | null>(null)
   const [syncOpen, setSyncOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  // Odscrollováno = horní lišta se zamlží a ukáže kompaktní titulek.
+  const [scrolled, setScrolled] = useState(false)
   // Navigace z tichých signálů: otevřít konkrétního klienta na záložce Klienti.
   const [clientFocus, setClientFocus] = useState<string | null>(null)
 
@@ -61,8 +63,12 @@ export default function App() {
   // Směr přechodu záložek: nový pohled přijíždí ze strany, kam se jde.
   const prevTab = useRef<Tab>(tab)
   const dir = TABS.findIndex((t) => t.id === tab) - TABS.findIndex((t) => t.id === prevTab.current)
+  const mainRef = useRef<HTMLElement>(null)
   useEffect(() => {
     prevTab.current = tab
+    // nová záložka začíná nahoře, ne uprostřed předchozího seznamu
+    mainRef.current?.scrollTo(0, 0)
+    setScrolled(false)
   }, [tab])
 
   // Deep-link z nedělní push notifikace (#review): přepnout na Dnes,
@@ -78,24 +84,41 @@ export default function App() {
 
   return (
     <div className="app-shell relative mx-auto flex h-dvh max-w-lg flex-col bg-paper text-ink antialiased">
+      {/* Horní lišta ve stylu iOS: v klidu průhledná (velký titulek si
+          svítí sám), po odscrollování se zamlží a obsah pod ni podjede —
+          jinak by ikony seděly přímo na textu úkolů. Průchozí na dotyk,
+          klikají jen samotná tlačítka. */}
       <div
-        className="absolute right-4 z-40 flex items-center gap-2"
-        style={{ top: 'calc(0.85rem + env(safe-area-inset-top))' }}
+        className={`pointer-events-none absolute inset-x-0 top-0 z-40 flex items-center justify-end gap-2 border-b px-4 pb-2.5 transition-colors duration-200 ${
+          scrolled ? 'border-line/70 bg-paper/80 backdrop-blur-xl' : 'border-transparent'
+        }`}
+        style={{ paddingTop: 'calc(0.85rem + env(safe-area-inset-top))' }}
       >
+        <span
+          className={`pointer-events-none absolute left-4 text-[17px] font-semibold transition-opacity duration-200 ${
+            scrolled ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          {TABS.find((t) => t.id === tab)?.label}
+        </span>
         <button
           aria-label="Hledat"
           onClick={() => setSearchOpen(true)}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-card/80 text-ink-soft shadow-card backdrop-blur transition-transform duration-150 active:scale-90"
+          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-card/80 text-ink-soft shadow-card backdrop-blur transition-transform duration-150 active:scale-90"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="6.5" />
             <path d="M15.8 15.8L20 20" />
           </svg>
         </button>
-        <SyncButton onOpen={() => setSyncOpen(true)} />
+        <span className="pointer-events-auto">
+          <SyncButton onOpen={() => setSyncOpen(true)} />
+        </span>
       </div>
 
       <main
+        ref={mainRef}
+        onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 24)}
         className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6"
         style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top))' }}
       >
