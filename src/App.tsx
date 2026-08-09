@@ -135,7 +135,9 @@ export default function App() {
               onOpenInbox={() => setTab('upcoming')}
             />
           )}
-          {tab === 'upcoming' && <UpcomingView onOpenTask={setEditing} />}
+          {tab === 'upcoming' && (
+            <UpcomingView onOpenTask={setEditing} onShowToday={() => setTab('today')} />
+          )}
           {tab === 'clients' && (
             <ClientsView
               onOpenTask={setEditing}

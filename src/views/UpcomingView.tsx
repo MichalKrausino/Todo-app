@@ -1,5 +1,6 @@
+import { useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import type { Task } from '../db/types'
+import type { CalendarEvent, Task } from '../db/types'
 import {
   allClients,
   allProjects,
@@ -9,7 +10,9 @@ import {
   reopenTask,
   sortTasks,
 } from '../db/repo'
+import { plannedMinutes } from '../lib/capacity'
 import { addDays, formatDayLabel, fromISODate, toISODate, todayISO } from '../lib/dates'
+import { minutesToLabel } from '../lib/freeSlot'
 import { TaskRow } from '../components/TaskRow'
 
 const plural = (n: number, one: string, few: string, many: string) =>
@@ -20,7 +23,30 @@ const effectiveDate = (t: Task): string | undefined => {
   return dates.sort()[0]
 }
 
-export function UpcomingView({ onOpenTask }: { onOpenTask: (t: Task) => void }) {
+const timeFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
+const WEEKDAY = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So']
+
+// Kolik dní dopředu ukazuje pás nahoře.
+const STRIP_DAYS = 14
+// Jak daleko se hledají naplánované úkoly a schůzky.
+const HORIZON_DAYS = 30
+
+// Sytost proužku pod dnem = kolik toho ten den je. Stejná semaforová
+// škála jako v kalendáříku u zadávání úkolu.
+function loadClass(count: number): string {
+  if (count <= 0) return 'bg-transparent'
+  if (count <= 2) return 'bg-accent/45'
+  if (count <= 4) return 'bg-amber/60'
+  return 'bg-danger/60'
+}
+
+export function UpcomingView({
+  onOpenTask,
+  onShowToday,
+}: {
+  onOpenTask: (t: Task) => void
+  onShowToday?: () => void
+}) {
   const today = todayISO()
   const open = useLiveQuery(openTasks, []) ?? []
   const clients = useLiveQuery(allClients, []) ?? []
@@ -37,15 +63,41 @@ export function UpcomingView({ onOpenTask }: { onOpenTask: (t: Task) => void }) 
     list.push(t)
     groups.set(d, list)
   }
-  const dates = [...groups.keys()].sort()
   const inbox = sortTasks(open.filter((t) => !effectiveDate(t)))
 
-  const horizon = toISODate(addDays(fromISODate(today), 30))
+  const horizon = toISODate(addDays(fromISODate(today), HORIZON_DAYS))
   const events = useLiveQuery(() => calendarEventsBetween(today, horizon), [today, horizon]) ?? []
-  const meetingsPerDay = new Map<string, number>()
+
+  // Schůzky po dnech — vícedenní událost patří do KAŽDÉHO svého dne
+  // (jinak by dovolená svítila jen v den začátku).
+  const eventsPerDay = new Map<string, CalendarEvent[]>()
   for (const e of events) {
     if (e.isTodoBlock) continue
-    meetingsPerDay.set(e.startDay, (meetingsPerDay.get(e.startDay) ?? 0) + 1)
+    let d = e.startDay < today ? today : e.startDay
+    const end = (e.endDay ?? e.startDay) > horizon ? horizon : (e.endDay ?? e.startDay)
+    let guard = 0
+    while (d <= end && guard++ <= HORIZON_DAYS + 1) {
+      const list = eventsPerDay.get(d) ?? []
+      list.push(e)
+      eventsPerDay.set(d, list)
+      d = toISODate(addDays(fromISODate(d), 1))
+    }
+  }
+
+  // Den se ukáže, když na něj něco je — úkol nebo schůzka. Plán tak
+  // konečně ukazuje i dny, kde čekají jen jednání.
+  const dates = [...new Set([...groups.keys(), ...eventsPerDay.keys()])]
+    .filter((d) => d > today)
+    .sort()
+
+  // Pás nejbližších dnů: zítřek + STRIP_DAYS-1 dalších (dnešek zvlášť).
+  const strip = Array.from({ length: STRIP_DAYS }, (_, i) =>
+    toISODate(addDays(fromISODate(today), i + 1)),
+  )
+
+  const sectionRefs = useRef(new Map<string, HTMLElement>())
+  const jumpTo = (d: string) => {
+    sectionRefs.current.get(d)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   const toggle = (t: Task) => {
@@ -71,6 +123,54 @@ export function UpcomingView({ onOpenTask }: { onOpenTask: (t: Task) => void }) 
         <p className="text-sm text-ink-soft">Co je přede mnou</p>
       </header>
 
+      {/* Pás nejbližších dvou týdnů — proužek pod číslem říká, jak je
+          den nabitý; ťuknutí skočí na jeho sekci. */}
+      <div
+        className="rise -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1"
+        style={{ scrollbarWidth: 'none' }}
+      >
+        {onShowToday && (
+          <button
+            onClick={onShowToday}
+            className="flex w-12 shrink-0 flex-col items-center gap-1 rounded-xl bg-well px-1 py-1.5 transition-transform duration-150 active:scale-95"
+          >
+            <span className="text-[10px] font-medium text-ink-faint">dnes</span>
+            <span className="text-[15px] font-semibold text-accent tabular-nums">
+              {fromISODate(today).getDate()}
+            </span>
+            <span className="h-1 w-6 rounded-full bg-accent" />
+          </button>
+        )}
+        {strip.map((d) => {
+          const date = fromISODate(d)
+          const count = (groups.get(d)?.length ?? 0) + (eventsPerDay.get(d)?.length ?? 0)
+          const weekend = [0, 6].includes(date.getDay())
+          const has = count > 0
+          return (
+            <button
+              key={d}
+              data-day={d}
+              data-load={count}
+              disabled={!has}
+              onClick={() => jumpTo(d)}
+              className={`flex w-12 shrink-0 flex-col items-center gap-1 rounded-xl px-1 py-1.5 transition-transform duration-150 ${
+                has ? 'bg-card shadow-card active:scale-95' : 'bg-well/50'
+              }`}
+            >
+              <span className={`text-[10px] font-medium ${weekend ? 'text-ink-faint' : 'text-ink-soft'}`}>
+                {WEEKDAY[date.getDay()]}
+              </span>
+              <span
+                className={`text-[15px] tabular-nums ${has ? 'font-semibold text-ink' : 'text-ink-faint'}`}
+              >
+                {date.getDate()}
+              </span>
+              <span className={`h-1 w-6 rounded-full ${loadClass(count)}`} />
+            </button>
+          )
+        })}
+      </div>
+
       {dates.length === 0 && inbox.length === 0 && (
         <div className="rise rounded-2xl bg-card px-6 py-10 text-center shadow-card">
           <svg viewBox="0 0 48 48" className="mx-auto h-12 w-12 text-accent/70" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -82,18 +182,55 @@ export function UpcomingView({ onOpenTask }: { onOpenTask: (t: Task) => void }) 
         </div>
       )}
 
-      {dates.map((d, i) => (
-        <section key={d} className="rise" style={{ '--stagger': Math.min(i + 1, 8) } as React.CSSProperties}>
-          <h2 className="section-label mb-2 first-letter:lowercase">
-            {formatDayLabel(d)}
-            {(meetingsPerDay.get(d) ?? 0) > 0 &&
-              ` · ${meetingsPerDay.get(d)} ${plural(meetingsPerDay.get(d)!, 'schůzka', 'schůzky', 'schůzek')}`}
-          </h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
-            {sortTasks(groups.get(d)!).map((t) => row(t, false))}
-          </ul>
-        </section>
-      ))}
+      {dates.map((d, i) => {
+        const dayTasks = sortTasks(groups.get(d) ?? [])
+        const dayEvents = [...(eventsPerDay.get(d) ?? [])].sort(
+          (a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start),
+        )
+        const workMin = plannedMinutes(dayTasks)
+        return (
+          <section
+            key={d}
+            ref={(el) => {
+              if (el) sectionRefs.current.set(d, el)
+              else sectionRefs.current.delete(d)
+            }}
+            className="rise scroll-mt-24"
+            style={{ '--stagger': Math.min(i + 1, 8) } as React.CSSProperties}
+          >
+            {/* bez first-letter:lowercase — s verzálkami v section-label
+                dělalo zvěrstva typu „zíTRA" a „sO 8. 8." */}
+            <h2 className="section-label mb-2">
+              {formatDayLabel(d)}
+              {dayTasks.length > 0 && ` · ${dayTasks.length} ${plural(dayTasks.length, 'úkol', 'úkoly', 'úkolů')}`}
+              {workMin > 0 && ` · ~${minutesToLabel(workMin)}`}
+            </h2>
+
+            <div className="overflow-hidden rounded-xl bg-card shadow-card">
+              {/* schůzky dne — Plán teď ukazuje i to, co je v kalendáři */}
+              {dayEvents.length > 0 && (
+                <ul className="divide-y divide-line border-b border-line bg-well/30">
+                  {dayEvents.map((e) => (
+                    <li key={e.id} className="flex items-center gap-3 px-4 py-2">
+                      <span className="w-24 shrink-0 text-[13px] tabular-nums text-ink-soft">
+                        {e.allDay
+                          ? 'celý den'
+                          : `${timeFmt.format(new Date(e.start))}–${timeFmt.format(new Date(e.end))}`}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[14px] text-ink-soft">{e.title}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {dayTasks.length > 0 ? (
+                <ul className="divide-y divide-line">{dayTasks.map((t) => row(t, false))}</ul>
+              ) : (
+                <p className="px-4 py-2.5 text-[13px] text-ink-faint">Jen schůzky, žádný úkol.</p>
+              )}
+            </div>
+          </section>
+        )
+      })}
 
       {inbox.length > 0 && (
         <section className="rise" style={{ '--stagger': Math.min(dates.length + 1, 9) } as React.CSSProperties}>
