@@ -19,6 +19,7 @@ import {
   reopenTask,
   sortTasks,
   updateClient,
+  updateProject,
 } from '../db/repo'
 import { activeTemplates, deployTemplate, undeployTemplate } from '../db/templates'
 import {
@@ -411,8 +412,25 @@ function ClientDetail({
   const [taskText, setTaskText] = useState('')
   const [projName, setProjName] = useState('')
   const [addingProject, setAddingProject] = useState(false)
+  // Přejmenování klienta: dřív šlo klienta jen smazat — i s projekty
+  // a úkoly. Překlep ve jméně tak stál celou historii.
+  const [renaming, setRenaming] = useState(false)
+  const [draftName, setDraftName] = useState('')
+  const [editProject, setEditProject] = useState<string | null>(null)
+  const [draftProject, setDraftProject] = useState('')
 
   if (!client || client.deletedAt) return null
+
+  const startRename = () => {
+    setDraftName(client.name)
+    setRenaming(true)
+  }
+
+  const saveRename = () => {
+    const name = draftName.trim()
+    if (name && name !== client.name) void updateClient(id, { name })
+    setRenaming(false)
+  }
 
   const toggleTemplate = (templateId: string) => {
     void (client.templateIds.includes(templateId)
@@ -425,7 +443,13 @@ function ClientDetail({
     void updateClient(id, { checkIntervalDays: n > 0 ? n : undefined })
   }
 
-  const noProject = sortTasks(tasks.filter((t) => !t.projectId))
+  // Úkoly uzavřeného (archivovaného) projektu by jinak zmizely úplně —
+  // sekce projektu se nevykreslí a mezi „bez projektu" nespadnou. Padají
+  // proto do obecných úkolů klienta.
+  const visibleProjects = new Set(projects.map((p) => p.id))
+  const noProject = sortTasks(
+    tasks.filter((t) => !t.projectId || !visibleProjects.has(t.projectId)),
+  )
 
   const toggle = (t: Task) => {
     void (t.status === 'done' ? reopenTask(t.id) : completeTask(t.id))
@@ -437,12 +461,18 @@ function ClientDetail({
 
   const submitTask = async (e: React.FormEvent) => {
     e.preventDefault()
-    const parsed = parseQuickAdd(taskText, [])
+    // Parser rozumí i času, opakování a poznámce — zahazovat je jen
+    // proto, že se úkol zadává u klienta, nedávalo smysl.
+    const parsed = parseQuickAdd(taskText, [], new Date(), projects)
     if (!parsed.title) return
     await addTask({
       title: parsed.title,
       dueDate: parsed.dueDate,
+      dueTime: parsed.dueTime,
       priority: parsed.priority,
+      recurrenceRule: parsed.recurrenceRule,
+      notes: parsed.notes,
+      projectId: parsed.projectId,
       clientId: id,
     })
     setTaskText('')
@@ -467,6 +497,12 @@ function ClientDetail({
     }
   }
 
+  const saveProject = (projectId: string) => {
+    const name = draftProject.trim()
+    if (name) void updateProject(projectId, { name })
+    setEditProject(null)
+  }
+
   const delProject = async (projectId: string, name: string) => {
     if (confirm(`Smazat projekt „${name}“? Úkoly zůstanou pod klientem.`)) {
       await removeProject(projectId)
@@ -482,15 +518,62 @@ function ClientDetail({
         Klienti
       </button>
 
-      <header className="flex items-center gap-3 pr-10">
-        <span className="h-4 w-4 shrink-0 rounded-full" style={{ background: client.color }} />
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate display text-[2.1rem] font-semibold leading-tight">{client.name}</h1>
-          <p className="text-sm text-ink-soft">
-            {KIND_LABELS[client.kind]}
-            {client.status === 'archived' && ' · archivovaný'}
-          </p>
-        </div>
+      <header className="pr-10">
+        {renaming ? (
+          <div className="rise space-y-2 rounded-xl bg-card p-3 shadow-card">
+            <input
+              autoFocus
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveRename()
+                if (e.key === 'Escape') setRenaming(false)
+              }}
+              className="w-full rounded-lg border border-line bg-card px-3 py-2 text-[16px] outline-none focus:border-accent/60"
+            />
+            <div className="flex flex-wrap gap-1.5">
+              {CLIENT_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  aria-label={`Barva ${c}`}
+                  onClick={() => void updateClient(id, { color: c })}
+                  className={`h-7 w-7 rounded-full transition-transform duration-150 active:scale-90 ${
+                    client.color === c ? 'ring-2 ring-ink ring-offset-2 ring-offset-card' : ''
+                  }`}
+                  style={{ background: c }}
+                />
+              ))}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setRenaming(false)}
+                className="rounded-lg px-3 py-1.5 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-95"
+              >
+                Hotovo
+              </button>
+              <button
+                onClick={saveRename}
+                disabled={!draftName.trim()}
+                className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-card transition-transform duration-150 active:scale-95 disabled:opacity-30"
+              >
+                Uložit název
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={startRename} className="flex w-full items-center gap-3 text-left">
+            <span className="h-4 w-4 shrink-0 rounded-full" style={{ background: client.color }} />
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate display text-[2.1rem] font-semibold leading-tight">{client.name}</h1>
+              <p className="text-sm text-ink-soft">
+                {KIND_LABELS[client.kind]}
+                {client.status === 'archived' && ' · archivovaný'}
+                <span className="text-ink-faint"> · ťukni pro úpravu</span>
+              </p>
+            </div>
+          </button>
+        )}
       </header>
 
       <form onSubmit={submitTask} className="flex gap-2">
@@ -594,14 +677,47 @@ function ClientDetail({
         const projectTasks = sortTasks(tasks.filter((t) => t.projectId === p.id))
         return (
           <section key={p.id}>
-            <div className="mb-2 flex items-baseline justify-between">
-              <h2 className="section-label">
-                {p.name}
-                {p.goal && <span className="ml-2 font-normal normal-case text-ink-faint">{p.goal}</span>}
-              </h2>
-              <button className="text-xs text-ink-faint/70" onClick={() => void delProject(p.id, p.name)}>
-                Smazat
-              </button>
+            <div className="mb-2 flex items-baseline justify-between gap-2">
+              {editProject === p.id ? (
+                // projekt šel dřív jen založit a smazat — překlep v názvu
+                // znamenal rozpad vazby na úkoly
+                <input
+                  autoFocus
+                  value={draftProject}
+                  onChange={(e) => setDraftProject(e.target.value)}
+                  onBlur={() => saveProject(p.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') saveProject(p.id)
+                    if (e.key === 'Escape') setEditProject(null)
+                  }}
+                  className="min-w-0 flex-1 rounded-lg border border-line bg-card px-2.5 py-1 text-[16px] outline-none focus:border-accent/60"
+                />
+              ) : (
+                <button
+                  className="min-w-0 flex-1 text-left"
+                  onClick={() => {
+                    setDraftProject(p.name)
+                    setEditProject(p.id)
+                  }}
+                >
+                  <h2 className="section-label truncate">
+                    {p.name}
+                    {p.goal && <span className="ml-2 font-normal normal-case text-ink-faint">{p.goal}</span>}
+                  </h2>
+                </button>
+              )}
+              <div className="flex shrink-0 gap-2.5">
+                {/* uzavření projektu — hotová věc nemá zabírat místo */}
+                <button
+                  className="text-xs text-ink-faint/70"
+                  onClick={() => void updateProject(p.id, { status: 'archived' })}
+                >
+                  Uzavřít
+                </button>
+                <button className="text-xs text-ink-faint/70" onClick={() => void delProject(p.id, p.name)}>
+                  Smazat
+                </button>
+              </div>
             </div>
             {projectTasks.length > 0 ? (
               <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{projectTasks.map(row)}</ul>
