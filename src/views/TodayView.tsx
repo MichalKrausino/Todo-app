@@ -265,14 +265,27 @@ export function TodayView({
           </div>
         )}
         {unfinished.length > 0 && (
-          <p className={`mt-2 flex items-center gap-1.5 text-xs ${overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'}`}>
-            <span
-              className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${overloaded ? 'bg-note-ink' : 'bg-moss'}`}
-            />
-            práce ~{minutesToLabel(workMin)}
-            {freeMin !== null && <> · volno ~{minutesToLabel(freeMin)}</>}
-            {overloaded && ' · den je přeplněný — zvaž něco na zítra'}
-          </p>
+          <>
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-soft">
+              <span
+                className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${overloaded ? 'bg-note-ink' : 'bg-moss'}`}
+              />
+              práce ~{minutesToLabel(workMin)}
+              {/* stejné slovo jako v hlavičce kalendáře — jde o totéž číslo */}
+              {freeMin !== null && <> · zbývá ~{minutesToLabel(freeMin)}</>}
+            </p>
+            {/* varování na vlastním řádku — v jedné větě se lámalo přes
+                dva řádky a ztrácelo důraz */}
+            {overloaded && (
+              <p className="pop-soft mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-note px-2.5 py-1 text-xs font-medium text-note-ink">
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 8v5M12 16.5v.5" />
+                  <circle cx="12" cy="12" r="9" />
+                </svg>
+                Den je přeplněný — zvaž něco na zítra
+              </p>
+            )}
+          </>
         )}
       </header>
 
@@ -299,7 +312,7 @@ export function TodayView({
         return (
           <section className="rise" style={stagger(1)}>
             <h2 className="section-label mb-2">ranní návrh · {pending.length}</h2>
-            <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
               {pending.map((s) => {
                 const task = taskById.get(s.taskId)!
                 const leaving = leavingSuggestions[s.taskId]
@@ -378,7 +391,7 @@ export function TodayView({
               {/* po pracovní době už „volno" nedává smysl */}
               kalendář{freeMin !== null && restStart < WORK_END && ` · zbývá ~${minutesToLabel(freeMin)}`}
             </h2>
-            <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
               {shown.map((e) => {
                 const startMin = e.allDay ? 0 : minutesOfDay(e.start)
                 const endMin = e.allDay ? 24 * 60 : minutesOfDay(e.end)
@@ -524,7 +537,7 @@ export function TodayView({
       {isEvening && !dayClosed && unfinished.length > 0 && (
         <button
           onClick={() => setShutdownOpen(true)}
-          className="rise flex w-full items-center gap-3 rounded-xl bg-card px-4 py-3 text-left shadow-card transition-[background-color,transform] duration-150 active:scale-[0.99] active:bg-well/60"
+          className="rise flex w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-card transition-[background-color,transform] duration-150 active:scale-[0.99] active:bg-well/60"
           style={stagger(3)}
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-wash text-accent">
@@ -552,7 +565,7 @@ export function TodayView({
       {reviewDay && (
         <button
           onClick={() => setReviewOpen(true)}
-          className="rise flex w-full items-center gap-3 rounded-xl bg-card px-4 py-3 text-left shadow-card transition-[background-color,transform] duration-150 active:scale-[0.99] active:bg-well/60"
+          className="rise flex w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-card transition-[background-color,transform] duration-150 active:scale-[0.99] active:bg-well/60"
           style={stagger(3)}
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-wash text-accent">
@@ -610,7 +623,7 @@ export function TodayView({
           <h2 className="section-label mb-2 !text-accent-deep">
             na čem záleží · {pinned.length}
           </h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card ring-1 ring-accent/35">
+          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card ring-1 ring-accent/35">
             {/* datum jen u toho, co není z dneška (propadlé úkoly) */}
             {pinned.map((t) => row(t, effectiveDate(t) !== today, false))}
           </ul>
@@ -620,7 +633,7 @@ export function TodayView({
       {visOverdue.length > 0 && (
         <section className="rise" style={stagger(5)}>
           <h2 className="section-label mb-2 !text-danger">po termínu · {visOverdue.length}</h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{visOverdue.map((t) => row(t))}</ul>
+          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{visOverdue.map((t) => row(t))}</ul>
         </section>
       )}
 
@@ -628,7 +641,7 @@ export function TodayView({
         {visTodays.length > 0 && <h2 className="section-label mb-2">dnes · {visTodays.length}</h2>}
         {visTodays.length > 0 ? (
           <>
-            <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
               {visTodays.map((t) => row(t, false))}
             </ul>
             {gestureTip && (
@@ -709,7 +722,7 @@ export function TodayView({
         return (
           <section className="rise" style={stagger(7)}>
             <h2 className="section-label mb-2">bez termínu · {inbox.length}</h2>
-            <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{inbox.map((t) => row(t))}</ul>
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{inbox.map((t) => row(t))}</ul>
           </section>
         )
       })()}
@@ -717,7 +730,7 @@ export function TodayView({
       {done.length > 0 && (
         <section className="rise" style={stagger(8)}>
           <h2 className="section-label mb-2">hotovo · {done.length}</h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{done.map((t) => row(t))}</ul>
+          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{done.map((t) => row(t))}</ul>
         </section>
       )}
 

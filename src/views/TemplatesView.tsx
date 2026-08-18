@@ -108,7 +108,7 @@ export function TemplatesView({ onBack }: { onBack: () => void }) {
       </form>
 
       {templates.length > 0 && (
-        <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+        <ul className="rise divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
           {templates.map((t) => (
             <li key={t.id}>
               <button
@@ -136,7 +136,7 @@ export function TemplatesView({ onBack }: { onBack: () => void }) {
           <h2 className="section-label mb-2">
             {templates.length === 0 ? 'začni hotovým balíčkem' : 'galerie balíčků'}
           </h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
             {galleryLeft.map((p) => (
               <li key={p.name} className="flex items-center gap-3 px-4 py-3">
                 <span className="min-w-0 flex-1">
@@ -300,7 +300,7 @@ function TemplateDetail({
       </form>
 
       {template.items.length > 0 && (
-        <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+        <ul className="rise divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
           {template.items.map((item) => {
             const next = nextOccurrence(item.recurrenceRule, today)
             return (
@@ -360,7 +360,7 @@ function TemplateDetail({
       {preview.length > 0 && (
         <section className="rise">
           <h2 className="section-label mb-2">co vygeneruje příštích 14 dní</h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
             {preview.slice(0, 8).map(([date, titles]) => (
               <li key={date} className="flex gap-3 px-4 py-2.5">
                 <span className="w-24 shrink-0 text-[13px] text-ink-soft first-letter:uppercase">

@@ -81,7 +81,7 @@ export function SearchSheet({
           {results && results.clients.length > 0 && (
             <section className="rise">
               <h2 className="section-label mb-2">klienti</h2>
-              <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+              <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
                 {results.clients.map((c) => (
                   <li key={c.id}>
                     <button
@@ -108,7 +108,7 @@ export function SearchSheet({
           {results && results.projects.length > 0 && (
             <section className="rise">
               <h2 className="section-label mb-2">projekty</h2>
-              <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+              <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
                 {results.projects.map((p) => {
                   const c = clientMap.get(p.clientId)
                   return (
@@ -139,7 +139,7 @@ export function SearchSheet({
           {results && results.tasks.length > 0 && (
             <section className="rise">
               <h2 className="section-label mb-2">úkoly · {results.tasks.length}</h2>
-              <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+              <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
                 {results.tasks.slice(0, LIMIT_TASKS).map((t) => {
                   const c = t.clientId ? clientMap.get(t.clientId) : undefined
                   const done = t.status === 'done'

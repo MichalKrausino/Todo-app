@@ -34,7 +34,7 @@
   --color-amber: #ff9500; /* plná iOS oranžová (heatmapa, akcenty varování) */
   --color-moss: #248a3d; /* ok / synchronizováno */
 
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.045), 0 6px 16px -10px rgb(0 0 0 / 0.10);
   --shadow-sheet: 0 -8px 40px -12px rgb(0 0 0 / 0.25);
   --shadow-float: 0 2px 8px rgb(0 0 0 / 0.08), 0 8px 24px -8px rgb(0 0 0 / 0.16);
 
@@ -67,7 +67,7 @@
     --color-moss: #30d158;
 
     /* v tmavém režimu dělá hloubku jemný světlý prstenec místo stínu */
-    --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.07);
+    --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.07), 0 6px 18px -12px rgb(0 0 0 / 0.8);
     --shadow-sheet: 0 -8px 40px -8px rgb(0 0 0 / 0.7);
     --shadow-float: 0 2px 12px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.08);
   }
@@ -147,6 +147,19 @@ select {
   animation-delay: calc(var(--stagger, 0) * 35ms);
 }
 
+/* Kaskáda řádků uvnitř seskupeného seznamu: každý další řádek přijede
+   o chlup později, takže se seznam „rozvine" místo skokového objevení.
+   Index nejde v CSS spočítat, proto pevná řada pro prvních osm řádků —
+   dál už by zpoždění stejně nikdo nepostřehl. */
+ul > .rise:nth-child(1) { --stagger: 0 }
+ul > .rise:nth-child(2) { --stagger: 1 }
+ul > .rise:nth-child(3) { --stagger: 2 }
+ul > .rise:nth-child(4) { --stagger: 3 }
+ul > .rise:nth-child(5) { --stagger: 4 }
+ul > .rise:nth-child(6) { --stagger: 5 }
+ul > .rise:nth-child(7) { --stagger: 6 }
+ul > .rise:nth-child(n + 8) { --stagger: 7 }
+
 /* dosednutí fajfky po dokončení úkolu */
 @keyframes pop {
   0% {
@@ -181,7 +194,7 @@ select {
   animation: roll-in 0.3s var(--ease-glide) both;
 }
 
-/* záblesk průběhu — světlo přeletí náplní baru при každém dokončení */
+/* záblesk průběhu — světlo přeletí náplní baru při každém dokončení */
 @keyframes bar-pulse {
   from {
     opacity: 0.85;
@@ -227,7 +240,7 @@ select {
 @keyframes view-in {
   from {
     opacity: 0;
-    transform: translate(var(--vx, 0px), 6px) scale(0.995);
+    transform: translate(var(--vx, 0px), 8px) scale(0.985);
   }
   to {
     opacity: 1;
@@ -236,7 +249,16 @@ select {
 }
 
 .view-enter {
-  animation: view-in 0.32s var(--ease-glide) both;
+  animation: view-in 0.36s var(--ease-ios) both;
+}
+
+/* Ťuknutí do řádku seznamu: krátké dosednutí místo prostého podbarvení.
+   Transform jen na sobě, takže sousední řádky zůstanou v klidu. */
+.press-row {
+  transition: transform 0.16s var(--ease-glide), background-color 0.15s;
+}
+.press-row:active {
+  transform: scale(0.985);
 }
 
 /* iOS push-back: obsah pod otevřeným sheetem couvne do hloubky.
@@ -513,6 +535,10 @@ body:has(.sheet-backdrop:not(.closing)) .app-shell {
   .sheet-backdrop.closing,
   .sheet-backdrop.closing .sheet-panel {
     animation: none;
+  }
+  /* dosednutí řádku je transition, ne animace — vypnout zvlášť */
+  .press-row:active {
+    transform: none;
   }
   .check-path {
     stroke-dashoffset: 0;

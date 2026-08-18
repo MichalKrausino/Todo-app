@@ -72,7 +72,7 @@ export function MonthPicker({
   const keep = (e: React.PointerEvent) => e.preventDefault()
 
   return (
-    <div className="rise mb-2 rounded-xl bg-card p-2.5 shadow-card">
+    <div className="rise mb-2 rounded-2xl bg-card p-2.5 shadow-card">
       <div className="mb-1 flex items-center justify-between">
         <button
           type="button"

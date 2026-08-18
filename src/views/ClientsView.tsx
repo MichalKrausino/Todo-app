@@ -146,14 +146,14 @@ function ClientList({
       <ProjectsOverview clients={clients} open={open} onSelect={onSelect} />
 
       {clients.length > 0 && <h2 className="section-label mb-2">klienti a oblasti</h2>}
-      <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{clients.map(item)}</ul>
+      <ul className="rise divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{clients.map(item)}</ul>
 
       {archived.length > 0 && (
         <section>
           <h2 className="mb-2 section-label">
             Archivované · {archived.length}
           </h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card opacity-60 shadow-card">{archived.map(item)}</ul>
+          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card opacity-60 shadow-card">{archived.map(item)}</ul>
         </section>
       )}
     </div>
@@ -223,7 +223,7 @@ function ProjectsOverview({
       {adding && <NewProjectForm clients={clients} onDone={() => setAdding(false)} />}
 
       {active.length > 0 && (
-        <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+        <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
           {active.map((p) => {
             const client = clientById.get(p.clientId)!
             const openCount = openByProject.get(p.id) ?? 0
@@ -304,7 +304,7 @@ function NewProjectForm({ clients, onDone }: { clients: Client[]; onDone: () => 
   }
 
   return (
-    <form onSubmit={submit} className="rise mb-3 space-y-2 rounded-xl bg-card p-3 shadow-card">
+    <form onSubmit={submit} className="rise mb-3 space-y-2 rounded-2xl bg-card p-3 shadow-card">
       <input
         autoFocus
         value={name}
@@ -567,7 +567,7 @@ function ClientDetail({
 
       <header className="pr-24">
         {renaming ? (
-          <div className="rise space-y-2 rounded-xl bg-card p-3 shadow-card">
+          <div className="rise space-y-2 rounded-2xl bg-card p-3 shadow-card">
             <input
               autoFocus
               value={draftName}
@@ -664,7 +664,7 @@ function ClientDetail({
         </section>
       )}
 
-      <section className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+      <section className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
         <div className="flex items-center justify-between gap-3 px-4 py-2.5">
           <div className="text-sm">
             <div className="font-medium">Pravidelná kontrola</div>
@@ -716,7 +716,7 @@ function ClientDetail({
       {noProject.length > 0 && (
         <section>
           <h2 className="mb-2 section-label">Úkoly</h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{noProject.map(row)}</ul>
+          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{noProject.map(row)}</ul>
         </section>
       )}
 
@@ -816,7 +816,7 @@ function ClientDetail({
               </div>
             </div>
             {projectTasks.length > 0 ? (
-              <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{projectTasks.map(row)}</ul>
+              <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{projectTasks.map(row)}</ul>
             ) : (
               <p className="rounded-2xl border border-dashed border-line px-3 py-3 text-xs text-ink-faint">
                 Zatím bez úkolů — přiřaď je úkolu v detailu.

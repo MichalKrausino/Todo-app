@@ -391,7 +391,7 @@ export function QuickAdd({
 
           {/* mini agenda vybraného dne: schůzky z kalendáře + úkoly + volno */}
           {previewDay && (
-            <div className="rise mb-2 overflow-hidden rounded-xl bg-card shadow-card">
+            <div className="rise mb-2 overflow-hidden rounded-2xl bg-card shadow-card">
               <div className="flex items-baseline justify-between gap-2 border-b border-line px-3 py-2">
                 <span className="text-[13px] font-semibold text-ink first-letter:uppercase">
                   {formatDayLabel(previewDay)}

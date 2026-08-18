@@ -32,13 +32,13 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
         </header>
 
         <div className="grid grid-cols-2 gap-3">
-          <div className="rise rounded-xl bg-card px-4 py-3 shadow-card" style={stagger(1)}>
+          <div className="rise rounded-2xl bg-card px-4 py-3 shadow-card" style={stagger(1)}>
             <div className="text-3xl font-bold tracking-tight">
               <span className="pop-soft inline-block">{stats.completedCount}</span>
             </div>
             <div className="mt-0.5 text-[13px] text-ink-soft">hotových úkolů</div>
           </div>
-          <div className="rise rounded-xl bg-card px-4 py-3 shadow-card" style={stagger(2)}>
+          <div className="rise rounded-2xl bg-card px-4 py-3 shadow-card" style={stagger(2)}>
             <div className="text-3xl font-bold tracking-tight">
               <span className="pop-soft inline-block">{rate === null ? '—' : `${rate} %`}</span>
             </div>
@@ -49,7 +49,7 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
         </div>
 
         {stats.completedCount === 0 && (
-          <p className="rise rounded-xl bg-card px-4 py-3 text-sm text-ink-soft shadow-card" style={stagger(3)}>
+          <p className="rise rounded-2xl bg-card px-4 py-3 text-sm text-ink-soft shadow-card" style={stagger(3)}>
             Tenhle týden se nic nedokončilo. Příští týden je nový list.
           </p>
         )}
@@ -57,7 +57,7 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
         {stats.completedByClient.length > 0 && (
           <section className="rise" style={stagger(3)}>
             <h3 className="section-label mb-2">komu šla práce</h3>
-            <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
               {stats.completedByClient.slice(0, 5).map(({ client, count, projects: byProject }) => (
                 <li key={client?.id ?? 'none'} className="px-4 py-2.5">
                   <div className="flex items-center gap-2.5">
@@ -84,7 +84,7 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
         {stats.mostPostponed.length > 0 && (
           <section className="rise" style={stagger(4)}>
             <h3 className="section-label mb-2">nejvíc odkládáš</h3>
-            <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
               {stats.mostPostponed.map((t) => (
                 <li key={t.id} className="flex items-baseline gap-2 px-4 py-2.5">
                   <span className="min-w-0 flex-1 truncate text-[15px]">{t.title}</span>
@@ -116,7 +116,7 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
           <h3 className="section-label mb-2">
             příštích 7 dní · {nextTotal} {nextTotal === 1 ? 'úkol' : nextTotal < 5 ? 'úkoly' : 'úkolů'}
           </h3>
-          <div className="rounded-xl bg-card px-4 pb-2.5 pt-4 shadow-card">
+          <div className="rounded-2xl bg-card px-4 pb-2.5 pt-4 shadow-card">
             <div className="flex items-end justify-between gap-2">
               {stats.nextDays.map((d, i) => (
                 <div key={d.date} className="flex flex-1 flex-col items-center gap-1.5">

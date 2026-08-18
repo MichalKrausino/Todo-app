@@ -212,7 +212,7 @@ export function TaskRow({
       )}
 
       <div
-        className="relative flex items-start gap-3 bg-card px-4 py-3 transition-colors duration-150 hover:bg-well/40 active:bg-well/60"
+        className="press-row relative flex items-start gap-3 bg-card px-4 py-3 hover:bg-well/40 active:bg-well/60"
         style={{
           transform: `translateX(${dx}px)`,
           transition: dragging ? 'none' : 'transform 0.35s var(--ease-spring)',

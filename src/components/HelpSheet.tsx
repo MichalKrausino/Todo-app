@@ -46,7 +46,7 @@ export function HelpSheet({ onClose }: { onClose: () => void }) {
 
           <section>
             <h3 className="section-label mb-2">psaní úkolů</h3>
-            <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
               {SYNTAX.map((s) => (
                 <li key={s.example} className="px-4 py-2.5">
                   <span className="block text-[15px] text-ink">„{s.example}"</span>
@@ -58,7 +58,7 @@ export function HelpSheet({ onClose }: { onClose: () => void }) {
 
           <section>
             <h3 className="section-label mb-2">gesta a ťuknutí</h3>
-            <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
               {GESTURES.map((g) => (
                 <li key={g.what} className="px-4 py-2.5">
                   <span className="block text-[15px] text-ink">{g.what}</span>
@@ -70,7 +70,7 @@ export function HelpSheet({ onClose }: { onClose: () => void }) {
 
           <section>
             <h3 className="section-label mb-2">co appka dělá sama</h3>
-            <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
               {AUTOMATIC.map((a) => (
                 <li key={a} className="px-4 py-2.5 text-[14px] text-ink-soft">
                   {a}

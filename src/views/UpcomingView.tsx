@@ -206,7 +206,7 @@ export function UpcomingView({
               {workMin > 0 && ` · ~${minutesToLabel(workMin)}`}
             </h2>
 
-            <div className="overflow-hidden rounded-xl bg-card shadow-card">
+            <div className="overflow-hidden rounded-2xl bg-card shadow-card">
               {/* schůzky dne — Plán teď ukazuje i to, co je v kalendáři */}
               {dayEvents.length > 0 && (
                 <ul className="divide-y divide-line border-b border-line bg-well/30">
@@ -235,7 +235,7 @@ export function UpcomingView({
       {inbox.length > 0 && (
         <section className="rise" style={{ '--stagger': Math.min(dates.length + 1, 9) } as React.CSSProperties}>
           <h2 className="section-label mb-2">bez termínu · {inbox.length}</h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{inbox.map((t) => row(t, true))}</ul>
+          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{inbox.map((t) => row(t, true))}</ul>
         </section>
       )}
     </div>
