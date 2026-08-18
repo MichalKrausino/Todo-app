@@ -19,6 +19,7 @@ import { isOverloaded, plannedMinutes } from '../lib/capacity'
 import { formatFullDate, fromISODate, todayISO } from '../lib/dates'
 import { WORK_END, WORK_START, freeGaps, freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { computeSignals } from '../lib/signals'
+import { HelpSheet } from '../components/HelpSheet'
 import { ShutdownSheet } from '../components/ShutdownSheet'
 import { SignalsBlock } from '../components/SignalsBlock'
 import { TaskRow } from '../components/TaskRow'
@@ -55,6 +56,13 @@ const dayIndex = (startDay: string, endDay: string, today: string) => {
   const total = Math.round((to - from) / day) + 1
   return { index: Math.round((now - from) / day) + 1, total }
 }
+
+// Příklady do prázdného stavu — každý ukazuje jinou schopnost parseru.
+const EXAMPLES = [
+  'zítra poslat report',
+  'v pátek fakturace !!',
+  'zavolat Pepovi do 14:00',
+]
 
 // Kolik schůzek se ukáže, než se seznam sbalí.
 const EVENTS_PREVIEW = 4
@@ -95,6 +103,16 @@ export function TodayView({
   const [batchClient, setBatchClient] = useState<string | null>(null)
   // Večerní uzávěrka (shutdown ritual) — uzavření dne se pamatuje do půlnoci.
   const [shutdownOpen, setShutdownOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
+  // Jednorázový tip na swipe gesta — jinak je nikdo neobjeví. Zmizí
+  // navždy po zavření nebo po prvním použití gesta.
+  const [gestureTip, setGestureTip] = useState(
+    () => localStorage.getItem('todo.gestureTipSeen') !== '1',
+  )
+  const dismissTip = () => {
+    localStorage.setItem('todo.gestureTipSeen', '1')
+    setGestureTip(false)
+  }
   const [dayClosed, setDayClosed] = useState(
     () => localStorage.getItem('todo.dayClosed') === todayISO(),
   )
@@ -609,9 +627,31 @@ export function TodayView({
       <section className="rise" style={stagger(6)}>
         {visTodays.length > 0 && <h2 className="section-label mb-2">dnes · {visTodays.length}</h2>}
         {visTodays.length > 0 ? (
-          <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
-            {visTodays.map((t) => row(t, false))}
-          </ul>
+          <>
+            <ul className="divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">
+              {visTodays.map((t) => row(t, false))}
+            </ul>
+            {gestureTip && (
+              <div className="rise mt-2 flex items-start gap-2 rounded-xl bg-accent-wash px-3 py-2">
+                <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-accent-deep" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 12h6M7 9l-3 3 3 3M20 12h-6M17 9l3 3-3 3" />
+                </svg>
+                <span className="flex-1 text-[13px] text-accent-deep">
+                  Tip: přejeď po úkolu <strong className="font-semibold">doprava</strong> = hotovo,{' '}
+                  <strong className="font-semibold">doleva</strong> = odložit na zítra.
+                </span>
+                <button
+                  aria-label="Skrýt tip"
+                  onClick={dismissTip}
+                  className="-m-1 shrink-0 p-1 text-accent-deep/70 transition-transform duration-150 active:scale-90"
+                >
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </>
         ) : batchClient ? (
           visOverdue.length === 0 &&
           pinned.length === 0 && (
@@ -622,17 +662,41 @@ export function TodayView({
         ) : (
           overdue.length === 0 &&
           pinned.length === 0 && (
-            <div className="rounded-2xl bg-card px-6 py-10 text-center shadow-card">
+            <div className="rounded-2xl bg-card px-5 py-8 text-center shadow-card">
               <svg viewBox="0 0 48 48" className="breathe mx-auto h-12 w-12 text-accent/70" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="24" cy="24" r="15" />
                 <path d="M24 4v5M24 39v5M4 24h5M39 24h5M9.9 9.9l3.5 3.5M34.6 34.6l3.5 3.5M9.9 38.1l3.5-3.5M34.6 13.4l3.5-3.5" />
               </svg>
               <p className="display mt-3 text-lg font-medium">Čistý stůl</p>
-              <p className="mt-1 text-sm text-ink-soft">
-                Na dnešek nic neplánuješ. Přidej úkol polem dole,
-                <br />
-                nebo si užij klid.
-              </p>
+              <p className="mt-1 text-sm text-ink-soft">Na dnešek nic neplánuješ.</p>
+
+              {/* Učící prázdný stav: příklady se ťuknutím vloží do pole,
+                  takže se syntaxe rychlého zadávání naučí sama od sebe. */}
+              {open.length === 0 && done.length === 0 && (
+                <>
+                  <p className="mt-4 text-[13px] font-medium text-ink-soft">Zkus napsat třeba:</p>
+                  <div className="mt-2 flex flex-col gap-1.5">
+                    {EXAMPLES.map((ex) => (
+                      <button
+                        key={ex}
+                        onClick={() =>
+                          window.dispatchEvent(new CustomEvent('todo:prefill', { detail: ex }))
+                        }
+                        className="rounded-full bg-well px-3 py-2 text-[13px] text-ink transition-transform duration-150 active:scale-95"
+                      >
+                        „{ex}"
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <button
+                onClick={() => setHelpOpen(true)}
+                className="mt-4 text-[13px] font-medium text-accent transition-transform duration-150 active:scale-95"
+              >
+                Jak to funguje
+              </button>
             </div>
           )
         )}
@@ -657,6 +721,7 @@ export function TodayView({
         </section>
       )}
 
+      {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
       {reviewOpen && <WeeklyReviewSheet onClose={() => setReviewOpen(false)} />}
       {shutdownOpen && (
         <ShutdownSheet

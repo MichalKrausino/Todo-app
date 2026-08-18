@@ -19,6 +19,7 @@ import {
   syncNow,
 } from '../sync/engine'
 import { getSyncStatus, subscribeSyncStatus, type SyncPhase } from '../sync/status'
+import { HelpSheet } from './HelpSheet'
 import { Sheet } from './Sheet'
 
 const PHASE_LABELS: Record<SyncPhase, string> = {
@@ -37,6 +38,7 @@ export function useSyncStatus() {
 }
 
 export function SyncSheet({ onClose }: { onClose: () => void }) {
+  const [helpOpen, setHelpOpen] = useState(false)
   const status = useSyncStatus()
 
   return (
@@ -114,6 +116,21 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
         )}
 
         <BackupSection />
+
+        {/* Nápověda patří sem — je to jediné „nastavení" v appce. */}
+        <button
+          onClick={() => setHelpOpen(true)}
+          className="flex w-full items-center justify-between rounded-xl border border-line px-4 py-3 text-left transition-transform duration-150 active:scale-[0.99]"
+        >
+          <span>
+            <span className="block text-[15px] font-medium">Jak to funguje</span>
+            <span className="text-[13px] text-ink-soft">Psaní úkolů, gesta a co appka dělá sama</span>
+          </span>
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint/70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
+        {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
         </>
       )}
     </Sheet>

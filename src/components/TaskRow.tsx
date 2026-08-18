@@ -122,6 +122,8 @@ export function TaskRow({
     // prosté ťuknutí neřešíme tady — zavření odhalených akcí dělá
     // onClickCapture, který běží až po pointerup a viděl by už zavřeno
     if (!d.active) return
+    // první opravdové gesto → nápovědný tip na Dnes už není potřeba
+    localStorage.setItem('todo.gestureTipSeen', '1')
     if (d.raw > SWIPE_COMMIT) {
       handleToggle()
       setDx(0)

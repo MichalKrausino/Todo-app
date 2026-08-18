@@ -59,6 +59,21 @@ export function QuickAdd({
 
   useEffect(() => () => clearTimeout(undoTimer.current), [])
 
+  // Příklad z prázdného stavu na Dnes se vloží rovnou do pole a zaostří
+  // ho — uživatel vidí, co parser z věty vytáhne, a jen odešle.
+  const inputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const fill = (e: Event) => {
+      const text = (e as CustomEvent<string>).detail
+      if (typeof text !== 'string') return
+      setText(text)
+      setOverrides({})
+      inputRef.current?.focus()
+    }
+    window.addEventListener('todo:prefill', fill)
+    return () => window.removeEventListener('todo:prefill', fill)
+  }, [])
+
   const parsed = useMemo(
     () => (text.trim() ? parseQuickAdd(text, clients, new Date(), projects) : null),
     [text, clients, projects],
@@ -540,6 +555,7 @@ export function QuickAdd({
 
       <form onSubmit={submit} className="flex items-center gap-2">
         <input
+          ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Např. „zítra poslat report @klient“"
