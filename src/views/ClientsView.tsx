@@ -7,7 +7,9 @@ import {
   addProject,
   addTask,
   allProjects,
+  allTasks,
   archivedClients,
+  clientAllTasks,
   clientOpenTasks,
   clientProjects,
   completeTask,
@@ -30,7 +32,7 @@ import {
   type CheckFrequency,
 } from '../db/clientCheck'
 import { CLIENT_COLORS, KIND_LABELS } from '../lib/labels'
-import { daysSince, formatDayLabel } from '../lib/dates'
+import { daysSince, formatDayLabel, todayISO } from '../lib/dates'
 import { parseQuickAdd } from '../lib/quickAdd'
 import { neglectedDays } from '../lib/signals'
 import { TaskRow } from '../components/TaskRow'
@@ -112,7 +114,7 @@ function ClientList({
 
   return (
     <div className="space-y-4">
-      <header className="flex items-center justify-between pr-12">
+      <header className="flex items-center justify-between pr-24">
         <div>
           <h1 className="display text-[2.1rem] font-semibold leading-tight">Klienti</h1>
           <p className="text-sm text-ink-soft">Klienti i oblasti jako „Interní“ nebo „Osobní“</p>
@@ -143,7 +145,7 @@ function ClientList({
 
       <ProjectsOverview clients={clients} open={open} onSelect={onSelect} />
 
-      {clients.length > 0 && <h2 className="section-label -mb-2">klienti a oblasti</h2>}
+      {clients.length > 0 && <h2 className="section-label mb-2">klienti a oblasti</h2>}
       <ul className="rise divide-y divide-line overflow-hidden rounded-xl bg-card shadow-card">{clients.map(item)}</ul>
 
       {archived.length > 0 && (
@@ -171,6 +173,8 @@ function ProjectsOverview({
   onSelect: (clientId: string) => void
 }) {
   const projects = useLiveQuery(allProjects, []) ?? []
+  // i hotové úkoly — postup projektu bez nich nedává smysl
+  const every = useLiveQuery(allTasks, []) ?? []
   const [adding, setAdding] = useState(false)
 
   const clientById = new Map(clients.map((c) => [c.id, c]))
@@ -186,6 +190,14 @@ function ProjectsOverview({
   for (const t of open) {
     if (t.projectId) openByProject.set(t.projectId, (openByProject.get(t.projectId) ?? 0) + 1)
   }
+  const doneByProject = new Map<string, number>()
+  const totalByProject = new Map<string, number>()
+  for (const t of every) {
+    if (!t.projectId) continue
+    totalByProject.set(t.projectId, (totalByProject.get(t.projectId) ?? 0) + 1)
+    if (t.status === 'done') doneByProject.set(t.projectId, (doneByProject.get(t.projectId) ?? 0) + 1)
+  }
+  const today = todayISO()
 
   if (active.length === 0 && !adding) {
     // Bez projektů jen nenápadná nabídka — blok si na nic nehraje.
@@ -215,6 +227,9 @@ function ProjectsOverview({
           {active.map((p) => {
             const client = clientById.get(p.clientId)!
             const openCount = openByProject.get(p.id) ?? 0
+            const done = doneByProject.get(p.id) ?? 0
+            const total = totalByProject.get(p.id) ?? 0
+            const late = Boolean(p.dueDate && p.dueDate < today && done < total)
             return (
               <li key={p.id}>
                 <button
@@ -224,7 +239,27 @@ function ProjectsOverview({
                   <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: client.color }} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-medium">{p.name}</span>
-                    <span className="text-xs text-ink-faint">{client.name}</span>
+                    <span className="flex flex-wrap items-center gap-x-2 text-xs">
+                      <span className="text-ink-faint">{client.name}</span>
+                      {p.dueDate && (
+                        <span className={late ? 'font-medium text-danger' : 'text-ink-soft'}>
+                          do {formatDayLabel(p.dueDate)}
+                        </span>
+                      )}
+                      {total > 0 && (
+                        <span className="text-ink-faint">
+                          {done} z {total}
+                        </span>
+                      )}
+                    </span>
+                    {total > 0 && (
+                      <span className="mt-1 block h-1 w-full overflow-hidden rounded-full bg-well">
+                        <span
+                          className="block h-full rounded-full bg-accent transition-[width] duration-500 ease-glide"
+                          style={{ width: `${Math.round((done / total) * 100)}%` }}
+                        />
+                      </span>
+                    )}
                   </span>
                   {openCount > 0 ? (
                     <span className="rounded-full bg-well px-2 py-0.5 text-xs font-medium text-ink-soft">
@@ -407,6 +442,8 @@ function ClientDetail({
   const client = useLiveQuery(() => getClient(id), [id])
   const projects = useLiveQuery(() => clientProjects(id), [id]) ?? []
   const tasks = useLiveQuery(() => clientOpenTasks(id), [id]) ?? []
+  // hotové úkoly jen kvůli postupu projektů („3 z 8 hotovo")
+  const everyTask = useLiveQuery(() => clientAllTasks(id), [id]) ?? []
   const templates = useLiveQuery(activeTemplates, []) ?? []
   const checkTask = useLiveQuery(() => getClientCheckTask(id), [id])
   const [taskText, setTaskText] = useState('')
@@ -418,6 +455,8 @@ function ClientDetail({
   const [draftName, setDraftName] = useState('')
   const [editProject, setEditProject] = useState<string | null>(null)
   const [draftProject, setDraftProject] = useState('')
+  const [draftGoal, setDraftGoal] = useState('')
+  const [draftDue, setDraftDue] = useState('')
 
   if (!client || client.deletedAt) return null
 
@@ -499,7 +538,15 @@ function ClientDetail({
 
   const saveProject = (projectId: string) => {
     const name = draftProject.trim()
-    if (name) void updateProject(projectId, { name })
+    if (!name) {
+      setEditProject(null)
+      return
+    }
+    void updateProject(projectId, {
+      name,
+      goal: draftGoal.trim() || undefined,
+      dueDate: draftDue || undefined,
+    })
     setEditProject(null)
   }
 
@@ -518,7 +565,7 @@ function ClientDetail({
         Klienti
       </button>
 
-      <header className="pr-10">
+      <header className="pr-24">
         {renaming ? (
           <div className="rise space-y-2 rounded-xl bg-card p-3 shadow-card">
             <input
@@ -675,35 +722,84 @@ function ClientDetail({
 
       {projects.map((p) => {
         const projectTasks = sortTasks(tasks.filter((t) => t.projectId === p.id))
+        // postup počítá i hotové úkoly — jinak by projekt ke konci
+        // vypadal jako prázdný místo jako dotažený
+        const allOfProject = everyTask.filter((t) => t.projectId === p.id)
+        const projectDone = allOfProject.filter((t) => t.status === 'done').length
+        const projectTotal = allOfProject.length
+        const projectLate = Boolean(p.dueDate && p.dueDate < todayISO() && projectDone < projectTotal)
         return (
           <section key={p.id}>
             <div className="mb-2 flex items-baseline justify-between gap-2">
               {editProject === p.id ? (
                 // projekt šel dřív jen založit a smazat — překlep v názvu
                 // znamenal rozpad vazby na úkoly
-                <input
-                  autoFocus
-                  value={draftProject}
-                  onChange={(e) => setDraftProject(e.target.value)}
-                  onBlur={() => saveProject(p.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') saveProject(p.id)
-                    if (e.key === 'Escape') setEditProject(null)
-                  }}
-                  className="min-w-0 flex-1 rounded-lg border border-line bg-card px-2.5 py-1 text-[16px] outline-none focus:border-accent/60"
-                />
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <input
+                    autoFocus
+                    aria-label="Název projektu"
+                    value={draftProject}
+                    onChange={(e) => setDraftProject(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveProject(p.id)
+                      if (e.key === 'Escape') setEditProject(null)
+                    }}
+                    className="w-full rounded-lg border border-line bg-card px-2.5 py-1.5 text-[16px] outline-none focus:border-accent/60"
+                  />
+                  <input
+                    aria-label="Cíl projektu"
+                    placeholder="Cíl — čeho chceš dosáhnout"
+                    value={draftGoal}
+                    onChange={(e) => setDraftGoal(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveProject(p.id)
+                      if (e.key === 'Escape') setEditProject(null)
+                    }}
+                    className="w-full rounded-lg border border-line bg-card px-2.5 py-1.5 text-[16px] outline-none focus:border-accent/60"
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 text-xs font-medium text-ink-soft">Termín</span>
+                    <input
+                      type="date"
+                      aria-label="Termín projektu"
+                      value={draftDue}
+                      onChange={(e) => setDraftDue(e.target.value)}
+                      className="min-w-0 flex-1 rounded-lg border border-line bg-card px-2.5 py-1.5 text-[16px] outline-none focus:border-accent/60"
+                    />
+                    <button
+                      onClick={() => saveProject(p.id)}
+                      className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-card transition-transform duration-150 active:scale-95"
+                    >
+                      Uložit
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <button
                   className="min-w-0 flex-1 text-left"
                   onClick={() => {
                     setDraftProject(p.name)
+                    setDraftGoal(p.goal ?? '')
+                    setDraftDue(p.dueDate ?? '')
                     setEditProject(p.id)
                   }}
                 >
-                  <h2 className="section-label truncate">
-                    {p.name}
-                    {p.goal && <span className="ml-2 font-normal normal-case text-ink-faint">{p.goal}</span>}
-                  </h2>
+                  <h2 className="section-label truncate">{p.name}</h2>
+                  {(p.goal || p.dueDate || projectTasks.length > 0 || projectDone > 0) && (
+                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] normal-case">
+                      {p.goal && <span className="text-ink-soft">{p.goal}</span>}
+                      {p.dueDate && (
+                        <span className={projectLate ? 'font-medium text-danger' : 'text-ink-soft'}>
+                          do {formatDayLabel(p.dueDate)}
+                        </span>
+                      )}
+                      {projectTotal > 0 && (
+                        <span className="text-ink-faint">
+                          {projectDone} z {projectTotal} hotovo
+                        </span>
+                      )}
+                    </span>
+                  )}
                 </button>
               )}
               <div className="flex shrink-0 gap-2.5">

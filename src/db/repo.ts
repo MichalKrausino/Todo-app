@@ -305,6 +305,15 @@ export const doneOn = (dateISO: string) =>
     .filter((t) => !t.deletedAt && (t.completedAt ?? '').startsWith(dateISO))
     .toArray()
 
+// Všechny úkoly klienta včetně hotových — podklad pro postup projektů
+// („3 z 8 hotovo"). Tombstony se pořád filtrují.
+export const clientAllTasks = (clientId: string) =>
+  db.tasks
+    .where('clientId')
+    .equals(clientId)
+    .filter((t) => !t.deletedAt)
+    .toArray()
+
 export const clientOpenTasks = (clientId: string) =>
   db.tasks
     .where('clientId')
