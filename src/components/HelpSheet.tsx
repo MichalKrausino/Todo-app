@@ -24,6 +24,13 @@ const GESTURES: Array<{ what: string; how: string }> = [
   { what: 'Připnout v detailu úkolu', how: 'dá úkol mezi Top 3 dne' },
 ]
 
+const NOTIFICATIONS: Array<{ when: string; what: string }> = [
+  { when: 'Ráno v 7:00', what: 'Návrh dne — co dnes dává smysl vzít první' },
+  { when: '15 minut předem', what: 'Připomínka úkolu, kterému jsi dal čas („do 14:00")' },
+  { when: 'Všední den v 17:30', what: 'Uzávěrka dne, když ještě něco zbývá' },
+  { when: 'Neděle v 18:00', what: 'Ohlédnutí za týdnem' },
+]
+
 const AUTOMATIC: string[] = [
   'Ráno spočítá návrh dne a pošle upozornění (jde zapnout v Synchronizaci).',
   'Hlídá klienty, na které se dlouho nesáhlo, a projekty bez dalšího kroku.',
@@ -66,6 +73,22 @@ export function HelpSheet({ onClose }: { onClose: () => void }) {
                 </li>
               ))}
             </ul>
+          </section>
+
+          <section>
+            <h3 className="section-label mb-2">kdy se ozve</h3>
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
+              {NOTIFICATIONS.map((n) => (
+                <li key={n.when} className="px-4 py-2.5">
+                  <span className="block text-[15px] text-ink">{n.when}</span>
+                  <span className="text-[13px] text-ink-soft">{n.what}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5 px-1 text-[12px] text-ink-faint">
+              Upozornění se zapínají v Synchronizaci. Když se zrovna díváš do appky,
+              nepřijdou — jen se srovná číslo na ikoně.
+            </p>
           </section>
 
           <section>

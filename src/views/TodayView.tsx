@@ -137,11 +137,14 @@ export function TodayView({
     }
   }, [])
 
-  // Nedělní push (#review) vede rovnou do týdenního ohlédnutí.
+  // Deep-linky z notifikací: #review otevře týdenní ohlédnutí,
+  // #shutdown podvečerní uzávěrku dne.
   useEffect(() => {
     const check = () => {
-      if (window.location.hash !== '#review') return
-      setReviewOpen(true)
+      const hash = window.location.hash
+      if (hash !== '#review' && hash !== '#shutdown') return
+      if (hash === '#review') setReviewOpen(true)
+      else setShutdownOpen(true)
       history.replaceState(null, '', window.location.pathname + window.location.search)
     }
     check()

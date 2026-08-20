@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Task } from './db/types'
+import { getTask } from './db/repo'
 import { QuickAdd } from './components/QuickAdd'
 import { SearchSheet } from './components/SearchSheet'
 import { SyncButton, SyncSheet } from './components/SyncSheet'
@@ -71,11 +72,20 @@ export default function App() {
     setScrolled(false)
   }, [tab])
 
-  // Deep-link z nedělní push notifikace (#review): přepnout na Dnes,
-  // samotné ohlédnutí si otevře TodayView (a hash uklidí).
+  // Deep-linky z notifikací. #review a #shutdown si přebírá TodayView
+  // (a hash uklidí), tady stačí přepnout na Dnes. #task-{id} otevře
+  // rovnou detail konkrétního úkolu — připomínka termínu vede k němu.
   useEffect(() => {
     const check = () => {
-      if (window.location.hash === '#review') setTab('today')
+      const hash = window.location.hash
+      if (hash === '#review' || hash === '#shutdown') setTab('today')
+      const task = /^#task-(.+)$/.exec(hash)
+      if (task) {
+        history.replaceState(null, '', window.location.pathname + window.location.search)
+        void getTask(task[1]).then((t) => {
+          if (t && !t.deletedAt) setEditing(t)
+        })
+      }
     }
     check()
     window.addEventListener('hashchange', check)

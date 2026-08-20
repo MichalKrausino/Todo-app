@@ -23,24 +23,31 @@ self.addEventListener('push', (event) => {
   } catch {
     payload = { body: event.data.text() }
   }
-  const work: Promise<unknown>[] = [
-    self.registration.showNotification(payload.title ?? 'Todo', {
-      body: payload.body,
-      icon: 'icon-192.png',
-      badge: 'icon-192.png',
-      data: { url: payload.url },
-      tag: payload.tag ?? 'todo', // stejný druh notifikace se nahrazuje, nekupí
-    }),
-  ]
-  // Odznak na ikoně (iOS 16.4+): server posílá počet úkolů na dnes + po termínu.
-  if (typeof payload.badge === 'number' && 'setAppBadge' in self.navigator) {
-    work.push(
-      payload.badge > 0
-        ? self.navigator.setAppBadge(payload.badge).catch(() => {})
-        : self.navigator.clearAppBadge().catch(() => {}),
-    )
-  }
-  event.waitUntil(Promise.all(work))
+  event.waitUntil(
+    (async () => {
+      // Odznak na ikoně (iOS 16.4+): server posílá počet úkolů na dnes
+      // a po termínu — drží se čerstvý i bez otevření appky.
+      if (typeof payload.badge === 'number' && 'setAppBadge' in self.navigator) {
+        await (payload.badge > 0
+          ? self.navigator.setAppBadge(payload.badge).catch(() => {})
+          : self.navigator.clearAppBadge().catch(() => {}))
+      }
+
+      // Když se uživatel na appku právě dívá, notifikace by jen překážela
+      // — obsah vidí na obrazovce. Odznak se přesto srovná (výše).
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      const watching = windows.some((c) => c.visibilityState === 'visible' && c.focused)
+      if (watching) return
+
+      await self.registration.showNotification(payload.title ?? 'Todo', {
+        body: payload.body,
+        icon: 'icon-192.png',
+        badge: 'icon-192.png',
+        data: { url: payload.url },
+        tag: payload.tag ?? 'todo', // stejný druh notifikace se nahrazuje, nekupí
+      })
+    })(),
+  )
 })
 
 self.addEventListener('notificationclick', (event) => {

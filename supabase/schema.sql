@@ -83,6 +83,15 @@ alter table public.push_subscriptions enable row level security;
 -- /functions/v1/morning-plan denně v 5:00 UTC (7:00 léto / 6:00 zima).
 -- Funkce skóruje kandidáty (termíny, priority, odklady, zanedbaní klienti),
 -- uloží DayPlan do day_plans (sync ho stáhne do appky) a pošle push.
+--
+-- Průběžná upozornění: edge funkce /functions/v1/reminders?kind=…
+-- (iOS webovým appkám nedovolí naplánovat notifikaci lokálně, takže
+-- všechno časované musí přijít pushem ze serveru). Tři joby:
+--   reminders-due      */10 5-16 * * *   úkol s časem začne za ~15 min
+--   reminders-shutdown 30 15 * * 1-5     podvečerní uzávěrka dne
+--   reminders-review   0 16 * * 0        nedělní ohlédnutí za týdnem
+-- Časy jsou v UTC (léto = +2 h pražského času). Okno pro `due` je přesně
+-- jeden krok cronu, takže tentýž úkol nespadne do dvou běhů.
 
 -- ---------------------------------------------------------------------------
 -- Fáze 3: Google kalendář — tokeny a OAuth údaje

@@ -295,6 +295,9 @@ export const openTasks = () =>
 // Všechny živé úkoly včetně dokončených — podklad týdenní zpětné vazby.
 export const allLiveTasks = () => db.tasks.filter((t) => !t.deletedAt).toArray()
 
+// Jeden úkol podle id — deep-link z notifikace („#task-{id}").
+export const getTask = (id: string) => db.tasks.get(id)
+
 // Pro globální vyhledávání — všechny nesmazané úkoly včetně hotových.
 export const allTasks = () => db.tasks.filter((t) => !t.deletedAt).toArray()
 
