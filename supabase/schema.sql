@@ -87,9 +87,12 @@ alter table public.push_subscriptions enable row level security;
 -- Průběžná upozornění: edge funkce /functions/v1/reminders?kind=…
 -- (iOS webovým appkám nedovolí naplánovat notifikaci lokálně, takže
 -- všechno časované musí přijít pushem ze serveru). Tři joby:
---   reminders-due      */10 5-16 * * *   úkol s časem začne za ~15 min
---   reminders-shutdown 30 15 * * 1-5     podvečerní uzávěrka dne
---   reminders-review   0 16 * * 0        nedělní ohlédnutí za týdnem
+--   reminders-due        */10 5-16 * * *   úkol s časem začne za ~15 min
+--   reminders-checkpoint 0 9,13 * * 1-5    dopolední a odpolední pobídka
+--   reminders-shutdown   30 15 * * 1-5     podvečerní uzávěrka dne
+--   reminders-review     0 16 * * 0        nedělní ohlédnutí za týdnem
+-- Checkpoint pošle JEDNU notifikaci, ale jmenuje konkrétní nejdůležitější
+-- zbylý úkol — úkoly bez času by jinak přes den nikdo nepřipomněl.
 -- Časy jsou v UTC (léto = +2 h pražského času). Okno pro `due` je přesně
 -- jeden krok cronu, takže tentýž úkol nespadne do dvou běhů.
 

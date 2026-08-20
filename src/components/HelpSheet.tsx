@@ -27,6 +27,7 @@ const GESTURES: Array<{ what: string; how: string }> = [
 const NOTIFICATIONS: Array<{ when: string; what: string }> = [
   { when: 'Ráno v 7:00', what: 'Návrh dne — co dnes dává smysl vzít první' },
   { when: '15 minut předem', what: 'Připomínka úkolu, kterému jsi dal čas („do 14:00")' },
+  { when: 'V 11:00 a 15:00', what: 'Pobídka s nejdůležitějším úkolem, který ještě zbývá' },
   { when: 'Všední den v 17:30', what: 'Uzávěrka dne, když ještě něco zbývá' },
   { when: 'Neděle v 18:00', what: 'Ohlédnutí za týdnem' },
 ]

@@ -1,9 +1,13 @@
 // Průběžná upozornění (nad rámec ranního návrhu, Fáze 6).
 //
 // Jedna funkce, tři druhy — vybírá je pg_cron parametrem `kind`:
-//   due      — každých 10 minut v pracovní době; hlásí úkol s časem
-//              deadlineu, který začne za ~15 minut
-//   shutdown — podvečer ve všední den; připomene zbylé úkoly a uzávěrku
+//   due        — každých 10 minut v pracovní době; hlásí úkol s časem
+//                deadlineu, který začne za ~15 minut
+//   checkpoint — dopoledne a odpoledne; JEDNA notifikace, která ale
+//                jmenuje konkrétní nejdůležitější zbylý úkol. Úkoly bez
+//                času by jinak přes den nikdo nepřipomněl, a upozornění
+//                na každý zvlášť by se přestala vnímat
+//   shutdown   — podvečer ve všední den; připomene zbylé úkoly a uzávěrku
 //   review   — v neděli večer; pozvánka na týdenní ohlédnutí
 //
 // Proč server: iOS webovým appkám nedovolí naplánovat notifikaci lokálně,
@@ -68,7 +72,7 @@ interface Payload {
 
 Deno.serve(async (req) => {
   const kind = new URL(req.url).searchParams.get('kind') ?? 'due'
-  if (!['due', 'shutdown', 'review'].includes(kind)) {
+  if (!['due', 'checkpoint', 'shutdown', 'review'].includes(kind)) {
     return Response.json({ error: 'neznámý kind' }, { status: 400 })
   }
 
@@ -143,6 +147,58 @@ Deno.serve(async (req) => {
           body: `Termín ${t.dueTime}${who ? ` · ${who}` : ''}`,
           url: `${APP_URL}#task-${t.id as string}`,
           tag: `due-${t.id as string}`,
+          badge,
+        })
+      }
+    }
+
+    if (kind === 'checkpoint') {
+      // Zbývající úkoly na dnešek (a propadlé). Když je čisto, mlčíme.
+      const left = tasks.filter((t) => {
+        if (t.status !== 'active' && t.status !== 'inbox') return false
+        const d = eff(t)
+        return d !== undefined && d <= today
+      })
+      if (left.length > 0) {
+        const { data: clientRows } = await admin
+          .from('clients')
+          .select('data')
+          .eq('user_id', userId)
+          .is('deleted_at', null)
+        const clientName = new Map(
+          (clientRows ?? [])
+            .map((r) => r.data as Rec)
+            .map((c) => [c.id as string, c.name as string]),
+        )
+
+        // Pořadí důležitosti: připnuté Top 3 vždycky první, pak priorita,
+        // pak propadlé. Úkol BEZ času je jen jazýček na vahách při shodě —
+        // ten s časem má vlastní připomínku, tenhle by jinak zapadl.
+        const weight = (t: Rec): number => {
+          const prio = { critical: 3, high: 2, normal: 1, low: 0 }[t.priority as string] ?? 1
+          const pinned = t.pinnedFor === today ? 100 : 0
+          const late = (eff(t) ?? today) < today ? 15 : 0
+          const untimed = typeof t.dueTime === 'string' ? 0 : 3
+          return pinned + late + prio * 10 + untimed
+        }
+        const star = [...left].sort(
+          (a, b) =>
+            weight(b) - weight(a) ||
+            String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')),
+        )[0]
+        const who = star.clientId ? clientName.get(star.clientId as string) : undefined
+        const others = left.length - 1
+        const parts = [
+          others === 0
+            ? 'Poslední úkol na dnešek'
+            : `Zbývá ještě ${others} ${plural(others, 'úkol', 'další úkoly', 'dalších úkolů')}`,
+        ]
+        if (who) parts.push(who)
+        payloads.push({
+          title: star.title as string,
+          body: parts.join(' · '),
+          url: `${APP_URL}#task-${star.id as string}`,
+          tag: 'checkpoint',
           badge,
         })
       }
