@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { CalendarEvent, Priority, Task } from '../db/types'
 import { activeClients, addTask, allProjects, calendarCacheCount, calendarEventsOn, openTasks, removeTask } from '../db/repo'
@@ -211,8 +212,11 @@ export function QuickAdd({
 
   return (
     <div className="relative px-3 pt-2.5">
-      {lastAdded && (
-        <div className="pointer-events-none absolute inset-x-0 -top-12 z-30 flex justify-center">
+      {lastAdded && createPortal(
+        <div
+          className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-3"
+          style={{ bottom: 'calc(var(--dock-h, 9rem) + 0.75rem)' }}
+        >
           <div className={`${toastLeaving ? 'toast-out' : 'pop'} pointer-events-auto flex items-center gap-2 rounded-full bg-ink/90 py-1.5 pl-4 pr-1.5 shadow-float backdrop-blur`}>
             <span className="max-w-48 truncate text-[13px] text-paper">
               {lastAdded.dueDate
@@ -237,7 +241,8 @@ export function QuickAdd({
               Zpět
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {mention && (

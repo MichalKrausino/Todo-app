@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Task } from './db/types'
 import { getTask } from './db/repo'
 import { QuickAdd } from './components/QuickAdd'
@@ -65,6 +65,19 @@ export default function App() {
   const prevTab = useRef<Tab>(tab)
   const dir = TABS.findIndex((t) => t.id === tab) - TABS.findIndex((t) => t.id === prevTab.current)
   const mainRef = useRef<HTMLElement>(null)
+  // Spodní dok plave nad obsahem (aby přes sklo prosvítal), takže si
+  // musí říct o odsazení — a jeho výška se mění (lišta, výběr termínu).
+  const dockRef = useRef<HTMLElement>(null)
+  useLayoutEffect(() => {
+    const el = dockRef.current
+    if (!el) return
+    const apply = () =>
+      document.documentElement.style.setProperty('--dock-h', `${el.offsetHeight}px`)
+    apply()
+    const ro = new ResizeObserver(apply)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   useEffect(() => {
     prevTab.current = tab
     // nová záložka začíná nahoře, ne uprostřed předchozího seznamu
@@ -129,8 +142,11 @@ export default function App() {
       <main
         ref={mainRef}
         onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 24)}
-        className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6"
-        style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top))' }}
+        className="flex-1 overflow-y-auto overflow-x-hidden px-4"
+        style={{
+          paddingTop: 'calc(1rem + env(safe-area-inset-top))',
+          paddingBottom: 'calc(var(--dock-h, 9rem) + 0.75rem)',
+        }}
       >
         {/* key vynutí novou instanci pohledu → směrová nástupní animace */}
         <div
@@ -158,29 +174,42 @@ export default function App() {
         </div>
       </main>
 
+      {/* Spodní dok: jedna plovoucí skleněná deska, přes kterou obsah
+          prosvítá rozmazaný. Obal je průchozí na dotyk, klikatelná je
+          jen samotná deska — u okrajů tak jde dál scrollovat obsah. */}
       <footer
-        className="border-t border-line/80 bg-card/85 backdrop-blur-xl"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        ref={dockRef}
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-3"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.5rem)' }}
       >
-        <QuickAdd onShowUpcoming={() => setTab('upcoming')} defaultToToday={tab === 'today'} />
-        <nav className="flex px-2 pb-1 pt-0.5">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              aria-current={tab === t.id ? 'page' : undefined}
-              className={`flex flex-1 flex-col items-center gap-1 py-1.5 text-[11px] font-medium transition-colors duration-200 active:scale-95 ${
-                tab === t.id ? 'text-accent' : 'text-ink-faint'
-              }`}
-            >
-              {/* nový element při vybrání → ikona poskočí (tab-bounce) */}
-              <span key={tab === t.id ? 'on' : 'off'} className={tab === t.id ? 'tab-bounce' : ''}>
-                {t.icon}
-              </span>
-              {t.label}
-            </button>
-          ))}
-        </nav>
+        <div className="dock pointer-events-auto overflow-hidden rounded-[28px] border border-line/60">
+          <QuickAdd onShowUpcoming={() => setTab('upcoming')} defaultToToday={tab === 'today'} />
+          <nav className="flex px-2 pb-1.5 pt-0.5">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                aria-current={tab === t.id ? 'page' : undefined}
+                className={`flex flex-1 flex-col items-center gap-1 py-1 text-[11px] font-medium transition-colors duration-200 active:scale-95 ${
+                  tab === t.id ? 'text-accent' : 'text-ink-faint'
+                }`}
+              >
+                {/* vybraná záložka má pod ikonou měkkou pilulku;
+                    nový element při vybrání → ikona poskočí (tab-bounce) */}
+                <span
+                  className={`rounded-2xl px-4 py-1 transition-colors duration-200 ${
+                    tab === t.id ? 'bg-accent-wash' : ''
+                  }`}
+                >
+                  <span key={tab === t.id ? 'on' : 'off'} className={tab === t.id ? 'tab-bounce block' : 'block'}>
+                    {t.icon}
+                  </span>
+                </span>
+                {t.label}
+              </button>
+            ))}
+          </nav>
+        </div>
       </footer>
 
       {searchOpen && (
