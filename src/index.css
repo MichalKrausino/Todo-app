@@ -12,19 +12,21 @@
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto,
     'Helvetica Neue', system-ui, sans-serif;
 
-  /* plochy a text (světlý režim) */
-  --color-paper: #f2f2f7; /* pozadí appky (systemGroupedBackground) */
+  /* Plochy a text (světlý režim). Podklad je záměrně teplý, ne studená
+     iOS šeď — papír působí klidněji a bílé karty na něm líp vyniknou. */
+  --color-paper: #f6f6f4; /* pozadí appky */
   --color-card: #ffffff; /* karty a plochy */
-  --color-well: #e9e9ee; /* zapuštěné plochy (inputy, pilulky) */
-  --color-line: #e5e5ea; /* hairline oddělovače */
-  --color-ink: #0b0b0f; /* hlavní text */
-  --color-ink-soft: #6d6d72; /* sekundární text */
-  --color-ink-faint: #aeaeb2; /* terciární text, ikony v klidu */
+  --color-well: #eeedea; /* zapuštěné plochy (inputy, pilulky) */
+  --color-line: #e6e4df; /* hairline oddělovače */
+  --color-ink: #16161a; /* hlavní text — měkčí než čerň */
+  --color-ink-soft: #6b6b70; /* sekundární text */
+  --color-ink-faint: #a3a2a6; /* terciární text, ikony v klidu */
 
-  /* jediný akcent — iOS modrá */
-  --color-accent: #007aff;
-  --color-accent-deep: #0063cc;
-  --color-accent-wash: #e8f2ff;
+  /* Jediný akcent: klidnější modrá než systémová iOS — méně křiklavá,
+     na teplém podkladu sedí líp a nepůsobí jako výchozí nastavení. */
+  --color-accent: #3a6df0;
+  --color-accent-deep: #2b52c4;
+  --color-accent-wash: #eaf0fe;
 
   /* sémantické tóny (iOS systémová paleta) */
   --color-danger: #e5372c;
@@ -34,9 +36,11 @@
   --color-amber: #ff9500; /* plná iOS oranžová (heatmapa, akcenty varování) */
   --color-moss: #248a3d; /* ok / synchronizováno */
 
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.045), 0 6px 16px -10px rgb(0 0 0 / 0.10);
-  --shadow-sheet: 0 -8px 40px -12px rgb(0 0 0 / 0.25);
-  --shadow-float: 0 2px 8px rgb(0 0 0 / 0.08), 0 8px 24px -8px rgb(0 0 0 / 0.16);
+  /* Hloubku dělá ostrý hairline, ne rozmazaný stín — kresba zůstane
+     čistá i na malém displeji a karta nevypadá „nalepená". */
+  --shadow-card: 0 0 0 1px rgb(22 22 26 / 0.05), 0 1px 3px rgb(22 22 26 / 0.035);
+  --shadow-sheet: 0 -8px 40px -12px rgb(22 22 26 / 0.22);
+  --shadow-float: 0 0 0 1px rgb(22 22 26 / 0.05), 0 4px 14px -4px rgb(22 22 26 / 0.14);
 
   /* pohybový systém — křivky jako v iOS (generují utility ease-*) */
   --ease-ios: cubic-bezier(0.32, 0.72, 0, 1); /* Apple sheet/navigace */
@@ -47,17 +51,19 @@
 /* tmavý režim podle systému — přepis tokenů, komponenty se přebarví samy */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-paper: #000000;
-    --color-card: #1c1c1e;
-    --color-well: #2c2c2e;
-    --color-line: #38383a;
-    --color-ink: #f5f5f7;
-    --color-ink-soft: #98989f;
-    --color-ink-faint: #636366;
+    /* Ne úplná čerň: obsahová appka na ní tvrdne. Tmavý podklad má
+       stejný teplý nádech jako světlý režim. */
+    --color-paper: #0e0e11;
+    --color-card: #17171b;
+    --color-well: #212127;
+    --color-line: #2c2c33;
+    --color-ink: #f2f2f4;
+    --color-ink-soft: #9a9aa2;
+    --color-ink-faint: #66666e;
 
-    --color-accent: #0a84ff;
-    --color-accent-deep: #409cff;
-    --color-accent-wash: #0d2b4d;
+    --color-accent: #7397ff;
+    --color-accent-deep: #a3bcff;
+    --color-accent-wash: #182140;
 
     --color-danger: #ff453a;
     --color-danger-wash: #3a1512;
@@ -100,13 +106,18 @@ body {
 }
 
 /* hlavičky sekcí ve stylu seskupených iOS seznamů */
+/* Hlavičky sekcí: dřív verzálky s rozpalem, což na malém displeji
+   křičelo. Teď tichý štítek — velké písmeno jen na začátku, aby texty
+   v kódu mohly zůstat psané malými (uppercase je nedělá „Dnes · 3"). */
 .section-label {
   font-size: 13px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: -0.005em;
   color: var(--color-ink-soft);
   padding-inline: 4px;
+}
+.section-label::first-letter {
+  text-transform: uppercase;
 }
 
 :focus-visible {

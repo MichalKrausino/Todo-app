@@ -233,7 +233,7 @@ export function TodayView({
   )
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <header className="rise">
         <h1 className="display text-[2.1rem] font-semibold leading-tight">Dnes</h1>
         <p className="text-sm text-ink-soft first-letter:uppercase">{formatFullDate(new Date())}</p>

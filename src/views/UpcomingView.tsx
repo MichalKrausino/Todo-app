@@ -117,7 +117,7 @@ export function UpcomingView({
   )
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <header className="rise">
         <h1 className="display text-[2.1rem] font-semibold leading-tight">Plán</h1>
         <p className="text-sm text-ink-soft">Co je přede mnou</p>

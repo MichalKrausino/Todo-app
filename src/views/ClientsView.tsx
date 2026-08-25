@@ -113,7 +113,7 @@ function ClientList({
   )
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <header className="flex items-center justify-between pr-24">
         <div>
           <h1 className="display text-[2.1rem] font-semibold leading-tight">Klienti</h1>

@@ -33,22 +33,32 @@ zdůvodnění rozhodnutí a roadmapa fází: **`docs/PLAN.md`** — před větš
    pozadí. `estimateMinutes` je tichý odhad, nikdy se nezobrazuje jako pole k vyplnění.
 6. **UI česky.** Veškeré texty v rozhraní jsou české.
 
-## Design („iOS minimal“)
+## Design („tichý minimalismus“)
 
-Vzhled nativní Apple aplikace: systémový font (na iPhonu SF Pro — nic se
-nestahuje), seskupené karty (`divide-y divide-line` v `rounded-xl bg-card`)
-na podkladu `paper`, hairline oddělovače, frosted-glass tab bar, velké
-titulky (`display`, iOS Large Title), hlavičky sekcí `section-label`
-(13px verzálky). Tokeny v `src/index.css` (Tailwind v4 `@theme`) —
-**používat výhradně je**, žádné surové Tailwind barvy: `paper`/`card`/
-`well`/`line`, text `ink`/`ink-soft`/`ink-faint`, jediný akcent `accent`
-(iOS modrá) + `accent-deep`/`accent-wash`, sémantické `danger`, `note`/
-`note-ink` (signály), `moss` (ok). **Plný tmavý režim**: tokeny se přepisují
-v `@media (prefers-color-scheme: dark)` — nová barva se VŽDY přidává v obou
-režimech; theme-color metas v `index.html` jsou dvě (light/dark). Barvy
-klientů = systémová paleta iOS (`CLIENT_COLORS`). Animace `rise`/`pop`/
-`sheet-*` respektují `prefers-reduced-motion`. Ikony PWA generuje skript
-v iOS modré — při změně brandu přegenerovat.
+Nativní chování Apple aplikace, ale vlastní vzhled — inspirace Things 3
+(vzdušnost, typografie místo rámečků) a Linear (kázeň, jemné obrysy místo
+stínů). Systémový font (na iPhonu SF Pro — nic se nestahuje), seskupené
+karty (`divide-y divide-line` v `rounded-2xl bg-card`) na **teplém**
+podkladu `paper` (ne studená iOS šeď), hairline oddělovače, frosted-glass
+tab bar, velké titulky (`display`), hlavičky sekcí `section-label` —
+**tiché, ne verzálky**: velké písmeno dělá `::first-letter`, takže texty
+v kódu zůstávají psané malými.
+
+Hloubku dělá **ostrý hairline v `--shadow-card`**, ne rozmazaný stín.
+Tokeny v `src/index.css` (Tailwind v4 `@theme`) — **používat výhradně je**,
+žádné surové Tailwind barvy: `paper`/`card`/`well`/`line`, text
+`ink`/`ink-soft`/`ink-faint`, jediný akcent `accent` (klidná modrá
+`#3a6df0`, ne systémová iOS) + `accent-deep`/`accent-wash`, sémantické
+`danger`, `note`/`note-ink` (signály), `amber`, `moss` (ok).
+
+**Plný tmavý režim**: tokeny se přepisují v `@media (prefers-color-scheme:
+dark)` — nová barva se VŽDY přidává v obou režimech; podklad je teplá
+téměř-čerň (`#0e0e11`), ne plná čerň. Theme-color metas v `index.html`
+jsou dvě (light/dark) a musí sedět s `paper`. Barvy klientů zůstávají
+systémová paleta iOS (`CLIENT_COLORS`) — jsou to štítky, ne brand.
+Animace `rise`/`pop`/`sheet-*` respektují `prefers-reduced-motion`.
+Ikony PWA jsou v akcentní modré — **při změně akcentu přegenerovat**
+(SVG v `public/favicon.svg` je předloha, PNG se renderují z něj).
 
 ## Datový model
 
