@@ -39,9 +39,12 @@ const chip = 'rounded-full px-2.5 py-0.5 font-medium'
 export function QuickAdd({
   onShowUpcoming,
   defaultToToday = false,
+  autoFocus = false,
 }: {
   onShowUpcoming?: () => void
   defaultToToday?: boolean
+  /** rozbalené zadávání v doku si vyžádá fokus do pole */
+  autoFocus?: boolean
 }) {
   const [text, setText] = useState('')
   const [overrides, setOverrides] = useState<Overrides>({})
@@ -63,6 +66,9 @@ export function QuickAdd({
   // Příklad z prázdného stavu na Dnes se vloží rovnou do pole a zaostří
   // ho — uživatel vidí, co parser z věty vytáhne, a jen odešle.
   const inputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (autoFocus) inputRef.current?.focus()
+  }, [autoFocus])
   useEffect(() => {
     const fill = (e: Event) => {
       const text = (e as CustomEvent<string>).detail

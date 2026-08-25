@@ -357,6 +357,28 @@ body:has(.sheet-backdrop:not(.closing)) .app-shell {
 }
 
 /* zmizení řádku (rozhodnutý ranní návrh): výška se složí, obsah odpluje */
+/* Zadávání v doku: složené má nulovou výšku, rozvine se pružně.
+   Vlastní třída (ne row-collapse) — ta je stavěná obráceně, výchozí
+   stav má rozbalený a skládá se až třídou .leave. */
+.compose {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows 0.32s var(--ease-ios),
+    opacity 0.2s ease-out;
+}
+
+.compose > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.compose.is-collapsed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .row-collapse {
   display: grid;
   grid-template-rows: 1fr;
@@ -570,6 +592,9 @@ body:has(.sheet-backdrop:not(.closing)) .app-shell {
   .sheet-backdrop.closing,
   .sheet-backdrop.closing .sheet-panel {
     animation: none;
+  }
+  .compose {
+    transition: none;
   }
   /* dosednutí řádku je transition, ne animace — vypnout zvlášť */
   .press-row:active {

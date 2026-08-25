@@ -51,6 +51,9 @@ export default function App() {
   const [editing, setEditing] = useState<Task | null>(null)
   const [syncOpen, setSyncOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  // Zadávání úkolu je složené do pluska — dok tak zůstane slim kapsle
+  // a možnosti (termín, klient…) se ukážou, až když je potřebuješ.
+  const [addOpen, setAddOpen] = useState(false)
   // Odscrollováno = horní lišta se zamlží a ukáže kompaktní titulek.
   const [scrolled, setScrolled] = useState(false)
   // Navigace z tichých signálů: otevřít konkrétního klienta na záložce Klienti.
@@ -83,7 +86,16 @@ export default function App() {
     // nová záložka začíná nahoře, ne uprostřed předchozího seznamu
     mainRef.current?.scrollTo(0, 0)
     setScrolled(false)
+    setAddOpen(false)
   }, [tab])
+
+  // Příklad z prázdného stavu vkládá text do pole — musí se s ním
+  // zadávání i rozbalit, jinak by se „nic nestalo".
+  useEffect(() => {
+    const open = () => setAddOpen(true)
+    window.addEventListener('todo:prefill', open)
+    return () => window.removeEventListener('todo:prefill', open)
+  }, [])
 
   // Deep-linky z notifikací. #review a #shutdown si přebírá TodayView
   // (a hash uklidí), tady stačí přepnout na Dnes. #task-{id} otevře
@@ -182,22 +194,39 @@ export default function App() {
         className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-3"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.5rem)' }}
       >
-        <div className="dock pointer-events-auto overflow-hidden rounded-[28px] border border-line/60">
-          <QuickAdd onShowUpcoming={() => setTab('upcoming')} defaultToToday={tab === 'today'} />
-          <nav className="flex px-2 pb-1.5 pt-0.5">
+        <div
+          className={`dock pointer-events-auto overflow-hidden border border-line/60 transition-[border-radius] duration-300 ease-ios ${
+            addOpen ? 'rounded-[28px]' : 'rounded-full'
+          }`}
+        >
+          {/* Zadávání se rozvine až po ťuknutí na plus — složené zabírá
+              nulovou výšku, takže dok je v klidu jen tenká kapsle. */}
+          <div className={`compose ${addOpen ? '' : 'is-collapsed'}`}>
+            <div>
+              <div>
+                <QuickAdd
+                  onShowUpcoming={() => setTab('upcoming')}
+                  defaultToToday={tab === 'today'}
+                  autoFocus={addOpen}
+                />
+              </div>
+            </div>
+          </div>
+
+          <nav className="flex items-center gap-1 px-2 py-1.5">
             {TABS.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 aria-current={tab === t.id ? 'page' : undefined}
-                className={`flex flex-1 flex-col items-center gap-1 py-1 text-[11px] font-medium transition-colors duration-200 active:scale-95 ${
+                className={`flex flex-1 flex-col items-center gap-0.5 py-0.5 text-[11px] font-medium transition-colors duration-200 active:scale-95 ${
                   tab === t.id ? 'text-accent' : 'text-ink-faint'
                 }`}
               >
                 {/* vybraná záložka má pod ikonou měkkou pilulku;
                     nový element při vybrání → ikona poskočí (tab-bounce) */}
                 <span
-                  className={`rounded-2xl px-4 py-1 transition-colors duration-200 ${
+                  className={`rounded-2xl px-4 py-0.5 transition-colors duration-200 ${
                     tab === t.id ? 'bg-accent-wash' : ''
                   }`}
                 >
@@ -208,6 +237,23 @@ export default function App() {
                 {t.label}
               </button>
             ))}
+            <button
+              aria-label={addOpen ? 'Zavřít zadávání' : 'Nový úkol'}
+              aria-expanded={addOpen}
+              onClick={() => setAddOpen((v) => !v)}
+              className="ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-card shadow-float transition-transform duration-150 active:scale-90"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className={`h-6 w-6 transition-transform duration-300 ease-spring ${addOpen ? 'rotate-45' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              >
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
           </nav>
         </div>
       </footer>
