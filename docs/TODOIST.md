@@ -177,22 +177,40 @@ množil z obou stran.
 
 ## 5. Kudy tečou změny
 
-**Todoist → appka** (hlavní směr, každých ~10 minut a při otevření appky):
+**Todoist → appka** (hlavní směr, každých ~5 minut a při otevření appky):
 
 - nový úkol v projektu klienta → objeví se v appce
 - změna termínu/priority/textu → přepíše se v appce
 - hotovo v Todoistu → hotovo v appce
 - úkol zmizel → dohledá se v hotových; jinak `dropped`
 
-**Appka → Todoist** (jen jedna věc):
+**Appka → Todoist:**
 
-- dokončím úkol v appce → `POST /tasks/{id}/close`, klient vidí hotovo
+- dokončím úkol → `POST /tasks/{id}/close`, klient vidí hotovo
+- otevřu ho znovu → `POST /tasks/{id}/reopen`
+- upravím název, popis, termín nebo prioritu → `POST /tasks/{id}`
+- ťuknu na „Poslat do Todoistu" u lokálního úkolu → `POST /tasks`
+- u klienta se zapnutým psaním letí nové úkoly ven samy
 
-Zbytek zůstává lokální: naplánování na den (`scheduledFor`), špendlík Top 3,
-odhad času, kalendářní blok, podklady pro ranní návrh. Todoist je pro
-importované úkoly zdrojem pravdy u názvu, termínu a priority — ruční přepis
-v appce by další synchronizace přepsala, takže tahle pole u importovaných
-úkolů zamknu a řádek dostane odznak „Todoist".
+Úprava se nejdřív označí jako neodeslaná (`todoistDirty`) a teprve pak se
+posílá. Dokud neodejde, žádné stažení ji nepřepíše — offline úprava se tak
+neztratí. Termín se vrací do toho pole, ze kterého přišel: co dorazilo jako
+`deadline`, odchází jako `deadline`.
+
+Zamčené zůstává jediné: **zařazení** (klient a projekt). Přesouvat úkol mezi
+projekty patří do Todoistu, ne sem.
+
+Čistě naše a ven se neposílá: naplánování na den (`scheduledFor`), špendlík
+Top 3, odhad času, kalendářní blok, podklady pro ranní návrh.
+
+### Opakované úkoly
+
+Todoist opakovaný úkol odškrtnutím **nezavře** — posune ho na další termín
+a nechá pod týmž id. Naivní implementace by při dalším stažení viděla
+„u nás hotovo, tam otevřené" a poslala druhý `close`, čímž by úkol posunula
+o další období. Proto se u opakovaného úkolu nový termín bere jako nový
+výskyt: hotový se odloží do historie jako čistě lokální záznam (aby ho
+vidělo týdenní ohlédnutí) a živý řádek se vrátí do hry s novým termínem.
 
 ---
 
@@ -203,6 +221,15 @@ v appce by další synchronizace přepsala, takže tahle pole u importovaných
   je ukáže jen jako počet, aby bylo jasné, že se ignorují.
 - **Berou se úkoly přiřazené mně a nepřiřazené.** Cizí přiřazené úkoly ve
   sdíleném projektu nechávám být (`isMine` v `src/lib/todoistMap.ts`).
+- **Psaní ven je vypnuté, dokud ho nezapnu**, a to zvlášť u každého klienta.
+  Zapnutí si pamatuje čas (`Client.todoistPushSince`), takže se do klientova
+  projektu nevyvalí všechno, co jsem si u něj kdy poznamenal — jen to, co
+  napíšu od té chvíle. Kontroly klienta a instance šablon zůstávají doma vždy.
+- **Odpojení projektu úkoly nemaže.** Jen z nich sundá todoistí značky, takže
+  se z nich stanou normální lokální úkoly.
+- **Ztráta přístupu k jednomu projektu nesmí zmrazit zbytek.** Edge funkce
+  stahuje projekt po projektu a chyby sbírá stranou; nedostupný projekt se
+  ohlásí v nastavení a jeho úkoly se neuklidí jako smazané.
 - **Sekce se stávají projekty** pod klientem.
 - **Webhooky zatím ne.** Šly by (`item:added`, `item:completed`, `project:*` …)
   a změny by chodily okamžitě, ale vyžadují registraci OAuth aplikace

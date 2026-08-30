@@ -4,6 +4,7 @@ import type { Priority, Project, Subtask, Task } from '../db/types'
 import { MAX_PINNED, activeClients, clientProjects, removeTask, togglePinned, updateTask } from '../db/repo'
 import { Sheet } from './Sheet'
 import { deleteBlockForTask } from '../sync/calendar'
+import { pushTodoistEdits, sendTaskToTodoist } from '../sync/todoist'
 import { todayISO } from '../lib/dates'
 import { PRIORITY_LABELS } from '../lib/labels'
 import {
@@ -23,9 +24,11 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   const [clientId, setClientId] = useState(task.clientId ?? '')
   const [projectId, setProjectId] = useState(task.projectId ?? '')
   const [priority, setPriority] = useState<Priority>(task.priority)
-  // Importovaný úkol: název, zařazení, termín a priorita patří Todoistu.
-  // Ruční úprava by při dalším stažení stejně zmizela, tak radši zamčeno.
+  // Importovaný úkol se dá upravovat a změny letí zpátky do Todoistu.
+  // Zamčené zůstává jen zařazení — přesouvat úkol mezi projekty klienta
+  // patří do Todoistu, ne sem.
   const fromTodoist = Boolean(task.todoistId)
+  const [sendState, setSendState] = useState<'idle' | 'sending' | 'sent' | string>('idle')
   const [dueDate, setDueDate] = useState(task.dueDate ?? '')
   const [dueTime, setDueTime] = useState(task.dueTime ?? '')
   const [scheduledFor, setScheduledFor] = useState(task.scheduledFor ?? '')
@@ -66,6 +69,10 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   }
 
   const clients = useLiveQuery(activeClients, []) ?? []
+  // Klient s napojeným projektem — jen u něj má smysl nabízet odeslání.
+  const todoistClient = clients.find(
+    (c) => c.id === clientId && (c.todoistProjectIds?.length ?? 0) > 0,
+  )
   const projects =
     useLiveQuery(
       () => (clientId ? clientProjects(clientId) : Promise.resolve<Project[]>([])),
@@ -93,6 +100,12 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
       recurrenceRule,
       status: task.status === 'inbox' && hasDate ? 'active' : task.status,
     })
+    // Úprava todoistího úkolu se označí jako neodeslaná a hned se zkusí
+    // poslat; do té doby ji stažení nepřepíše.
+    if (fromTodoist) {
+      await updateTask(task.id, { todoistDirty: true })
+      void pushTodoistEdits()
+    }
     // Zrušené naplánování uvolní i blok v kalendáři „Todo".
     if (task.calendarEventId && !scheduledFor) void deleteBlockForTask(task)
     close()
@@ -134,18 +147,14 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
         )}
         {fromTodoist && (
           <p className="rounded-lg bg-well px-3 py-2 text-[13px] leading-relaxed text-ink-soft">
-            Úkol je z Todoistu. Název, zařazení, termín a priorita se řídí tam —
-            tady se dá naplánovat den, připnout do Top 3 a odškrtnout.
+            Úkol je z Todoistu — název, termín a priorita se odsud píšou i tam.
+            {task.todoistRecurring && ' Opakuje se; odškrtnutím se posune na další termín.'}
+            {task.todoistDirty && ' Poslední změna ještě čeká na odeslání.'}
           </p>
         )}
         <div>
           <label className={label}>Úkol</label>
-          <input
-            className={field}
-            value={title}
-            disabled={fromTodoist}
-            onChange={(e) => setTitle(e.target.value)}
-          />
+          <input className={field} value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -193,7 +202,6 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
               type="date"
               className={field}
               value={dueDate}
-              disabled={fromTodoist}
               onChange={(e) => setDueDate(e.target.value)}
             />
             {/* čas patří k termínu — bez popisku vypadal jako osiřelé pole */}
@@ -204,7 +212,6 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
                 aria-label="Čas termínu"
                 className={`${field} min-w-0 flex-1`}
                 value={dueTime}
-                disabled={fromTodoist}
                 onChange={(e) => {
                   setDueTime(e.target.value)
                   // čas na prázdném datu doplní dnešek, ať se neztratí
@@ -230,7 +237,6 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
             <select
               className={field}
               value={priority}
-              disabled={fromTodoist}
               onChange={(e) => setPriority(e.target.value as Priority)}
             >
               {(Object.keys(PRIORITY_LABELS) as Priority[]).map((p) => (
@@ -339,6 +345,36 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           <label className={label}>Poznámky</label>
           <textarea className={field} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
+
+        {/* Lokální úkol u klienta s napojeným Todoistem — jedním ťuknutím
+            ho uvidí i klient. Nikdy se to nestane samo bez zapnutí. */}
+        {!fromTodoist && todoistClient && (
+          <button
+            type="button"
+            disabled={sendState === 'sending' || sendState === 'sent'}
+            onClick={async () => {
+              setSendState('sending')
+              await updateTask(task.id, {
+                title: title.trim(),
+                notes: notes.trim() || undefined,
+                priority,
+                dueDate: dueDate || undefined,
+                dueTime: dueDate && dueTime ? dueTime : undefined,
+              })
+              const err = await sendTaskToTodoist(task.id)
+              setSendState(err ?? 'sent')
+            }}
+            className="w-full rounded-lg border border-line px-3 py-2.5 text-left text-sm font-medium text-accent transition-transform duration-150 active:scale-[0.99] disabled:opacity-50"
+          >
+            {sendState === 'sending'
+              ? 'Posílám…'
+              : sendState === 'sent'
+                ? `Odesláno do Todoistu — ${todoistClient.name} to teď vidí`
+                : sendState === 'idle'
+                  ? `Poslat do Todoistu (${todoistClient.name})`
+                  : sendState}
+          </button>
+        )}
 
         <div className="flex items-center justify-between pt-1">
           <button

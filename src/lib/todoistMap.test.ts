@@ -24,6 +24,8 @@ describe('priorityFrom', () => {
   it('p1 je kritická, p4 obyčejná', () => {
     expect(priorityFrom(4)).toBe('critical')
     expect(priorityFrom(3)).toBe('high')
+    // p3 je jen mírné zvýraznění — kdyby bylo „vysoké", ztratí to význam
+    expect(priorityFrom(2)).toBe('normal')
     expect(priorityFrom(1)).toBe('normal')
     expect(priorityFrom(undefined)).toBe('normal')
   })

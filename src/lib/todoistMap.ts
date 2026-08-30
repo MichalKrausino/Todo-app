@@ -29,13 +29,22 @@ export interface TodoistTask {
   duration?: { amount: number; unit?: string } | null
 }
 
-// Todoist má 4 = nejvyšší, appka slova. p4 (výchozí) je „normal", ne „low" —
-// jinak by drtivá většina importovaných úkolů spadla na dno seznamu.
+// Todoist má 4 = nejvyšší, appka slova. p4 (výchozí, tedy 1) je „normal",
+// ne „low" — jinak by drtivá většina importovaných úkolů spadla na dno.
+// p3 (tedy 2) je jen mírné zvýraznění, na „vysokou" to nedosahuje;
+// kdyby ano, byla by vysoká priorita skoro na všem a přestala by značit.
 export function priorityFrom(p: number | undefined): Priority {
   if (p === 4) return 'critical'
   if (p === 3) return 'high'
-  if (p === 2) return 'high'
   return 'normal'
+}
+
+// Zpátky do Todoistu. „Nízká" u nás je jeho výchozí p4 — Todoist nižší
+// stupeň nemá a označovat úkol za podřadný jen kvůli převodu by lhalo.
+export function priorityToTodoist(p: Priority): number {
+  if (p === 'critical') return 4
+  if (p === 'high') return 3
+  return 1
 }
 
 // Datetime z Todoistu → lokální den a čas. Nikdy toISOString() —
@@ -102,6 +111,8 @@ export interface TodoistOwnedFields {
   todoistId: string
   todoistProjectId?: string
   todoistUpdatedAt?: string
+  todoistRecurring?: boolean
+  todoistHasDeadline?: boolean
 }
 
 export function ownedFields(
@@ -124,6 +135,8 @@ export function ownedFields(
     todoistId: t.id,
     todoistProjectId: t.projectId,
     todoistUpdatedAt: t.updatedAt,
+    todoistRecurring: Boolean(t.due?.isRecurring) || undefined,
+    todoistHasDeadline: Boolean(t.deadline?.date) || undefined,
   }
 }
 
@@ -142,6 +155,8 @@ const ALWAYS_OWNED = [
   'todoistId',
   'todoistProjectId',
   'todoistUpdatedAt',
+  'todoistRecurring',
+  'todoistHasDeadline',
 ] as const
 
 const OWNED_WHEN_SET = ['scheduledFor', 'estimateMinutes', 'notes', 'subtasks'] as const

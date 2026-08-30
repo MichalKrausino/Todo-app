@@ -26,6 +26,10 @@ export interface Client extends BaseRecord {
   // Sdílené projekty v Todoistu, které tomuhle klientovi patří (Fáze 8).
   // Párování žije na klientovi, takže se syncuje na obě zařízení.
   todoistProjectIds?: string[]
+  // Od kdy se nové úkoly tohohle klienta zakládají i v Todoistu. Je to
+  // časové razítko, ne vypínač: po zapnutí se nesmí vyvalit do klientova
+  // projektu všechno, co jsem si u něj kdy poznamenal.
+  todoistPushSince?: string
   lastActivityAt?: string // dopočítáváno z úkolů
   templateIds: string[] // nasazené šablony (Fáze 4)
 }
@@ -76,6 +80,9 @@ export interface Task extends BaseRecord {
   todoistProjectId?: string
   todoistUpdatedAt?: string // updated_at z Todoistu — podle něj se pozná, že se nic nezměnilo
   todoistDoneAt?: string // completed_at, které už jsme z Todoistu převzali (rozliší „hotovo tam" od „otevřel jsem to znovu tady")
+  todoistRecurring?: boolean // opakuje se v Todoistu — odškrtnutím se posune na další termín, nezmizí
+  todoistHasDeadline?: boolean // termín přišel z todoistího `deadline` (ne z `due`) — úprava se musí vrátit do stejného pole
+  todoistDirty?: boolean // lokální úprava čeká na odeslání; do té doby ji stažení nesmí přepsat
   order: number
 }
 

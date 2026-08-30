@@ -1,6 +1,8 @@
 // Brána do Todoistu (Fáze 8). Klient s ní mluví přes POST {action, ...}:
 //   projects  {}                              → projekty + spolupracovníci (párování s klienty)
 //   pull      {projectIds, completedSince}     → sekce, aktivní i hotové úkoly
+//   create    {projectId, sectionId, ...}      → založí úkol v Todoistu
+//   update    {taskId, ...}                    → přepíše název, popis, termín, prioritu
 //   close     {taskId}                         → odškrtne úkol v Todoistu
 //   reopen    {taskId}                         → vrátí úkol mezi nehotové
 //
@@ -72,6 +74,9 @@ async function tdList(token: string, path: string, params: Record<string, string
 }
 
 const s = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined)
+
+// Todoist nesnáší undefined v těle požadavku — vyhodit prázdné klíče.
+const clean = (o: Rec): Rec => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined))
 
 // Todoist vrací u úkolu jen to, co appka opravdu potřebuje — zbytek
 // (pořadí, kdo přidal, komentáře) zahazujeme už na serveru.
@@ -157,28 +162,79 @@ Deno.serve(async (req) => {
       const sections: Rec[] = []
       const tasks: Rec[] = []
       const completed: Rec[] = []
+      // Projekt, ke kterému jsem přišel o přístup, nesmí shodit celé
+      // stažení — jinak by jeden odebraný klient zmrazil úplně všechno.
+      const pulled: string[] = []
+      const failed: Rec[] = []
       for (const projectId of projectIds) {
-        for (const sec of await tdList(token, '/sections', { project_id: projectId })) {
-          if (sec.is_deleted) continue
-          sections.push({ id: String(sec.id), projectId, name: (sec.name as string) ?? '' })
-        }
-        for (const t of await tdList(token, '/tasks', { project_id: projectId })) {
-          if (!t.is_deleted) tasks.push(slimTask(t))
-        }
-        const done = await td(
-          token,
-          `/tasks/completed/by_completion_date?${new URLSearchParams({
-            since,
-            until,
-            project_id: projectId,
-            limit: '200',
-          })}`,
-        )
-        for (const t of ((done.items ?? done.results ?? []) as Rec[])) {
-          completed.push(slimTask({ ...t, checked: true }))
+        try {
+          for (const sec of await tdList(token, '/sections', { project_id: projectId })) {
+            if (sec.is_deleted) continue
+            sections.push({ id: String(sec.id), projectId, name: (sec.name as string) ?? '' })
+          }
+          for (const t of await tdList(token, '/tasks', { project_id: projectId })) {
+            if (!t.is_deleted) tasks.push(slimTask(t))
+          }
+          const done = await td(
+            token,
+            `/tasks/completed/by_completion_date?${new URLSearchParams({
+              since,
+              until,
+              project_id: projectId,
+              limit: '200',
+            })}`,
+          )
+          for (const t of ((done.items ?? done.results ?? []) as Rec[])) {
+            completed.push(slimTask({ ...t, checked: true }))
+          }
+          pulled.push(projectId)
+        } catch (e) {
+          failed.push({ projectId, error: e instanceof Error ? e.message : String(e) })
         }
       }
-      return json({ myUid, sections, tasks, completed })
+      return json({ myUid, sections, tasks, completed, pulled, failed })
+    }
+
+    // Založení úkolu v Todoistu. Na drátě jsou klíče snake_case a datum
+    // se posílá buď jako due_date (celý den), nebo due_datetime (s časem).
+    if (action === 'create') {
+      const body2: Rec = {
+        content: String(body.title ?? '').trim(),
+        description: body.notes ? String(body.notes) : undefined,
+        project_id: body.projectId ? String(body.projectId) : undefined,
+        section_id: body.sectionId ? String(body.sectionId) : undefined,
+        priority: body.priority ? Number(body.priority) : undefined,
+      }
+      if (body.dueDate && body.dueTime) body2.due_datetime = `${body.dueDate}T${body.dueTime}:00`
+      else if (body.dueDate) body2.due_date = String(body.dueDate)
+      if (body.deadline) body2.deadline_date = String(body.deadline)
+      if (!body2.content) return json({ error: 'úkol bez názvu' }, 400)
+      const created = await td(token, '/tasks', {
+        method: 'POST',
+        body: JSON.stringify(clean(body2)),
+      })
+      return json({ task: slimTask(created) })
+    }
+
+    if (action === 'update') {
+      const taskId = String(body.taskId ?? '')
+      if (!taskId) return json({ error: 'chybí taskId' }, 400)
+      const patch: Rec = {}
+      if (typeof body.title === 'string') patch.content = body.title.trim()
+      if (typeof body.notes === 'string') patch.description = body.notes
+      if (body.priority) patch.priority = Number(body.priority)
+      // Vymazání termínu má v Todoistu vlastní zaklínadlo.
+      if ('dueDate' in body) {
+        if (!body.dueDate) patch.due_string = 'no date'
+        else if (body.dueTime) patch.due_datetime = `${body.dueDate}T${body.dueTime}:00`
+        else patch.due_date = String(body.dueDate)
+      }
+      if ('deadline' in body) patch.deadline_date = body.deadline ? String(body.deadline) : null
+      const updated = await td(token, `/tasks/${taskId}`, {
+        method: 'POST',
+        body: JSON.stringify(patch),
+      })
+      return json({ task: slimTask(updated) })
     }
 
     if (action === 'close') {

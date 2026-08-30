@@ -25,6 +25,10 @@ export interface TodoistSnapshot {
   tasks: TodoistTask[] // aktivní
   completed: TodoistTask[]
   clientOf: Map<string, string> // todoist projekt → náš klient
+  // Projekty, které se opravdu podařilo stáhnout. Úklid „co v Todoistu
+  // zmizelo" se smí týkat jenom jich — u projektu, na který jsem přišel
+  // o přístup, by jinak zmizely úkoly, které tam pořád jsou.
+  pulled?: string[]
 }
 
 const now = () => new Date().toISOString()
@@ -62,11 +66,43 @@ async function importSections(
   return out
 }
 
+// Úkol založený z appky si nese vlastní id, ne to odvozené z todoistího.
+// Proto se hledá nejdřív podle značky a teprve pak podle odvozeného id —
+// jinak by z jednoho úkolu vznikly dva.
+async function byTodoistId(todoistId: string, localId: string): Promise<Task | undefined> {
+  const marked = await db.tasks.where('todoistId').equals(todoistId).first()
+  return marked ?? (await db.tasks.get(localId))
+}
+
+// Hotový výskyt opakovaného úkolu si necháváme jako čistě lokální záznam
+// (bez todoistId), aby týdenní ohlédnutí vidělo, že práce proběhla.
+// Deterministické id = tentýž výskyt vznikne na obou zařízeních jen jednou.
+async function archiveOccurrence(task: Task, t: string): Promise<void> {
+  const day = task.dueDate ?? task.completedAt?.slice(0, 10) ?? t.slice(0, 10)
+  const id = await deterministicUuid('todoist-vyskyt', task.todoistId ?? task.id, day)
+  if (await db.tasks.get(id)) return
+  await db.tasks.add({
+    ...task,
+    id,
+    createdAt: task.createdAt,
+    updatedAt: t,
+    status: 'done',
+    completedAt: task.completedAt ?? t,
+    todoistId: undefined,
+    todoistProjectId: undefined,
+    todoistUpdatedAt: undefined,
+    todoistDoneAt: undefined,
+    todoistRecurring: undefined,
+    todoistDirty: undefined,
+    pinnedFor: undefined,
+  })
+}
+
 export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): Promise<number> {
   const active = snap.tasks.filter((t) => isMine(t, snap.myUid))
   const completed = snap.completed.filter((t) => isMine(t, snap.myUid))
   const projectOfSection = await importSections(snap.sections, snap.clientOf)
-  const projectIds = [...snap.clientOf.keys()]
+  const projectIds = snap.pulled ?? [...snap.clientOf.keys()]
 
   // Podúkoly (parent_id) nejsou samostatné úkoly — jsou to položky
   // checklistu. Hotové podúkoly chodí v completed, proto se sbírají z obou
@@ -90,9 +126,9 @@ export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): P
     const clientId = td.projectId ? snap.clientOf.get(td.projectId) : undefined
     if (!clientId) continue
     const localId = await deterministicUuid('todoist', td.id)
-    seen.add(localId)
+    const existing = await byTodoistId(td.id, localId)
+    seen.add(existing?.id ?? localId)
     count++
-    const existing = await db.tasks.get(localId)
     if (existing?.deletedAt) continue // smazal jsem ho tady — tombstone vyhrává
     const fields = ownedFields(td, children.get(td.id) ?? [], {
       clientId,
@@ -114,20 +150,43 @@ export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): P
       await db.tasks.add(task)
       continue
     }
-    // Odškrtnuto tady, v Todoistu pořád otevřené → dotáhnout to tam.
+    // Lokální úprava ještě neodešla → nesmí ji přepsat stažení.
+    if (existing.todoistDirty) continue
+
     if (existing.status === 'done') {
+      // Opakovaný úkol se odškrtnutím v Todoistu nezavře — posune se na
+      // další termín a zůstane pod týmž id. Kdybychom tady poslali další
+      // close, posunuli bychom ho podruhé. Nový termín tedy znamená nový
+      // výskyt: hotový zůstane v historii, živý řádek se vrátí do hry.
+      if (existing.todoistRecurring && fields.dueDate && fields.dueDate !== existing.dueDate) {
+        await archiveOccurrence(existing, t)
+        await db.tasks.update(existing.id, {
+          ...patchFrom(fields),
+          status: 'active',
+          completedAt: undefined,
+          todoistDoneAt: undefined,
+          scheduledFor: undefined,
+          pinnedFor: undefined,
+          postponeCount: undefined,
+          subtasks: fields.subtasks?.map((sub) => ({ ...sub, done: false })),
+          updatedAt: t,
+        })
+        continue
+      }
+      // Odškrtnuto tady, v Todoistu pořád otevřené → dotáhnout to tam.
       await push.close(td.id)
       continue
     }
-    if (differs(existing, fields)) await db.tasks.update(localId, { ...patchFrom(fields), updatedAt: t })
+    if (differs(existing, fields)) await db.tasks.update(existing.id, { ...patchFrom(fields), updatedAt: t })
   }
 
   for (const td of completed) {
     if (td.parentId && rootIds.has(td.parentId)) continue
     const localId = await deterministicUuid('todoist', td.id)
-    const existing = await db.tasks.get(localId)
+    const existing = await byTodoistId(td.id, localId)
     if (!existing || existing.deletedAt) continue // historii do appky netaháme
-    seen.add(localId)
+    seen.add(existing.id)
+    if (existing.todoistDirty) continue // čeká na odeslání, nechat být
     const subtasks = subtasksFrom(children.get(td.id) ?? [])
     if (existing.status !== 'done') {
       if (existing.todoistDoneAt && existing.todoistDoneAt === td.completedAt) {
@@ -136,7 +195,7 @@ export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): P
         await push.reopen(td.id)
         continue
       }
-      await db.tasks.update(localId, {
+      await db.tasks.update(existing.id, {
         status: 'done',
         completedAt: td.completedAt ?? t,
         todoistDoneAt: td.completedAt,
@@ -144,7 +203,7 @@ export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): P
         updatedAt: t,
       })
     } else if (existing.todoistDoneAt !== td.completedAt) {
-      await db.tasks.update(localId, { todoistDoneAt: td.completedAt, updatedAt: t })
+      await db.tasks.update(existing.id, { todoistDoneAt: td.completedAt, updatedAt: t })
     }
   }
 
@@ -164,4 +223,24 @@ export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): P
   for (const x of gone) await db.tasks.update(x.id, { deletedAt: t, updatedAt: t })
 
   return count
+}
+
+// Odpojení projektu od klienta. Úkoly zůstávají — jen přestanou být
+// todoistí, takže se dají zase normálně upravovat a nic je nepřepíše.
+export async function unlinkTodoistProject(todoistProjectId: string): Promise<number> {
+  const rows = await db.tasks.filter((x) => x.todoistProjectId === todoistProjectId).toArray()
+  const t = now()
+  for (const x of rows) {
+    await db.tasks.update(x.id, {
+      todoistId: undefined,
+      todoistProjectId: undefined,
+      todoistUpdatedAt: undefined,
+      todoistDoneAt: undefined,
+      todoistRecurring: undefined,
+      todoistHasDeadline: undefined,
+      todoistDirty: undefined,
+      updatedAt: t,
+    })
+  }
+  return rows.length
 }

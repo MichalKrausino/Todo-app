@@ -39,6 +39,8 @@ const PROJECTS_PAGE2 = [
     is_favorite: false, is_deleted: false, parent_id: null, child_order: 2 },
   { id: '222', name: 'Starý projekt', color: 'grey', is_shared: true, is_archived: true,
     is_favorite: false, is_deleted: false, parent_id: null, child_order: 3 },
+  { id: '223', name: 'Projekt bez přístupu', color: 'grey', is_shared: true, is_archived: false,
+    is_favorite: false, is_deleted: false, parent_id: null, child_order: 4 },
 ]
 
 const TASKS = [
@@ -59,6 +61,9 @@ const TASKS = [
     description: '', priority: 1, labels: [], responsible_uid: '49020', checked: false, is_deleted: false,
     updated_at: '2026-08-30T10:00:00Z', due: null, deadline: null, duration: null },
 ]
+
+const CREATED = []
+const UPDATES = []
 
 const COMPLETED = [
   { id: '7005', project_id: '220', section_id: '55', parent_id: '7001', content: 'Domluvit přístupy',
@@ -90,14 +95,64 @@ function startFakeTodoist() {
       ], next_cursor: null })
     }
     if (p === '/api/v1/projects/222/collaborators') return send({ results: [], next_cursor: null })
+    if (p === '/api/v1/projects/223/collaborators') return send({ results: [], next_cursor: null })
     if (p === '/api/v1/sections') {
-      return send({ results: [{ id: '55', project_id: '220', name: 'Kampaně', is_deleted: false }], next_cursor: null })
+      const pid = url.searchParams.get('project_id')
+      if (pid === '223') return send({ error: 'project not found' }, 404)
+      return send({
+        results: pid === '220' ? [{ id: '55', project_id: '220', name: 'Kampaně', is_deleted: false }] : [],
+        next_cursor: null,
+      })
+    }
+    if (p === '/api/v1/tasks' && req.method === 'POST') {
+      let raw = ''
+      req.on('data', (c) => { raw += c })
+      return req.on('end', () => {
+        const body = JSON.parse(raw || '{}')
+        const created = {
+          id: `9${CREATED.length + 1}`, project_id: body.project_id, section_id: body.section_id ?? null,
+          parent_id: null, content: body.content, description: body.description ?? '',
+          priority: body.priority ?? 1, labels: [], responsible_uid: '49020', checked: false,
+          is_deleted: false, updated_at: '2026-08-30T12:00:00Z',
+          due: body.due_date ? { date: body.due_date, datetime: null, string: '', is_recurring: false }
+             : body.due_datetime ? { date: body.due_datetime.slice(0, 10), datetime: body.due_datetime, string: '', is_recurring: false }
+             : null,
+          deadline: body.deadline_date ? { date: body.deadline_date, lang: 'cs' } : null, duration: null,
+        }
+        CREATED.push({ body, created })
+        TASKS.push(created)
+        send(created)
+      })
     }
     if (p === '/api/v1/tasks') {
       const pid = url.searchParams.get('project_id')
+      if (pid === '223') return send({ error: 'project not found' }, 404)
       return send({ results: TASKS.filter((t) => t.project_id === pid), next_cursor: null })
     }
-    if (p === '/api/v1/tasks/completed/by_completion_date') return send({ items: COMPLETED })
+    if (/^\/api\/v1\/tasks\/\d+$/.test(p) && req.method === 'POST') {
+      let raw = ''
+      req.on('data', (c) => { raw += c })
+      return req.on('end', () => {
+        const body = JSON.parse(raw || '{}')
+        const id = p.split('/').pop()
+        const task = TASKS.find((t) => t.id === id)
+        UPDATES.push({ id, body })
+        if (task) {
+          if (body.content !== undefined) task.content = body.content
+          if (body.description !== undefined) task.description = body.description
+          if (body.priority !== undefined) task.priority = body.priority
+          if (body.deadline_date !== undefined) task.deadline = body.deadline_date ? { date: body.deadline_date, lang: 'cs' } : null
+          if (body.due_date) task.due = { date: body.due_date, datetime: null, string: '', is_recurring: false }
+          task.updated_at = '2026-08-30T13:00:00Z'
+        }
+        send(task ?? {})
+      })
+    }
+    if (p === '/api/v1/tasks/completed/by_completion_date') {
+      const pid = url.searchParams.get('project_id')
+      if (pid === '223') return send({ error: 'project not found' }, 404)
+      return send({ items: pid === '220' ? COMPLETED : [] })
+    }
     if (/^\/api\/v1\/tasks\/\d+\/(close|reopen)$/.test(p)) { res.writeHead(204); return res.end() }
     return send({ error: `neznámý endpoint ${p}` }, 404)
   })
@@ -141,8 +196,8 @@ export const getSupabase = () => ({
   const entry = '/tmp/klient-entry.ts'
   fs.writeFileSync(entry, `
 export { db } from '${ROOT}src/db/db'
-export { addClient, updateClient } from '${ROOT}src/db/repo'
-export { refreshTodoist, fetchTodoistProjects, getTodoistStatus } from '${ROOT}src/sync/todoist'
+export { addClient, updateClient, addTask } from '${ROOT}src/db/repo'
+export { refreshTodoist, fetchTodoistProjects, getTodoistStatus, sendTaskToTodoist, pushTodoistEdits } from '${ROOT}src/sync/todoist'
 `)
   const out = '/tmp/klient-bundle.mjs'
   await esbuild.build({
@@ -180,14 +235,15 @@ globalThis.fetch = async (input, init) => {
   return realFetch(input, init)
 }
 
-const { db, addClient, updateClient, refreshTodoist, fetchTodoistProjects, getTodoistStatus } = await buildClient()
+const { db, addClient, updateClient, addTask, refreshTodoist, fetchTodoistProjects,
+        getTodoistStatus, sendTaskToTodoist, pushTodoistEdits } = await buildClient()
 
 console.log('\n— párovací obrazovka —')
 const { projects, user } = await fetchTodoistProjects()
 ok('edge funkce vrátila přihlášeného uživatele', user.id === '49020', user.email)
-ok('stránkování projektů funguje (2 stránky)', projects.length === 3, `${projects.length} projektů`)
+ok('stránkování projektů funguje (2 stránky)', projects.length === 4, `${projects.length} projektů`)
 const shared = projects.filter((p) => p.isShared)
-ok('sdílené projekty se poznají', shared.length === 2, shared.map((p) => p.name).join(', '))
+ok('sdílené projekty se poznají', shared.length === 3, shared.map((p) => p.name).join(', '))
 const alza = projects.find((p) => p.id === '220')
 ok('u sdíleného projektu jsou spolupracovníci', alza.collaborators.length === 2,
    alza.collaborators.map((c) => c.email).join(', '))
@@ -243,6 +299,39 @@ await db.tasks.update(report.id, { status: 'done', completedAt: new Date().toISO
 await refreshTodoist(true)
 ok('odškrtnutí v appce zavře úkol i v Todoistu', calls.includes('POST /api/v1/tasks/7001/close'),
    calls.filter((c) => c.includes('close')).join(', ') || 'nic')
+
+console.log('\n— úprava úkolu z appky letí do Todoistu —')
+await db.tasks.update(report.id, { status: 'active', completedAt: undefined, todoistDoneAt: undefined })
+await db.tasks.update(report.id, { title: 'Report kampaní — do pondělí', todoistDirty: true })
+await pushTodoistEdits()
+const edit = UPDATES.find((u) => u.id === '7001')
+ok('úprava dorazila do Todoistu', edit?.body.content === 'Report kampaní — do pondělí', edit?.body.content)
+ok('termín se vrátil do pole, ze kterého přišel (deadline)', 'deadline_date' in (edit?.body ?? {}),
+   JSON.stringify(edit?.body ?? {}).slice(0, 120))
+ok('po odeslání už úkol nečeká', !(await db.tasks.get(report.id))?.todoistDirty)
+
+console.log('\n— založení úkolu z appky —')
+const local = await addTask({ title: 'Poslat návrh rozpočtu', clientId: created.id, dueDate: '2026-09-10' })
+const sendErr = await sendTaskToTodoist(local.id)
+ok('odeslání proběhlo bez chyby', sendErr === null, sendErr ?? 'ok')
+const madeIn = CREATED.at(-1)
+ok('úkol vznikl ve správném projektu', madeIn?.body.project_id === '220', madeIn?.body.project_id)
+ok('poslal se název i termín', madeIn?.body.content === 'Poslat návrh rozpočtu' && madeIn?.body.due_date === '2026-09-10',
+   `${madeIn?.body.content} / ${madeIn?.body.due_date}`)
+const adopted = (await db.tasks.toArray()).find((x) => x.todoistId === madeIn.created.id && !x.deletedAt)
+ok('úkol v appce dostal značku Todoistu', Boolean(adopted), adopted?.todoistId)
+await refreshTodoist(true)
+const dupes = (await db.tasks.toArray()).filter((x) => !x.deletedAt && x.title === 'Poslat návrh rozpočtu')
+ok('další stažení ho nezdvojilo', dupes.length === 1, `${dupes.length}×`)
+
+console.log('\n— ztracený přístup k jednomu projektu —')
+await updateClient(created.id, { todoistProjectIds: ['220', '223'] })
+const pocetPred = (await db.tasks.toArray()).filter((x) => !x.deletedAt).length
+await refreshTodoist(true)
+const st = getTodoistStatus()
+ok('stažení kvůli jednomu projektu nespadlo', !st.lastError, st.lastError ?? 'ok')
+ok('nedostupný projekt se ohlásil', st.unreachable?.includes('223'), (st.unreachable ?? []).join(', '))
+ok('úkoly ostatních projektů zůstaly', (await db.tasks.toArray()).filter((x) => !x.deletedAt).length === pocetPred)
 
 server.close()
 console.log(fails.length ? `\nSELHALO: ${fails.join(' | ')}` : '\nCelý řetěz prošel')

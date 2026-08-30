@@ -9,10 +9,11 @@
 // naše; import je nepřepisuje.
 
 import { db } from '../db/db'
-import { emitRepoWrite } from '../db/events'
+import { emitRepoWrite, onRepoWrite } from '../db/events'
 import { importTodoist, type TodoistSection } from '../db/todoistImport'
-import type { Client } from '../db/types'
-import type { TodoistTask } from '../lib/todoistMap'
+import type { Client, Task } from '../db/types'
+import { deterministicUuid } from '../lib/deterministicId'
+import { priorityToTodoist, type TodoistTask } from '../lib/todoistMap'
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config'
 import { getSupabase } from './engine'
 import { getSyncStatus, subscribeSyncStatus } from './status'
@@ -39,6 +40,9 @@ export interface TodoistStatus {
   lastSuccessAt?: string
   taskCount?: number
   lastError?: string
+  // Projekty, na které jsem přišel o přístup — stažení kvůli nim nespadne,
+  // jen se o nich řekne, ať je můžu odpojit.
+  unreachable?: string[]
 }
 
 let status: TodoistStatus = {}
@@ -119,7 +123,19 @@ export async function fetchTodoistProjects(): Promise<{
 
 // --- stahování ---
 
+let pushTimer: ReturnType<typeof setTimeout> | undefined
+
 export function initTodoist(): void {
+  // Nový úkol u klienta se zapnutým psaním nemá čekat na další stažení.
+  onRepoWrite(() => {
+    clearTimeout(pushTimer)
+    pushTimer = setTimeout(() => {
+      if (!navigator.onLine || !getSupabase()) return
+      void pushNewTasks()
+      void pushTodoistEdits()
+    }, 2500)
+  })
+
   subscribeSyncStatus(() => {
     const s = getSyncStatus()
     if (s.phase === 'idle' && s.lastSyncAt) void maybeRefreshTodoist()
@@ -155,8 +171,14 @@ export async function refreshTodoist(force = false): Promise<void> {
   refreshing = true
   lastFetchAt = Date.now()
   try {
+    // Nejdřív ven, pak dovnitř — jinak by stažení přebilo úpravu,
+    // kterou jsem udělal offline.
+    await pushTodoistEdits()
+    await pushNewTasks()
+
     const completedSince = new Date(Date.now() - COMPLETED_WINDOW_DAYS * 86400_000).toISOString()
     const res = await callFn('pull', { projectIds, completedSince })
+    const failed = (res.failed ?? []) as Array<{ projectId: string }>
     const count = await importTodoist(
       {
         myUid: (res.myUid as string) || undefined,
@@ -164,12 +186,19 @@ export async function refreshTodoist(force = false): Promise<void> {
         tasks: (res.tasks ?? []) as TodoistTask[],
         completed: (res.completed ?? []) as TodoistTask[],
         clientOf,
+        pulled: (res.pulled as string[]) ?? projectIds,
       },
       { close: pushClose, reopen: pushReopen },
     )
 
     emitRepoWrite()
-    setStatus({ linked: true, lastSuccessAt: now(), taskCount: count, lastError: undefined })
+    setStatus({
+      linked: true,
+      lastSuccessAt: now(),
+      taskCount: count,
+      lastError: undefined,
+      unreachable: failed.length ? failed.map((f) => f.projectId) : undefined,
+    })
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
     console.warn('todoist:', message)
@@ -177,6 +206,114 @@ export async function refreshTodoist(force = false): Promise<void> {
   } finally {
     refreshing = false
   }
+}
+
+// --- zápis do Todoistu ---
+
+// Úprava, kterou jsem udělal v appce. Dokud se neodešle, je úkol
+// „todoistDirty" a žádné stažení ho nepřepíše.
+export async function pushTodoistEdits(): Promise<void> {
+  if (!navigator.onLine || !getSupabase()) return
+  const dirty = await db.tasks
+    .filter((x) => !x.deletedAt && Boolean(x.todoistId) && x.todoistDirty === true)
+    .toArray()
+  for (const task of dirty) {
+    try {
+      const res = await callFn('update', {
+        taskId: task.todoistId,
+        title: task.title,
+        notes: task.notes ?? '',
+        priority: priorityToTodoist(task.priority),
+        // Termín se musí vrátit do stejného pole, ze kterého přišel.
+        ...(task.todoistHasDeadline
+          ? { deadline: task.dueDate ?? '' }
+          : { dueDate: task.dueDate ?? '', dueTime: task.dueTime }),
+      })
+      const updated = res.task as TodoistTask | undefined
+      await db.tasks.update(task.id, {
+        todoistDirty: undefined,
+        todoistUpdatedAt: updated?.updatedAt,
+        updatedAt: now(),
+      })
+    } catch (e) {
+      // Zůstane rozepsaný a zkusí se při dalším stažení — offline úprava
+      // se tak neztratí.
+      console.warn('todoist update:', e instanceof Error ? e.message : e)
+    }
+  }
+}
+
+// Založení úkolu z appky přímo v Todoistu. Vrací chybu, nebo null.
+export async function sendTaskToTodoist(taskId: string): Promise<string | null> {
+  const task = await db.tasks.get(taskId)
+  if (!task || task.todoistId) return null
+  const client = task.clientId ? await db.clients.get(task.clientId) : undefined
+  const projectId = client?.todoistProjectIds?.[0]
+  if (!projectId) return 'Klient nemá napojený projekt v Todoistu.'
+  const project = task.projectId ? await db.projects.get(task.projectId) : undefined
+  try {
+    const res = await callFn('create', {
+      projectId,
+      sectionId: project?.todoistSectionId,
+      title: task.title,
+      notes: task.notes,
+      priority: priorityToTodoist(task.priority),
+      dueDate: task.dueDate,
+      dueTime: task.dueTime,
+    })
+    const created = res.task as TodoistTask | undefined
+    if (!created?.id) return 'Todoist úkol nevrátil.'
+    await adoptCreated(task, created)
+    emitRepoWrite()
+    return null
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e)
+  }
+}
+
+// Úkol z appky má vlastní id, ale stažení hledá to odvozené z todoistího.
+// Přesadíme ho tedy pod odvozené id, ať obě zařízení mluví o témž záznamu
+// a nevzniknou dva.
+async function adoptCreated(task: Task, created: TodoistTask): Promise<void> {
+  const t = now()
+  const marks = {
+    todoistId: created.id,
+    todoistProjectId: created.projectId,
+    todoistUpdatedAt: created.updatedAt,
+    todoistHasDeadline: Boolean(created.deadline?.date) || undefined,
+    todoistRecurring: Boolean(created.due?.isRecurring) || undefined,
+  }
+  const targetId = await deterministicUuid('todoist', created.id)
+  if (targetId === task.id || (await db.tasks.get(targetId))) {
+    await db.tasks.update(task.id, { ...marks, updatedAt: t })
+    return
+  }
+  await db.tasks.add({ ...task, ...marks, id: targetId, updatedAt: t })
+  await db.tasks.update(task.id, { deletedAt: t, updatedAt: t })
+}
+
+// Klient se zapnutým psaním do Todoistu: nové úkoly tam letí samy.
+// Rozhoduje razítko todoistPushSince — po zapnutí se nesmí vyvalit ven
+// všechno, co jsem si u klienta kdy poznamenal. Interní rutina
+// (kontroly klienta, instance šablon) zůstává doma vždycky.
+async function pushNewTasks(): Promise<void> {
+  const clients = await db.clients
+    .filter((c) => !c.deletedAt && Boolean(c.todoistPushSince) && (c.todoistProjectIds?.length ?? 0) > 0)
+    .toArray()
+  if (clients.length === 0) return
+  const since = new Map(clients.map((c) => [c.id, c.todoistPushSince!]))
+  const fresh = await db.tasks
+    .filter(
+      (x) =>
+        !x.deletedAt &&
+        !x.todoistId &&
+        x.status !== 'done' &&
+        !x.isClientCheck &&
+        !x.sourceTemplateItemId &&
+        Boolean(x.clientId && since.has(x.clientId) && x.createdAt >= since.get(x.clientId)!),
+    )
+    .toArray()
+  for (const task of fresh.slice(0, 20)) await sendTaskToTodoist(task.id)
 }
 
 async function pushClose(todoistId: string): Promise<void> {

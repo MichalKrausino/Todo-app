@@ -3,7 +3,7 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from './db'
-import { importTodoist, type TodoistPush, type TodoistSnapshot } from './todoistImport'
+import { importTodoist, unlinkTodoistProject, type TodoistPush, type TodoistSnapshot } from './todoistImport'
 import type { TodoistTask } from '../lib/todoistMap'
 import { deterministicUuid } from '../lib/deterministicId'
 
@@ -173,6 +173,74 @@ describe('importTodoist', () => {
   it('nový úkol dostane tichý odhad času, i když ho Todoist nemá', async () => {
     await importTodoist(snap({ tasks: [td()] }), push)
     expect((await db.tasks.get(await localId('7001')))?.estimateMinutes).toBeGreaterThan(0)
+  })
+
+  it('opakovaný úkol se po odškrtnutí nezavírá podruhé, jen se posune', async () => {
+    // Todoist opakovaný úkol nezavře — posune ho na další termín pod týmž
+    // id. Druhý close by ho posunul znovu, o týden dál.
+    const rec = (due: string) => td({ due: { date: due, isRecurring: true }, updatedAt: due })
+    await importTodoist(snap({ tasks: [rec('2026-05-04')] }), push)
+    const id = await localId('7001')
+    await db.tasks.update(id, { status: 'done', completedAt: '2026-05-04T09:00:00Z' })
+
+    await importTodoist(snap({ tasks: [rec('2026-05-11')] }), push)
+
+    expect(closed).toEqual([]) // žádné druhé zavření
+    const live = await db.tasks.get(id)
+    expect(live?.status).toBe('active')
+    expect(live?.dueDate).toBe('2026-05-11')
+    expect(live?.completedAt).toBeUndefined()
+
+    const history = (await db.tasks.toArray()).filter((x) => x.status === 'done' && !x.todoistId)
+    expect(history).toHaveLength(1)
+    expect(history[0].dueDate).toBe('2026-05-04') // hotový výskyt zůstal v historii
+  })
+
+  it('opakovaný úkol se stejným termínem se zavře jako každý jiný', async () => {
+    const rec = td({ due: { date: '2026-05-04', isRecurring: true } })
+    await importTodoist(snap({ tasks: [rec] }), push)
+    await db.tasks.update(await localId('7001'), { status: 'done', completedAt: 'kdysi' })
+    await importTodoist(snap({ tasks: [rec] }), push)
+    expect(closed).toEqual(['7001'])
+  })
+
+  it('neodeslanou lokální úpravu stažení nepřepíše', async () => {
+    await importTodoist(snap({ tasks: [td({ updatedAt: 'u1' })] }), push)
+    const id = await localId('7001')
+    await db.tasks.update(id, { title: 'Můj vlastní název', todoistDirty: true })
+    await importTodoist(snap({ tasks: [td({ content: 'Změna z Todoistu', updatedAt: 'u2' })] }), push)
+    expect((await db.tasks.get(id))?.title).toBe('Můj vlastní název')
+  })
+
+  it('projekt, který se nepodařilo stáhnout, o úkoly nepřijde', async () => {
+    await importTodoist(snap({ tasks: [td()] }), push)
+    // stažení proběhlo, ale tenhle projekt v něm nebyl (ztracený přístup)
+    await importTodoist(snap({ tasks: [], pulled: [] }), push)
+    expect((await db.tasks.get(await localId('7001')))?.deletedAt).toBeUndefined()
+  })
+
+  it('úkol založený z appky se nezdvojí (hledá se podle značky)', async () => {
+    const t = new Date().toISOString()
+    await db.tasks.add({
+      id: 'moje-vlastni-id', createdAt: t, updatedAt: t, title: 'Připravit report',
+      priority: 'normal', status: 'active', order: 0, clientId: CLIENT,
+      todoistId: '7001', todoistProjectId: PROJ,
+    })
+    await importTodoist(snap({ tasks: [td({ content: 'Připravit report — v2' })] }), push)
+    const all = (await db.tasks.toArray()).filter((x) => !x.deletedAt)
+    expect(all).toHaveLength(1)
+    expect(all[0].id).toBe('moje-vlastni-id')
+    expect(all[0].title).toBe('Připravit report — v2')
+  })
+
+  it('odpojení projektu úkoly nechá, jen z nich sundá značky', async () => {
+    await importTodoist(snap({ tasks: [td()] }), push)
+    const count = await unlinkTodoistProject(PROJ)
+    expect(count).toBe(1)
+    const task = await db.tasks.get(await localId('7001'))
+    expect(task?.deletedAt).toBeUndefined()
+    expect(task?.todoistId).toBeUndefined()
+    expect(task?.title).toBe('Připravit report')
   })
 
   it('projekt bez spárovaného klienta se ignoruje', async () => {

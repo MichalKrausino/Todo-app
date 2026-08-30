@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { addClient, allClients, updateClient } from '../db/repo'
+import { unlinkTodoistProject } from '../db/todoistImport'
 import { CLIENT_COLORS } from '../lib/labels'
 import {
   checkTodoistLinked,
@@ -89,7 +90,12 @@ export function TodoistSheet({ onClose }: { onClose: () => void }) {
         })
       }
     }
-    if (clientId === '') return
+    // „netahat" = úkoly zůstanou, jen přestanou být todoistí a dají se
+    // zase normálně upravovat.
+    if (clientId === '') {
+      await unlinkTodoistProject(projectId)
+      return
+    }
     if (clientId === '__new__') {
       const created = await addClient({
         name: projectName,
@@ -111,8 +117,9 @@ export function TodoistSheet({ onClose }: { onClose: () => void }) {
     pullTimer.current = setTimeout(() => void refreshTodoist(true), 1500)
   }
 
-  const clientOf = (projectId: string) =>
-    clients.find((c) => c.todoistProjectIds?.includes(projectId))?.id ?? ''
+  const mapped = (projectId: string) =>
+    clients.find((c) => c.todoistProjectIds?.includes(projectId))
+  const clientOf = (projectId: string) => mapped(projectId)?.id ?? ''
 
   const shared = (projects ?? []).filter((p) => p.isShared)
   const own = (projects ?? []).filter((p) => !p.isShared)
@@ -158,6 +165,15 @@ export function TodoistSheet({ onClose }: { onClose: () => void }) {
           {status.lastError && !error && (
             <p className="rounded-2xl bg-danger-wash px-3 py-2 text-xs text-danger">{status.lastError}</p>
           )}
+          {/* Odebraný přístup k jednomu projektu nesmí zmrazit zbytek —
+              stažení proběhne a jen se to tady řekne. */}
+          {status.unreachable?.length ? (
+            <p className="rounded-2xl bg-note px-3 py-2 text-xs text-note-ink">
+              K {status.unreachable.length === 1 ? 'jednomu projektu' : `${status.unreachable.length} projektům`} už
+              nemám přístup — nejspíš mě z nich klient odebral. Ostatní se stáhly normálně;
+              nastav u nich „netahat do appky".
+            </p>
+          ) : null}
 
           {status.linked && (
             <>
@@ -191,6 +207,29 @@ export function TodoistSheet({ onClose }: { onClose: () => void }) {
                             </option>
                           ))}
                         </select>
+                        {/* Psaní ven je vypnuté, dokud ho nezapnu — do
+                            klientova projektu nemá nic uniknout omylem. */}
+                        {mapped(p.id) && (
+                          <label className="flex items-start gap-2 text-[12px] leading-snug text-ink-soft">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(mapped(p.id)?.todoistPushSince)}
+                              onChange={(e) =>
+                                void updateClient(mapped(p.id)!.id, {
+                                  todoistPushSince: e.target.checked ? new Date().toISOString() : undefined,
+                                })
+                              }
+                              className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+                            />
+                            <span>
+                              Nové úkoly tohohle klienta zakládat i v Todoistu
+                              <span className="block text-ink-faint">
+                                Týká se jen úkolů napsaných od zapnutí; kontroly klienta
+                                a úkoly ze šablon zůstávají doma.
+                              </span>
+                            </span>
+                          </label>
+                        )}
                       </li>
                     ))}
                   </ul>
