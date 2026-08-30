@@ -39,6 +39,7 @@ const AUTOMATIC: string[] = [
   'V neděli a v pondělí nabídne ohlédnutí za týdnem.',
   'Schůzky z Google kalendáře se ukazují na Dnes i v Plánu.',
   'Úkoly ze sdílených projektů v Todoistu chodí ke svým klientům; co tady odškrtnu, je hotové i tam.',
+  'Dokud je appka otevřená a je signál, data se obnovují sama — na wifi i na datech.',
 ]
 
 export function HelpSheet({ onClose }: { onClose: () => void }) {

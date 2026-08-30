@@ -6,6 +6,7 @@ import { reconcileTemplates } from './db/templates'
 import { initAppBadge } from './lib/badge'
 import { initCalendar } from './sync/calendar'
 import { initSync } from './sync/engine'
+import { initLive } from './sync/live'
 import { initTodoist } from './sync/todoist'
 import './index.css'
 
@@ -26,6 +27,8 @@ registerSW({
 initSync()
 initCalendar()
 initTodoist()
+// Udržuje data čerstvá, dokud je appka otevřená a je signál.
+initLive()
 initAppBadge()
 
 // Kliknutí na notifikaci: service worker pošle cílovou adresu už otevřenému

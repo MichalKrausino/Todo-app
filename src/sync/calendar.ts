@@ -14,7 +14,7 @@ import { getSyncStatus, subscribeSyncStatus } from './status'
 // Okno cache: půl roku dopředu — heatmapa i agenda tak vidí i vzdálené
 // plány (svatby, dovolené, konference), ne jen nejbližší dny.
 export const FETCH_WINDOW_DAYS = 180
-const REFRESH_MIN_INTERVAL_MS = 10 * 60_000
+const REFRESH_MIN_INTERVAL_MS = 5 * 60_000
 
 let lastFetchAt = 0
 let refreshing = false
@@ -52,14 +52,16 @@ export function initCalendar(): void {
   // Po každém úspěšném syncu (a při návratu do popředí) zkusit obnovit cache.
   subscribeSyncStatus(() => {
     const s = getSyncStatus()
-    if (s.phase === 'idle' && s.lastSyncAt) void maybeRefresh()
+    if (s.phase === 'idle' && s.lastSyncAt) void maybeRefreshCalendar()
   })
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') void maybeRefresh()
+    if (document.visibilityState === 'visible') void maybeRefreshCalendar()
   })
 }
 
-async function maybeRefresh(): Promise<void> {
+// Obnova s pojistkou proti zbytečnému opakování — volá ji plánovač
+// (src/sync/live.ts) i návrat do popředí.
+export async function maybeRefreshCalendar(): Promise<void> {
   if (Date.now() - lastFetchAt < REFRESH_MIN_INTERVAL_MS) return
   await refreshCalendar()
 }

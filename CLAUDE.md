@@ -18,7 +18,11 @@ zdůvodnění rozhodnutí a roadmapa fází: **`docs/PLAN.md`** — před větš
    `src/sync/` (engine), která běží na pozadí: pull → push, konflikty LWW podle
    `updatedAt` (server má stejný guard jako trigger, viz `supabase/schema.sql`).
    Repo hlásí zápisy přes `src/db/events.ts`, engine na ně reaguje debounced
-   pushem. UI čte stav syncu jen přes `src/sync/status.ts`.
+   pushem. UI čte stav syncu jen přes `src/sync/status.ts`. O čerstvost se
+   stará jeden plánovač `src/sync/live.ts` — tiká, dokud je appka v popředí
+   a je signál (vlastní data po minutě, kalendář a Todoist po pěti), a při
+   návratu signálu, přepnutí wifi ↔ data i po probuzení zařízení stáhne
+   všechno hned. Na pozadí se netahá nic — od toho jsou push notifikace.
 2. **Tombstony.** Záznamy se nikdy nemažou natvrdo — nastavuje se `deletedAt`.
    Všechny dotazy musí filtrovat `deletedAt`. Konflikty při synchronizaci řeší
    last-write-wins podle `updatedAt`.

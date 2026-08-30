@@ -17,7 +17,7 @@ import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config'
 import { getSupabase } from './engine'
 import { getSyncStatus, subscribeSyncStatus } from './status'
 
-const REFRESH_MIN_INTERVAL_MS = 10 * 60_000
+const REFRESH_MIN_INTERVAL_MS = 5 * 60_000
 // Jak hluboko do minulosti se ptáme na hotové úkoly. Slouží jen k tomu,
 // aby se poznalo „odškrtnuto" od „smazáno" — delší okno nemá smysl.
 const COMPLETED_WINDOW_DAYS = 30
@@ -122,14 +122,16 @@ export async function fetchTodoistProjects(): Promise<{
 export function initTodoist(): void {
   subscribeSyncStatus(() => {
     const s = getSyncStatus()
-    if (s.phase === 'idle' && s.lastSyncAt) void maybeRefresh()
+    if (s.phase === 'idle' && s.lastSyncAt) void maybeRefreshTodoist()
   })
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') void maybeRefresh()
+    if (document.visibilityState === 'visible') void maybeRefreshTodoist()
   })
 }
 
-async function maybeRefresh(): Promise<void> {
+// Obnova s pojistkou proti zbytečnému opakování — volá ji plánovač
+// (src/sync/live.ts) i návrat do popředí.
+export async function maybeRefreshTodoist(): Promise<void> {
   if (Date.now() - lastFetchAt < REFRESH_MIN_INTERVAL_MS) return
   await refreshTodoist()
 }
