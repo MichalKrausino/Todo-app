@@ -33,6 +33,10 @@ export class TodoDB extends Dexie {
     this.version(3).stores({
       calendarEvents: 'id, startDay',
     })
+    // Fáze 8: import z Todoistu hledá úkoly podle jejich todoistId.
+    this.version(4).stores({
+      tasks: 'id, clientId, projectId, status, dueDate, scheduledFor, completedAt, updatedAt, todoistId',
+    })
   }
 }
 

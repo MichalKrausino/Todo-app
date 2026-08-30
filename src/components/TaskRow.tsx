@@ -259,7 +259,7 @@ export function TaskRow({
             )}
             {task.title}
           </div>
-          {(client || project || (showDate && task.dueDate) || task.dueTime || subs.length > 0 || prio || task.recurrenceRule || task.sourceTemplateItemId) && (
+          {(client || project || (showDate && task.dueDate) || task.dueTime || subs.length > 0 || prio || task.recurrenceRule || task.sourceTemplateItemId || task.todoistId) && (
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
               {client && (
                 <span className="inline-flex items-center gap-1.5 text-ink-soft">
@@ -297,6 +297,12 @@ export function TaskRow({
               {(task.recurrenceRule || task.sourceTemplateItemId) && (
                 <span className="text-ink-faint" title="Opakuje se">
                   ↻
+                </span>
+              )}
+              {/* úkol přišel z Todoistu — tichá tečka, ne cizí logo */}
+              {task.todoistId && (
+                <span className="text-ink-faint" title="Z Todoistu">
+                  ⇢ Todoist
                 </span>
               )}
               {prio && <span className={prio.cls}>{prio.label}</span>}

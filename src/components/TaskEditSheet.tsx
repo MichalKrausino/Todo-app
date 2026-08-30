@@ -14,7 +14,7 @@ import {
   type RecurrencePreset,
 } from '../lib/rrule'
 
-const field = 'w-full rounded-lg border border-line bg-card px-3 py-2 text-[16px] outline-none focus:border-accent/60'
+const field = 'w-full rounded-lg border border-line bg-card px-3 py-2 text-[16px] outline-none focus:border-accent/60 disabled:bg-well disabled:text-ink-soft'
 const label = 'mb-1 block text-xs font-medium text-ink-soft'
 
 export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => void }) {
@@ -23,6 +23,9 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   const [clientId, setClientId] = useState(task.clientId ?? '')
   const [projectId, setProjectId] = useState(task.projectId ?? '')
   const [priority, setPriority] = useState<Priority>(task.priority)
+  // Importovaný úkol: název, zařazení, termín a priorita patří Todoistu.
+  // Ruční úprava by při dalším stažení stejně zmizela, tak radši zamčeno.
+  const fromTodoist = Boolean(task.todoistId)
   const [dueDate, setDueDate] = useState(task.dueDate ?? '')
   const [dueTime, setDueTime] = useState(task.dueTime ?? '')
   const [scheduledFor, setScheduledFor] = useState(task.scheduledFor ?? '')
@@ -129,9 +132,20 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
             Top {MAX_PINNED} je plná — nejdřív něco odepni. Míň priorit, víc hotovo.
           </p>
         )}
+        {fromTodoist && (
+          <p className="rounded-lg bg-well px-3 py-2 text-[13px] leading-relaxed text-ink-soft">
+            Úkol je z Todoistu. Název, zařazení, termín a priorita se řídí tam —
+            tady se dá naplánovat den, připnout do Top 3 a odškrtnout.
+          </p>
+        )}
         <div>
           <label className={label}>Úkol</label>
-          <input className={field} value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input
+            className={field}
+            value={title}
+            disabled={fromTodoist}
+            onChange={(e) => setTitle(e.target.value)}
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -140,6 +154,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
             <select
               className={field}
               value={clientId}
+              disabled={fromTodoist}
               onChange={(e) => {
                 setClientId(e.target.value)
                 setProjectId('')
@@ -159,7 +174,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
               className={field}
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
-              disabled={!clientId}
+              disabled={fromTodoist || !clientId}
             >
               <option value="">—</option>
               {projects.map((p) => (
@@ -174,7 +189,13 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={label}>Termín (dokdy)</label>
-            <input type="date" className={field} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            <input
+              type="date"
+              className={field}
+              value={dueDate}
+              disabled={fromTodoist}
+              onChange={(e) => setDueDate(e.target.value)}
+            />
             {/* čas patří k termínu — bez popisku vypadal jako osiřelé pole */}
             <label className="mt-1.5 flex items-center gap-2">
               <span className="shrink-0 text-xs font-medium text-ink-soft">Čas</span>
@@ -183,6 +204,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
                 aria-label="Čas termínu"
                 className={`${field} min-w-0 flex-1`}
                 value={dueTime}
+                disabled={fromTodoist}
                 onChange={(e) => {
                   setDueTime(e.target.value)
                   // čas na prázdném datu doplní dnešek, ať se neztratí
@@ -205,7 +227,12 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={label}>Priorita</label>
-            <select className={field} value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
+            <select
+              className={field}
+              value={priority}
+              disabled={fromTodoist}
+              onChange={(e) => setPriority(e.target.value as Priority)}
+            >
               {(Object.keys(PRIORITY_LABELS) as Priority[]).map((p) => (
                 <option key={p} value={p}>
                   {PRIORITY_LABELS[p]}

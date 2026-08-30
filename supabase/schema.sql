@@ -139,3 +139,64 @@ grant execute on function public.store_google_token(text) to authenticated;
 -- Edge funkce `calendar` (supabase/functions/calendar): events /
 -- scheduleBlock / deleteBlock — čte všechny kalendáře, zapisuje výhradně
 -- do vlastního kalendáře „Todo" (id si ukládá do google_tokens).
+
+-- ---------------------------------------------------------------------------
+-- Fáze 8: Todoist — token a kurzor
+-- ---------------------------------------------------------------------------
+
+-- Osobní API token Todoistu má plný přístup k účtu a nedá se omezit rozsahem,
+-- takže bydlí tady: RLS zapnuté BEZ policies = anon ani authenticated na něj
+-- nedosáhnou, čte ho výhradně service role (edge funkce todoist).
+-- Klient token pouze ukládá přes write-only RPC store_todoist_token.
+
+create table if not exists public.todoist_tokens (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  api_token text not null,
+  sync_token text,
+  updated_at timestamptz not null default now()
+);
+alter table public.todoist_tokens enable row level security;
+
+create or replace function public.store_todoist_token(token text)
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  insert into public.todoist_tokens (user_id, api_token, updated_at)
+  values (auth.uid(), token, now())
+  on conflict (user_id) do update
+    set api_token = excluded.api_token, updated_at = now();
+$$;
+
+revoke all on function public.store_todoist_token(text) from public, anon;
+grant execute on function public.store_todoist_token(text) to authenticated;
+
+-- Odpojení Todoistu z appky — smaže token, úkoly zůstávají.
+create or replace function public.forget_todoist_token()
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  delete from public.todoist_tokens where user_id = auth.uid();
+$$;
+
+revoke all on function public.forget_todoist_token() from public, anon;
+grant execute on function public.forget_todoist_token() to authenticated;
+
+-- Jestli je Todoist propojený (bez prozrazení tokenu) — pro stav v nastavení.
+create or replace function public.has_todoist_token()
+returns boolean
+language sql
+security definer
+set search_path = ''
+as $$
+  select exists (select 1 from public.todoist_tokens where user_id = auth.uid());
+$$;
+
+revoke all on function public.has_todoist_token() from public, anon;
+grant execute on function public.has_todoist_token() to authenticated;
+
+-- Edge funkce `todoist` (supabase/functions/todoist): projects / pull /
+-- close / reopen. Nasazuje se s verify_jwt ON — volá ji přihlášený klient.

@@ -19,8 +19,10 @@ import {
   syncNow,
 } from '../sync/engine'
 import { getSyncStatus, subscribeSyncStatus, type SyncPhase } from '../sync/status'
+import { getTodoistStatus, subscribeTodoistStatus } from '../sync/todoist'
 import { HelpSheet } from './HelpSheet'
 import { Sheet } from './Sheet'
+import { TodoistSheet } from './TodoistSheet'
 
 const PHASE_LABELS: Record<SyncPhase, string> = {
   unconfigured: 'Nenastaveno',
@@ -39,7 +41,9 @@ export function useSyncStatus() {
 
 export function SyncSheet({ onClose }: { onClose: () => void }) {
   const [helpOpen, setHelpOpen] = useState(false)
+  const [todoistOpen, setTodoistOpen] = useState(false)
   const status = useSyncStatus()
+  const todoist = useSyncExternalStore(subscribeTodoistStatus, getTodoistStatus)
 
   return (
     <Sheet onClose={onClose} className="space-y-4">
@@ -116,6 +120,27 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
         )}
 
         <BackupSection />
+
+        {/* Todoist (Fáze 8) — sdílené projekty klientů do appky. */}
+        <button
+          onClick={() => setTodoistOpen(true)}
+          className="flex w-full items-center justify-between rounded-xl border border-line px-4 py-3 text-left transition-transform duration-150 active:scale-[0.99]"
+        >
+          <span>
+            <span className="block text-[15px] font-medium">Todoist</span>
+            <span className="text-[13px] text-ink-soft">
+              {todoist.linked
+                ? typeof todoist.taskCount === 'number'
+                  ? `Propojeno · ${todoist.taskCount} úkolů`
+                  : 'Propojeno'
+                : 'Sdílené projekty klientů do appky'}
+            </span>
+          </span>
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint/70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
+        {todoistOpen && <TodoistSheet onClose={() => setTodoistOpen(false)} />}
 
         {/* Nápověda patří sem — je to jediné „nastavení" v appce. */}
         <button

@@ -4,8 +4,8 @@ Cíl: klienti, kteří mě přidali do svých projektů v Todoistu, a jejich úk
 se objeví v této appce jako normální klienti a úkoly — vidím je na Dnes,
 v Plánu, počítají se do kapacity, chodí na ně upozornění.
 
-Tenhle dokument je průzkum + plán. **Kód zatím žádný.** Než se do toho pustím,
-je potřeba rozhodnout tři věci (na konci, sekce „Co potřebuju vědět od tebe“).
+Tenhle dokument je průzkum, návrh a zároveň návod k nasazení. Kód v appce
+je hotový — zbývá spustit SQL a nasadit edge funkci (sekce 7).
 
 ---
 
@@ -62,7 +62,7 @@ Spolupracovníky (kdo v projektu je, včetně e-mailů) vrátí
 1. **Token.** Todoist → Nastavení → Integrace → **Vývojář** → zkopírovat
    „API token". Funguje na jakémkoli tarifu, tvoje Pro předplatné navíc není
    podmínkou toho, aby tě klienti přidali (limit spolupracovníků řeší tarif
-   vlastníka projektu).
+   vlastníka projektu). Token nikam neposílej — vkládá se přímo v appce.
    - Pozor: osobní token má **plný přístup k celému účtu** a nedá se omezit.
      Proto poletí rovnou na server (viz níže) a nikdy nebude v prohlížeči.
      Kdykoli ho zneplatníš tamtéž ve vývojářském nastavení.
@@ -196,31 +196,52 @@ v appce by další synchronizace přepsala, takže tahle pole u importovaných
 
 ---
 
-## 6. Co ještě zvážit
+## 6. Co je rozhodnuté
 
-- **Kteří klienti.** Jen sdílené projekty (`is_shared: true`), nebo i moje
-  vlastní todoistí projekty? Vlastní projekty by se překrývaly s tím, co si
-  vedu tady.
-- **Které úkoly.** Jen ty přiřazené mně (`responsible_uid` = já) a
-  nepřiřazené, nebo úplně všechny včetně cizích? Filtr
-  `(shared & assigned to: me) | !shared` umí Todoist i sám.
-- **Webhooky.** Šly by (`item:added`, `item:completed`, `project:*` …) a
-  změny by chodily okamžitě, ale vyžadují registraci OAuth aplikace v
-  Todoist App Console. Doporučuju začít pravidelným taháním a webhooky
-  přidat, až se ukáže, že zpoždění vadí.
-- **Komentáře** u úkolů (`/comments`) se zatím ignorují.
+- **Tahají se jen sdílené projekty.** Vlastní todoistí projekty zůstávají
+  stranou — to, co si vedu sám, patří rovnou do appky. Párovací obrazovka
+  je ukáže jen jako počet, aby bylo jasné, že se ignorují.
+- **Berou se úkoly přiřazené mně a nepřiřazené.** Cizí přiřazené úkoly ve
+  sdíleném projektu nechávám být (`isMine` v `src/lib/todoistMap.ts`).
+- **Sekce se stávají projekty** pod klientem.
+- **Webhooky zatím ne.** Šly by (`item:added`, `item:completed`, `project:*` …)
+  a změny by chodily okamžitě, ale vyžadují registraci OAuth aplikace
+  v Todoist App Console. Deset minut zpoždění zatím stačí; kdyby vadilo,
+  přidají se později.
+- **Komentáře** u úkolů (`/comments`) se ignorují.
 
----
+## 7. Nasazení
 
-## 7. Rozsah práce
+Appka je hotová, server ještě ne. Postup:
 
-| Krok | Co |
+**Krok 1 — SQL.** V Supabase → SQL Editor spusť poslední sekci souboru
+[`supabase/schema.sql`](../supabase/schema.sql) („Fáze 8: Todoist").
+Vytvoří tabulku `todoist_tokens` (RLS bez policies) a tři funkce:
+`store_todoist_token`, `forget_todoist_token`, `has_todoist_token`.
+
+**Krok 2 — edge funkce.** V Supabase → Edge Functions vytvoř funkci
+`todoist` a vlož obsah [`supabase/functions/todoist/index.ts`](../supabase/functions/todoist/index.ts).
+Nechat **verify_jwt zapnuté** — volá ji přihlášený klient.
+
+**Krok 3 — token.** V appce: obláček vpravo nahoře → **Todoist** → vložit
+API token → Propojit.
+
+**Krok 4 — párování.** Ve stejném panelu se objeví sdílené projekty.
+U každého vyber klienta (nebo „založit klienta"). Stahování se rozjede samo
+pár vteřin po výběru, jinak tlačítkem „Stáhnout teď".
+
+## 8. Co je v kódu
+
+| Soubor | Co dělá |
 | --- | --- |
-| 1 | SQL: `todoist_tokens` + RPC (do `supabase/schema.sql`) |
-| 2 | Edge funkce `supabase/functions/todoist/index.ts` |
-| 3 | Datový model: pole na `Task` a `Client`, migrace Dexie |
-| 4 | `src/lib/todoistMap.ts` — čisté mapovací funkce + testy |
-| 5 | `src/sync/todoist.ts` — stahování, zápis přes repo, stav pro UI |
-| 6 | UI: v nastavení vložení tokenu a párování projektů s klienty |
-| 7 | Odznak „Todoist" na řádku úkolu, zamčená pole v editaci |
-| 8 | Zápis hotovosti zpátky do Todoistu |
+| `supabase/schema.sql` | tabulka `todoist_tokens` + RPC pro uložení/zapomenutí/ověření |
+| `supabase/functions/todoist/index.ts` | brána do API: `projects`, `pull`, `close`, `reopen` |
+| `src/lib/todoistMap.ts` | čisté mapování polí (termíny, priorita, checklist) |
+| `src/db/todoistImport.ts` | srovnání s lokální DB — co založit, změnit, zavřít, zahodit |
+| `src/sync/todoist.ts` | síť, throttle (10 min), stav pro UI |
+| `src/components/TodoistSheet.tsx` | vložení tokenu a párování projektů s klienty |
+
+Testy: `src/lib/todoistMap.test.ts` (13) a `src/db/todoistImport.test.ts` (15)
+nad fake IndexedDB — pokrývají založení, změnu, checklist z podúkolů,
+odškrtnutí oběma směry, mazání a to, že import nepřepíše moje naplánování,
+poznámky ani odhad.

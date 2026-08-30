@@ -6,6 +6,7 @@ import { reconcileTemplates } from './db/templates'
 import { initAppBadge } from './lib/badge'
 import { initCalendar } from './sync/calendar'
 import { initSync } from './sync/engine'
+import { initTodoist } from './sync/todoist'
 import './index.css'
 
 // Aktualizace PWA: nová verze se stáhne a aktivuje sama. Bez tohohle by si
@@ -24,6 +25,7 @@ registerSW({
 })
 initSync()
 initCalendar()
+initTodoist()
 initAppBadge()
 
 // Kliknutí na notifikaci: service worker pošle cílovou adresu už otevřenému

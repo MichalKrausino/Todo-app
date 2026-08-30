@@ -38,6 +38,7 @@ const AUTOMATIC: string[] = [
   'Po 16. hodině nabídne uzávěrku dne — zbylé úkoly dostanou nový termín.',
   'V neděli a v pondělí nabídne ohlédnutí za týdnem.',
   'Schůzky z Google kalendáře se ukazují na Dnes i v Plánu.',
+  'Úkoly ze sdílených projektů v Todoistu chodí ke svým klientům; co tady odškrtnu, je hotové i tam.',
 ]
 
 export function HelpSheet({ onClose }: { onClose: () => void }) {

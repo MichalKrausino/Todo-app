@@ -79,6 +79,24 @@ Přihlásit se jde e-mailem a heslem (funguje hned) nebo přes Google — ten
 vyžaduje OAuth klienta v Google Cloud Console a přijde vhod až s Fází 3
 (kalendář), kdy bude stejně potřeba.
 
+## Todoist (Fáze 8) — jednorázové nastavení
+
+Sdílené projekty, do kterých mě klienti přidali, se dají natáhnout do appky
+jako klienti a jejich úkoly.
+
+1. V **Supabase → SQL Editoru** spusť poslední sekci
+   [`supabase/schema.sql`](supabase/schema.sql) („Fáze 8: Todoist").
+2. V **Edge Functions** vytvoř funkci `todoist` z
+   [`supabase/functions/todoist/index.ts`](supabase/functions/todoist/index.ts),
+   `verify_jwt` nech zapnuté.
+3. V Todoistu: **Nastavení → Integrace → Vývojář** → zkopíruj API token.
+4. V appce: obláček vpravo nahoře → **Todoist** → vlož token → Propojit
+   a u každého sdíleného projektu vyber klienta.
+
+Token se ukládá jen na server (RLS bez policies, čte ho pouze edge funkce)
+a do prohlížeče se nikdy nevrací. Podrobnosti a mapování polí v
+[`docs/TODOIST.md`](docs/TODOIST.md).
+
 ## Nasazení
 
 Každý push na hlavní větev automaticky projde testy a nasadí se přes GitHub
