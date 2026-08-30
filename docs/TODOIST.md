@@ -245,3 +245,21 @@ Testy: `src/lib/todoistMap.test.ts` (13) a `src/db/todoistImport.test.ts` (15)
 nad fake IndexedDB — pokrývají založení, změnu, checklist z podúkolů,
 odškrtnutí oběma směry, mazání a to, že import nepřepíše moje naplánování,
 poznámky ani odhad.
+
+## 9. Ověření bez nasazeného serveru
+
+`npm run overit:todoist` (`scripts/overit-todoist.mjs`) postaví celý řetěz
+nanečisto: falešný Todoist → **skutečná** edge funkce → **skutečná**
+klientská vrstva → databáze appky. Podvržený je jen Todoist (HTTP server
+s odpověďmi ve tvaru podle oficiálních schémat) a Supabase (token a
+relace). Náš kód se nikde nemockuje, jen se za Deno runtime podstrčí Node.
+
+Ověřuje: stránkování projektů přes kurzor, rozpoznání sdílených projektů,
+spolupracovníky, „+ založit klienta", filtr přiřazení, mapování termínů,
+priority, délky, popisu a podúkolů, vznik projektu ze sekce, že opakované
+stažení nic nepřepisuje, a že odškrtnutí letí zpátky do Todoistu.
+
+Co tím ověřené **není**: že se pravé API chová přesně jako ta atrapa.
+Tvary odpovědí jsem vzal z oficiálního TypeScript klienta Doistu, ale
+drobnosti (třeba jestli hotové úkoly chodí pod `items`, nebo `results` —
+kód zvládne obojí) potvrdí až první ostré stažení.
