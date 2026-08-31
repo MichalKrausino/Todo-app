@@ -6,7 +6,15 @@ import { db } from './db'
 import type { Project, Task } from './types'
 import { deterministicUuid } from '../lib/deterministicId'
 import { estimateTaskMinutes } from '../lib/estimate'
-import { differs, isMine, ownedFields, patchFrom, subtasksFrom, type TodoistTask } from '../lib/todoistMap'
+import {
+  differs,
+  isMine,
+  mergeSubtasks,
+  ownedFields,
+  patchFrom,
+  subtasksFrom,
+  type TodoistTask,
+} from '../lib/todoistMap'
 
 export interface TodoistSection {
   id: string
@@ -134,6 +142,9 @@ export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): P
       clientId,
       projectId: td.sectionId ? projectOfSection.get(td.sectionId) : undefined,
     })
+    // Vlastní kroky dopsané v appce se ke krokům z Todoistu přidají,
+    // nepřepíšou se jimi.
+    if (existing) fields.subtasks = mergeSubtasks(existing.subtasks, fields.subtasks)
 
     if (!existing) {
       const task: Task = {
@@ -187,7 +198,7 @@ export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): P
     if (!existing || existing.deletedAt) continue // historii do appky netaháme
     seen.add(existing.id)
     if (existing.todoistDirty) continue // čeká na odeslání, nechat být
-    const subtasks = subtasksFrom(children.get(td.id) ?? [])
+    const subtasks = mergeSubtasks(existing.subtasks, subtasksFrom(children.get(td.id) ?? []))
     if (existing.status !== 'done') {
       if (existing.todoistDoneAt && existing.todoistDoneAt === td.completedAt) {
         // Tohle dokončení už jsme jednou převzali a úkol je přesto otevřený

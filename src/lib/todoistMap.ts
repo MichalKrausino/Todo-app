@@ -89,10 +89,30 @@ export function isMine(t: TodoistTask, myUid: string | undefined): boolean {
   return Boolean(myUid) && t.responsibleUid === myUid
 }
 
-// Podúkoly v Todoistu (parent_id) → náš checklist.
+// Podúkoly v Todoistu (parent_id) → náš checklist. Prefix `td-` v id
+// říká, že za položkou stojí skutečný úkol v Todoistu — odškrtnutí se
+// tam propíše a smazat ho odsud nejde.
+export const SUB_PREFIX = 'td-'
+
 export function subtasksFrom(children: TodoistTask[]): Subtask[] | undefined {
   if (children.length === 0) return undefined
-  return children.map((c) => ({ id: `td-${c.id}`, title: c.content, done: Boolean(c.checked) }))
+  return children.map((c) => ({ id: `${SUB_PREFIX}${c.id}`, title: c.content, done: Boolean(c.checked) }))
+}
+
+// Id úkolu v Todoistu, který za položkou checklistu stojí (nebo nic).
+export const todoistSubId = (subtaskId: string): string | undefined =>
+  subtaskId.startsWith(SUB_PREFIX) ? subtaskId.slice(SUB_PREFIX.length) : undefined
+
+// Vlastní kroky, které jsem si k todoistímu úkolu dopsal, musí stažení
+// přežít — jinak by mi je smazalo první obnovení.
+export function mergeSubtasks(
+  existing: Subtask[] | undefined,
+  fromTodoist: Subtask[] | undefined,
+): Subtask[] | undefined {
+  const mine = (existing ?? []).filter((s) => !s.id.startsWith(SUB_PREFIX))
+  const theirs = fromTodoist ?? []
+  if (mine.length === 0 && theirs.length === 0) return undefined
+  return [...theirs, ...mine]
 }
 
 // Pole, která u importovaného úkolu vlastní Todoist. Všechno ostatní

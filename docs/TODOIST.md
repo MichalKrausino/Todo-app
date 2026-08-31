@@ -203,6 +203,15 @@ projekty patří do Todoistu, ne sem.
 Čistě naše a ven se neposílá: naplánování na den (`scheduledFor`), špendlík
 Top 3, odhad času, kalendářní blok, podklady pro ranní návrh.
 
+### Checklist a podúkoly
+
+Podúkoly z Todoistu jsou položky checklistu s prefixem `td-` v id. Odškrtnutí
+takové položky zavře podúkol i v Todoistu, vrácení ho otevře. Nový krok
+dopsaný u todoistího úkolu tam vznikne jako podúkol (`parent_id`); když
+zrovna není signál, zůstane lokální a stažení ho nesmaže — vlastní kroky se
+ke krokům z Todoistu přidávají, nepřepisují se jimi. Smazat krok z Todoistu
+odsud nejde: smazal by se klientovi v jeho projektu.
+
 ### Opakované úkoly
 
 Todoist opakovaný úkol odškrtnutím **nezavře** — posune ho na další termín

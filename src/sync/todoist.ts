@@ -13,7 +13,7 @@ import { emitRepoWrite, onRepoWrite } from '../db/events'
 import { importTodoist, type TodoistSection } from '../db/todoistImport'
 import type { Client, Task } from '../db/types'
 import { deterministicUuid } from '../lib/deterministicId'
-import { priorityToTodoist, type TodoistTask } from '../lib/todoistMap'
+import { priorityToTodoist, todoistSubId, type TodoistTask } from '../lib/todoistMap'
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config'
 import { getSupabase } from './engine'
 import { getSyncStatus, subscribeSyncStatus } from './status'
@@ -290,6 +290,35 @@ async function adoptCreated(task: Task, created: TodoistTask): Promise<void> {
   }
   await db.tasks.add({ ...task, ...marks, id: targetId, updatedAt: t })
   await db.tasks.update(task.id, { deletedAt: t, updatedAt: t })
+}
+
+// Odškrtnutí kroku z checklistu, za kterým stojí úkol v Todoistu.
+// Bez tohohle by checklist v appce a v Todoistu tvrdily každý něco jiného.
+export async function setTodoistSubtaskDone(subtaskId: string, done: boolean): Promise<void> {
+  const id = todoistSubId(subtaskId)
+  if (!id || !navigator.onLine || !getSupabase()) return
+  try {
+    await callFn(done ? 'close' : 'reopen', { taskId: id })
+  } catch (e) {
+    console.warn('todoist podúkol:', e instanceof Error ? e.message : e)
+  }
+}
+
+// Nový krok u todoistího úkolu vznikne i tam, jako podúkol. Vrací id,
+// nebo null — offline zůstane krok jen lokální a stažení ho nesmaže.
+export async function addTodoistSubtask(
+  parentTodoistId: string,
+  title: string,
+): Promise<string | null> {
+  if (!navigator.onLine || !getSupabase()) return null
+  try {
+    const res = await callFn('create', { parentId: parentTodoistId, title })
+    const created = res.task as TodoistTask | undefined
+    return created?.id ?? null
+  } catch (e) {
+    console.warn('todoist podúkol:', e instanceof Error ? e.message : e)
+    return null
+  }
 }
 
 // Klient se zapnutým psaním do Todoistu: nové úkoly tam letí samy.

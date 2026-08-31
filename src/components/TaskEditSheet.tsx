@@ -4,7 +4,8 @@ import type { Priority, Project, Subtask, Task } from '../db/types'
 import { MAX_PINNED, activeClients, clientProjects, removeTask, togglePinned, updateTask } from '../db/repo'
 import { Sheet } from './Sheet'
 import { deleteBlockForTask } from '../sync/calendar'
-import { pushTodoistEdits, sendTaskToTodoist } from '../sync/todoist'
+import { addTodoistSubtask, pushTodoistEdits, sendTaskToTodoist, setTodoistSubtaskDone } from '../sync/todoist'
+import { SUB_PREFIX } from '../lib/todoistMap'
 import { todayISO } from '../lib/dates'
 import { PRIORITY_LABELS } from '../lib/labels'
 import {
@@ -61,11 +62,21 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
     void updateTask(task.id, { subtasks: list })
   }
 
-  const addSubtask = () => {
+  // U todoistího úkolu vznikne krok i tam, ať checklist sedí na obou
+  // stranách. Když se to nepovede (offline), zůstane krok lokální —
+  // stažení ho nesmaže, jen se nepropíše ven.
+  const addSubtask = async () => {
     const title = newSub.trim()
     if (!title) return
-    persistSubtasks([...subtasks, { id: crypto.randomUUID(), title, done: false }])
     setNewSub('')
+    const local = { id: crypto.randomUUID(), title, done: false }
+    persistSubtasks([...subtasks, local])
+    if (!task.todoistId) return
+    const remoteId = await addTodoistSubtask(task.todoistId, title)
+    if (!remoteId) return
+    persistSubtasks(
+      [...subtasks, local].map((s) => (s.id === local.id ? { ...s, id: `${SUB_PREFIX}${remoteId}` } : s)),
+    )
   }
 
   const clients = useLiveQuery(activeClients, []) ?? []
@@ -274,11 +285,13 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
                   <button
                     type="button"
                     aria-label={s.done ? `Vrátit podúkol ${s.title}` : `Dokončit podúkol ${s.title}`}
-                    onClick={() =>
+                    onClick={() => {
                       persistSubtasks(
                         subtasks.map((x) => (x.id === s.id ? { ...x, done: !x.done } : x)),
                       )
-                    }
+                      // krok z Todoistu se odškrtne i tam
+                      void setTodoistSubtaskDone(s.id, !s.done)
+                    }}
                     className="-m-1.5 shrink-0 p-1.5 transition-transform duration-150 active:scale-90"
                   >
                     <span
@@ -299,6 +312,14 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
                   >
                     {s.title}
                   </span>
+                  {/* Krok z Todoistu odsud mazat nejde — smazal by se
+                      klientovi v jeho projektu a stejně by se vrátil.
+                      Odškrtnout jde, to je v pořádku. */}
+                  {s.id.startsWith(SUB_PREFIX) ? (
+                    <span className="shrink-0 text-[11px] text-ink-faint" title="Krok z Todoistu">
+                      Todoist
+                    </span>
+                  ) : (
                   <button
                     type="button"
                     aria-label={`Smazat podúkol ${s.title}`}
@@ -309,6 +330,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
                       <path d="M6 6l12 12M18 6L6 18" />
                     </svg>
                   </button>
+                  )}
                 </li>
               ))}
             </ul>

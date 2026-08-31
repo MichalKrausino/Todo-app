@@ -458,6 +458,8 @@ function ClientDetail({
   const [draftGoal, setDraftGoal] = useState('')
   const [draftDue, setDraftDue] = useState('')
 
+  const todoistCount = everyTask.filter((t) => t.todoistId && !t.deletedAt).length
+
   if (!client || client.deletedAt) return null
 
   const startRename = () => {
@@ -622,6 +624,34 @@ function ClientDetail({
           </button>
         )}
       </header>
+
+      {/* Napojení na Todoist patří i sem — do nastavení kvůli jednomu
+          klientovi nikdo lézt nebude. */}
+      {(client.todoistProjectIds?.length ?? 0) > 0 && (
+        <div className="space-y-1.5 rounded-2xl bg-well px-3 py-2.5">
+          <p className="text-[13px] text-ink-soft">
+            Napojeno na Todoist
+            {todoistCount > 0 &&
+              ` · ${todoistCount} ${todoistCount === 1 ? 'úkol' : todoistCount < 5 ? 'úkoly' : 'úkolů'} odtamtud`}
+          </p>
+          <label className="flex items-start gap-2 text-[12px] leading-snug text-ink-soft">
+            <input
+              type="checkbox"
+              checked={Boolean(client.todoistPushSince)}
+              onChange={(e) =>
+                void updateClient(id, {
+                  todoistPushSince: e.target.checked ? new Date().toISOString() : undefined,
+                })
+              }
+              className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+            />
+            <span>
+              Nové úkoly zakládat i v Todoistu
+              <span className="block text-ink-faint">Klient je pak uvidí ve sdíleném projektu.</span>
+            </span>
+          </label>
+        </div>
+      )}
 
       <form onSubmit={submitTask} className="flex gap-2">
         <input

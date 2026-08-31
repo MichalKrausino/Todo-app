@@ -233,6 +233,24 @@ describe('importTodoist', () => {
     expect(all[0].title).toBe('Připravit report — v2')
   })
 
+  it('vlastní krok dopsaný v appce stažení nesmaže', async () => {
+    await importTodoist(
+      snap({ tasks: [td(), td({ id: '7002', parentId: '7001', content: 'Krok z Todoistu' })] }),
+      push,
+    )
+    const id = await localId('7001')
+    const task = await db.tasks.get(id)
+    await db.tasks.update(id, {
+      subtasks: [...(task!.subtasks ?? []), { id: 'muj-krok', title: 'Ještě zavolat', done: false }],
+    })
+    await importTodoist(
+      snap({ tasks: [td({ updatedAt: 'u2' }), td({ id: '7002', parentId: '7001', content: 'Krok z Todoistu' })] }),
+      push,
+    )
+    const after = await db.tasks.get(id)
+    expect(after?.subtasks?.map((x) => x.title)).toEqual(['Krok z Todoistu', 'Ještě zavolat'])
+  })
+
   it('odpojení projektu úkoly nechá, jen z nich sundá značky', async () => {
     await importTodoist(snap({ tasks: [td()] }), push)
     const count = await unlinkTodoistProject(PROJ)

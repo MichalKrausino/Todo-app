@@ -197,7 +197,8 @@ export const getSupabase = () => ({
   fs.writeFileSync(entry, `
 export { db } from '${ROOT}src/db/db'
 export { addClient, updateClient, addTask } from '${ROOT}src/db/repo'
-export { refreshTodoist, fetchTodoistProjects, getTodoistStatus, sendTaskToTodoist, pushTodoistEdits } from '${ROOT}src/sync/todoist'
+export { refreshTodoist, fetchTodoistProjects, getTodoistStatus, sendTaskToTodoist,
+         pushTodoistEdits, addTodoistSubtask, setTodoistSubtaskDone } from '${ROOT}src/sync/todoist'
 `)
   const out = '/tmp/klient-bundle.mjs'
   await esbuild.build({
@@ -236,7 +237,8 @@ globalThis.fetch = async (input, init) => {
 }
 
 const { db, addClient, updateClient, addTask, refreshTodoist, fetchTodoistProjects,
-        getTodoistStatus, sendTaskToTodoist, pushTodoistEdits } = await buildClient()
+        getTodoistStatus, sendTaskToTodoist, pushTodoistEdits, addTodoistSubtask,
+        setTodoistSubtaskDone } = await buildClient()
 
 console.log('\n— párovací obrazovka —')
 const { projects, user } = await fetchTodoistProjects()
@@ -323,6 +325,26 @@ ok('úkol v appce dostal značku Todoistu', Boolean(adopted), adopted?.todoistId
 await refreshTodoist(true)
 const dupes = (await db.tasks.toArray()).filter((x) => !x.deletedAt && x.title === 'Poslat návrh rozpočtu')
 ok('další stažení ho nezdvojilo', dupes.length === 1, `${dupes.length}×`)
+
+console.log('\n— checklist a podúkoly v Todoistu —')
+const novyKrok = await addTodoistSubtask('7001', 'Ověřit čísla s klientem')
+ok('nový krok vznikl i v Todoistu', Boolean(novyKrok), novyKrok ?? 'nic')
+const sub = CREATED.at(-1)
+ok('poslal se jako podúkol pod rodičem', sub?.body.parent_id === '7001', sub?.body.parent_id)
+ok('podúkol neposílá projekt ani sekci (určuje je rodič)',
+   !('project_id' in sub.body) && !('section_id' in sub.body))
+
+calls.length = 0
+await setTodoistSubtaskDone('td-7004', true)
+ok('odškrtnutí kroku zavře podúkol v Todoistu', calls.includes('POST /api/v1/tasks/7004/close'),
+   calls.join(', ') || 'nic')
+calls.length = 0
+await setTodoistSubtaskDone('td-7004', false)
+ok('vrácení kroku ho v Todoistu otevře', calls.includes('POST /api/v1/tasks/7004/reopen'),
+   calls.join(', ') || 'nic')
+calls.length = 0
+await setTodoistSubtaskDone('muj-vlastni-krok', true)
+ok('vlastní krok nikam nevolá', calls.length === 0, calls.join(', '))
 
 console.log('\n— ztracený přístup k jednomu projektu —')
 await updateClient(created.id, { todoistProjectIds: ['220', '223'] })

@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { Task } from '../db/types'
 import {
   datesFrom,
+  mergeSubtasks,
+  todoistSubId,
+  priorityToTodoist,
   differs,
   estimateFrom,
   isMine,
@@ -91,6 +94,36 @@ describe('subtasksFrom', () => {
     const subs = subtasksFrom([td({ id: '9', content: 'Data', checked: true })])
     expect(subs).toEqual([{ id: 'td-9', title: 'Data', done: true }])
     expect(subtasksFrom([])).toBeUndefined()
+  })
+})
+
+describe('podúkoly a Todoist', () => {
+  it('pozná krok, za kterým stojí úkol v Todoistu', () => {
+    expect(todoistSubId('td-9001')).toBe('9001')
+    expect(todoistSubId('vlastni-krok')).toBeUndefined()
+  })
+
+  it('vlastní kroky přežijí stažení', () => {
+    const mine = [{ id: 'muj', title: 'Můj krok', done: false }]
+    const theirs = [{ id: 'td-9001', title: 'Krok z Todoistu', done: true }]
+    expect(mergeSubtasks(mine, theirs)).toEqual([...theirs, ...mine])
+    expect(mergeSubtasks(mine, undefined)).toEqual(mine)
+    expect(mergeSubtasks(undefined, undefined)).toBeUndefined()
+  })
+
+  it('kroky z Todoistu se nezdvojí — nahradí se novým seznamem', () => {
+    const stary = [{ id: 'td-9001', title: 'Starý název', done: false }]
+    const novy = [{ id: 'td-9001', title: 'Nový název', done: true }]
+    expect(mergeSubtasks(stary, novy)).toEqual(novy)
+  })
+})
+
+describe('priorityToTodoist', () => {
+  it('vrací se na todoistí škálu, nízká končí jako výchozí', () => {
+    expect(priorityToTodoist('critical')).toBe(4)
+    expect(priorityToTodoist('high')).toBe(3)
+    expect(priorityToTodoist('normal')).toBe(1)
+    expect(priorityToTodoist('low')).toBe(1)
   })
 })
 

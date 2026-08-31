@@ -198,11 +198,15 @@ Deno.serve(async (req) => {
     // Založení úkolu v Todoistu. Na drátě jsou klíče snake_case a datum
     // se posílá buď jako due_date (celý den), nebo due_datetime (s časem).
     if (action === 'create') {
+      // U podúkolu určuje zařazení rodič — posílat k tomu ještě projekt
+      // a sekci by si Todoist mohl vyložit jako spor.
+      const parentId = body.parentId ? String(body.parentId) : undefined
       const body2: Rec = {
         content: String(body.title ?? '').trim(),
         description: body.notes ? String(body.notes) : undefined,
-        project_id: body.projectId ? String(body.projectId) : undefined,
-        section_id: body.sectionId ? String(body.sectionId) : undefined,
+        parent_id: parentId,
+        project_id: parentId ? undefined : body.projectId ? String(body.projectId) : undefined,
+        section_id: parentId ? undefined : body.sectionId ? String(body.sectionId) : undefined,
         priority: body.priority ? Number(body.priority) : undefined,
       }
       if (body.dueDate && body.dueTime) body2.due_datetime = `${body.dueDate}T${body.dueTime}:00`
