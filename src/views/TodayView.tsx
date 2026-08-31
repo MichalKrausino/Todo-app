@@ -16,7 +16,7 @@ import {
 } from '../db/repo'
 import { scheduleBlockForTask } from '../sync/calendar'
 import { isOverloaded, plannedMinutes } from '../lib/capacity'
-import { formatFullDate, fromISODate, todayISO } from '../lib/dates'
+import { formatEventRange, formatFullDate, fromISODate, todayISO } from '../lib/dates'
 import { WORK_END, WORK_START, freeGaps, freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { computeSignals } from '../lib/signals'
 import { HelpSheet } from '../components/HelpSheet'
@@ -424,7 +424,7 @@ export function TodayView({
                       <span className={`w-24 shrink-0 text-[13px] tabular-nums ${running ? 'font-semibold text-accent-deep' : 'text-ink-soft'}`}>
                         {e.allDay
                           ? 'celý den'
-                          : `${timeFmt.format(new Date(e.start))}–${timeFmt.format(new Date(e.end))}`}
+                          : formatEventRange(e)}
                       </span>
 
                       {/* blok z appky je zástupce úkolu → ťuknutím se otevře */}

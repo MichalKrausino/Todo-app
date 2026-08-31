@@ -186,8 +186,14 @@ async function fetchEvents(
       const end = ev.end as Rec | undefined
       if (!start || !end) continue
       const allDay = Boolean(start.date)
-      const startISO = (start.dateTime ?? start.date) as string
-      const endISO = (end.dateTime ?? end.date) as string
+      const startISO = (start.dateTime ?? start.date) as string | undefined
+      const endISO = (end.dateTime ?? end.date) as string | undefined
+      // Kontrolovat jen existenci objektů nestačí: Google umí vrátit start
+      // jen s `timeZone`, bez `dateTime` i `date`. Pak tudy propadlo
+      // undefined, JSON.stringify klíč vypustil a klientovi dorazila
+      // schůzka bez času — ta pak v appce shodila celou obrazovku.
+      if (!startISO || !endISO) continue
+      if (Number.isNaN(Date.parse(startISO)) || Number.isNaN(Date.parse(endISO))) continue
       out.push({
         id: `${cal.id}:${ev.id}`,
         calendarId: cal.id,

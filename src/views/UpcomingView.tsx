@@ -11,7 +11,7 @@ import {
   sortTasks,
 } from '../db/repo'
 import { plannedMinutes } from '../lib/capacity'
-import { addDays, formatDayLabel, fromISODate, toISODate, todayISO } from '../lib/dates'
+import { addDays, formatDayLabel, formatEventRange, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { minutesToLabel } from '../lib/freeSlot'
 import { TaskRow } from '../components/TaskRow'
 
@@ -23,7 +23,6 @@ const effectiveDate = (t: Task): string | undefined => {
   return dates.sort()[0]
 }
 
-const timeFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
 const WEEKDAY = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So']
 
 // Kolik dní dopředu ukazuje pás nahoře.
@@ -218,9 +217,7 @@ export function UpcomingView({
                   {dayEvents.map((e) => (
                     <li key={e.id} className="flex items-center gap-3 px-4 py-2">
                       <span className="w-24 shrink-0 text-[13px] tabular-nums text-ink-soft">
-                        {e.allDay
-                          ? 'celý den'
-                          : `${timeFmt.format(new Date(e.start))}–${timeFmt.format(new Date(e.end))}`}
+                        {formatEventRange(e)}
                       </span>
                       <span className="min-w-0 flex-1 truncate text-[14px] text-ink-soft">{e.title}</span>
                     </li>

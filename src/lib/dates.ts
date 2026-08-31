@@ -66,3 +66,29 @@ export function daysSince(isoDatetime: string, todayRef: string = todayISO()): n
   // 25 hodin), proto zaokrouhlení — hodinová odchylka se tím srovná.
   return Math.round((today.getTime() - then.getTime()) / 86400000)
 }
+
+const casFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
+
+/** Je z toho řetězce použitelný čas? Prázdno, undefined ani nesmysl není. */
+export const jePlatnyCas = (iso: unknown): iso is string =>
+  typeof iso === 'string' && iso !== '' && !Number.isNaN(Date.parse(iso))
+
+// Čas schůzky do řádku: „9:00–10:00", u celodenní „celý den".
+//
+// Formátuje se přes Intl, a `Intl.DateTimeFormat.format()` na neplatném
+// datu VYHODÍ RangeError — na rozdíl od toLocaleDateString, které jen vrátí
+// „Invalid Date". Bez téhle pojistky stačila jedna schůzka bez `start`
+// (Google umí vrátit start jen s timeZone, a JSON pak klíč vypustí) a celý
+// Plán zbělal: React bez error boundary shodí při chybě celý strom.
+export function formatEventRange(e: {
+  start?: string
+  end?: string
+  allDay?: boolean
+}): string {
+  if (e.allDay) return 'celý den'
+  const od = jePlatnyCas(e.start) ? casFmt.format(new Date(e.start)) : null
+  const doo = jePlatnyCas(e.end) ? casFmt.format(new Date(e.end)) : null
+  if (od && doo) return `${od}–${doo}`
+  if (od) return od
+  return 'čas neznámý'
+}

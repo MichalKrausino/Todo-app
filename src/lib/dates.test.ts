@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   addDays,
+  formatEventRange,
   daysSince,
   formatDayLabel,
   fromISODate,
@@ -119,5 +120,42 @@ describe('formatDayLabel', () => {
     const popisek = formatDayLabel(daleko)
     expect(popisek).not.toMatch(/Dnes|Zítra|Včera/)
     expect(popisek).toMatch(/\d/)
+  })
+})
+
+describe('formatEventRange', () => {
+  it('běžná schůzka ukáže rozsah', () => {
+    expect(
+      formatEventRange({
+        start: new Date(2026, 7, 31, 10, 0).toISOString(),
+        end: new Date(2026, 7, 31, 11, 30).toISOString(),
+        allDay: false,
+      }),
+    ).toBe('10:00–11:30')
+  })
+
+  it('celodenní se neformátuje vůbec', () => {
+    expect(formatEventRange({ start: '2026-08-31', end: '2026-09-01', allDay: true })).toBe(
+      'celý den',
+    )
+  })
+
+  it('schůzka bez času nespadne, jen to přizná', () => {
+    // Regrese: tohle byla bílá obrazovka. Intl.DateTimeFormat.format()
+    // na neplatném datu vyhodí RangeError a React shodí celý strom.
+    for (const spatny of [
+      { start: '', end: '', allDay: false },
+      { allDay: false },
+      { start: 'není datum', end: 'není datum', allDay: false },
+      { start: undefined, end: undefined, allDay: false },
+    ]) {
+      expect(() => formatEventRange(spatny)).not.toThrow()
+      expect(formatEventRange(spatny)).toBe('čas neznámý')
+    }
+  })
+
+  it('když chybí jen konec, ukáže aspoň začátek', () => {
+    const start = new Date(2026, 7, 31, 9, 15).toISOString()
+    expect(formatEventRange({ start, end: '', allDay: false })).toBe('09:15')
   })
 })
