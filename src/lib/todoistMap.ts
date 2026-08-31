@@ -133,6 +133,7 @@ export interface TodoistOwnedFields {
   todoistUpdatedAt?: string
   todoistRecurring?: boolean
   todoistHasDeadline?: boolean
+  todoistLabels?: string[]
 }
 
 export function ownedFields(
@@ -157,6 +158,7 @@ export function ownedFields(
     todoistUpdatedAt: t.updatedAt,
     todoistRecurring: Boolean(t.due?.isRecurring) || undefined,
     todoistHasDeadline: Boolean(t.deadline?.date) || undefined,
+    todoistLabels: t.labels?.length ? t.labels : undefined,
   }
 }
 
@@ -179,7 +181,7 @@ const ALWAYS_OWNED = [
   'todoistHasDeadline',
 ] as const
 
-const OWNED_WHEN_SET = ['scheduledFor', 'estimateMinutes', 'notes', 'subtasks'] as const
+const OWNED_WHEN_SET = ['scheduledFor', 'estimateMinutes', 'notes', 'subtasks', 'todoistLabels'] as const
 
 // Změny k zápisu — bez klíčů, které Todoist tentokrát nemá co říct.
 export function patchFrom(fields: TodoistOwnedFields): Partial<Task> {
@@ -196,8 +198,8 @@ export function patchFrom(fields: TodoistOwnedFields): Partial<Task> {
 export function differs(existing: Task, next: TodoistOwnedFields): boolean {
   const patch = patchFrom(next)
   for (const [k, v] of Object.entries(patch)) {
-    if (k === 'subtasks') {
-      if (JSON.stringify(existing.subtasks ?? null) !== JSON.stringify(v ?? null)) return true
+    if (k === 'subtasks' || k === 'todoistLabels') {
+      if (JSON.stringify(existing[k] ?? null) !== JSON.stringify(v ?? null)) return true
       continue
     }
     if ((existing[k as keyof Task] ?? undefined) !== (v ?? undefined)) return true

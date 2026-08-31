@@ -26,6 +26,7 @@ export function TodoistSheet({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [projects, setProjects] = useState<TodoistProject[] | null>(null)
+  const [assigned, setAssigned] = useState<Record<string, number>>({})
   const clients = useLiveQuery(allClients, []) ?? []
   // Po spárování se stahuje samo — ale až se přestane klikat, ať tři
   // projekty za sebou neznamenají tři stažení.
@@ -45,6 +46,7 @@ export function TodoistSheet({ onClose }: { onClose: () => void }) {
     try {
       const res = await fetchTodoistProjects()
       setProjects(res.projects.filter((p) => !p.isArchived))
+      setAssigned(res.assigned)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Nepodařilo se načíst projekty.')
     } finally {
@@ -121,8 +123,13 @@ export function TodoistSheet({ onClose }: { onClose: () => void }) {
     clients.find((c) => c.todoistProjectIds?.includes(projectId))
   const clientOf = (projectId: string) => mapped(projectId)?.id ?? ''
 
-  const shared = (projects ?? []).filter((p) => p.isShared)
-  const own = (projects ?? []).filter((p) => !p.isShared)
+  // Týmový projekt se nemusí tvářit jako sdílený — přístup k němu dává
+  // členství v týmu. Kdyby se bral jen `isShared`, projekty klientů na
+  // Todoist Business by tu vůbec nešly spárovat.
+  const shared = (projects ?? []).filter((p) => p.isShared || p.workspaceId)
+  const own = (projects ?? []).filter((p) => !p.isShared && !p.workspaceId)
+  // Nespárované projekty, ve kterých na mě přesto něco čeká.
+  const missed = shared.filter((p) => !mapped(p.id) && (assigned[p.id] ?? 0) > 0)
 
   return (
     <Sheet onClose={onClose} className="space-y-4">
@@ -177,8 +184,16 @@ export function TodoistSheet({ onClose }: { onClose: () => void }) {
 
           {status.linked && (
             <>
+              {missed.length > 0 && (
+                <p className="rounded-2xl bg-note px-3 py-2 text-xs leading-relaxed text-note-ink">
+                  V Todoistu na tebe čekají úkoly v {missed.length === 1 ? 'projektu' : 'projektech'},
+                  {' '}které tu nemáš spárované: {missed.map((p) => p.name).join(', ')}. Vyber u nich
+                  klienta a přestanou být neviditelné.
+                </p>
+              )}
+
               <section className="space-y-2">
-                <h3 className="section-label">sdílené projekty</h3>
+                <h3 className="section-label">sdílené a týmové projekty</h3>
                 {shared.length === 0 && (
                   <p className="rounded-2xl bg-well px-3 py-3 text-[13px] text-ink-soft">
                     {busy ? 'Načítám…' : 'Zatím tě nikdo nepřidal do sdíleného projektu.'}
@@ -191,7 +206,9 @@ export function TodoistSheet({ onClose }: { onClose: () => void }) {
                         <div className="flex items-baseline justify-between gap-2">
                           <span className="truncate text-sm font-medium">{p.name}</span>
                           <span className="shrink-0 text-[11px] text-ink-faint">
+                            {p.workspaceId ? 'tým · ' : ''}
                             {p.collaborators.length} lidí
+                            {assigned[p.id] ? ` · ${assigned[p.id]} na mě` : ''}
                           </span>
                         </div>
                         <select

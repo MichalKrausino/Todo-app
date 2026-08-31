@@ -25,13 +25,17 @@ Todoist v roce 2025 sloučil staré REST v2 a Sync v9 do jediného **API v1**.
 
 | Co | Volání |
 | --- | --- |
-| seznam projektů (včetně sdílených) | `GET /api/v1/projects` |
+| seznam projektů (osobní i týmové) | `GET /api/v1/projects` |
 | spolupracovníci projektu | `GET /api/v1/projects/{id}/collaborators` |
 | aktivní úkoly | `GET /api/v1/tasks?project_id=…` |
 | úkoly přes filtr | `GET /api/v1/tasks/filter?query=…` |
 | hotové úkoly | `GET /api/v1/tasks/completed/by_completion_date?since=…&until=…` |
 | sekce | `GET /api/v1/sections?project_id=…` |
 | dokončit úkol | `POST /api/v1/tasks/{id}/close` |
+| komentáře u úkolu | `GET /api/v1/comments?task_id=…`, `POST /api/v1/comments` |
+| úkoly přiřazené mně napříč účtem | `GET /api/v1/tasks/filter?query=assigned to: me` |
+| úprava úkolu | `POST /api/v1/tasks/{id}` |
+| založení úkolu / podúkolu | `POST /api/v1/tasks` (`parent_id`) |
 | inkrementální sync | `POST /api/v1/sync` (`sync_token`, `resource_types`) |
 
 ### Tvary objektů (podle oficiálního TypeScript klienta Doist)
@@ -54,6 +58,20 @@ Když mě klient přidá do svého projektu, ten projekt **normálně vyskočí 
 `GET /projects`** s `is_shared: true`. Nemusím nic zvlášť vyžadovat.
 Spolupracovníky (kdo v projektu je, včetně e-mailů) vrátí
 `/projects/{id}/collaborators`. To je přesně to, o co jde.
+
+**Pozor na týmové projekty.** `GET /projects` vrací dva různé tvary:
+osobní projekt a projekt ve workspace (má navíc `workspace_id`, `role`,
+`status`). U týmového projektu dává přístup členství v týmu, takže
+`is_shared` u něj klidně bývá `false`. Kdyby se párovaly jen projekty
+s `is_shared`, projekty klientů na Todoist Business by v appce vůbec nešly
+napojit. Za „cizí" se proto bere `is_shared || workspace_id`.
+
+### Komentáře
+
+U sdíleného projektu se s klientem domlouvá v komentářích úkolu — to je
+místo, kde se doopravdy mluví. `GET /comments?task_id=…` je vrací i
+s `posted_uid` a případnou přílohou; jména autorů se dotahují ze
+spolupracovníků projektu, protože samotné „napsal 49020" nikomu nepomůže.
 
 ---
 
@@ -202,6 +220,26 @@ projekty patří do Todoistu, ne sem.
 
 Čistě naše a ven se neposílá: naplánování na den (`scheduledFor`), špendlík
 Top 3, odhad času, kalendářní blok, podklady pro ranní návrh.
+
+### Konverzace
+
+Komentáře se netahají při každém stažení — jen když úkol otevřu. Uloží se
+do jeho záznamu (`Task.todoistComments`), takže je vidím i offline a
+dorazí i na druhé zařízení běžným syncem appky. Odpovídat jde přímo
+z detailu úkolu. Přílohy se ukazují názvem; soubor zůstává v Todoistu.
+
+### Štítky
+
+`labels` se u úkolu jen ukazují (`@čeká-na-klienta`). Appka s nimi nic
+nedělá, ale schovávat informaci, kterou klient do úkolu napsal, by bylo
+horší než ji zobrazit.
+
+### Nic nesmí proklouznout
+
+Párovací obrazovka se ptá i na `\`/tasks/filter?query=assigned to: me\``
+a u každého projektu ukáže, kolik úkolů na mě čeká. Když jsou nějaké
+v projektu, který v appce nemám spárovaný, řekne to nahlas — jinak by
+o nich člověk nevěděl.
 
 ### Checklist a podúkoly
 

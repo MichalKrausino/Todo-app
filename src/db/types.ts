@@ -52,6 +52,17 @@ export interface Subtask {
   done: boolean
 }
 
+// Komentář u todoistího úkolu — otisk, ne synchronizovaný záznam.
+// Žije uvnitř úkolu, takže ho druhé zařízení dostane spolu s ním
+// a při výpadku sítě je pořád vidět, co klient napsal.
+export interface TodoistComment {
+  id: string
+  text: string
+  at?: string // ISO datetime
+  author?: string
+  attachment?: string // název přílohy (soubor sám zůstává v Todoistu)
+}
+
 export interface Task extends BaseRecord {
   clientId?: string
   projectId?: string
@@ -83,6 +94,8 @@ export interface Task extends BaseRecord {
   todoistRecurring?: boolean // opakuje se v Todoistu — odškrtnutím se posune na další termín, nezmizí
   todoistHasDeadline?: boolean // termín přišel z todoistího `deadline` (ne z `due`) — úprava se musí vrátit do stejného pole
   todoistDirty?: boolean // lokální úprava čeká na odeslání; do té doby ji stažení nesmí přepsat
+  todoistLabels?: string[] // štítky z Todoistu — jen na ukázání, appka s nimi nepracuje
+  todoistComments?: TodoistComment[] // stažené komentáře (dotahují se při otevření úkolu)
   order: number
 }
 

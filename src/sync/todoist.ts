@@ -11,7 +11,7 @@
 import { db } from '../db/db'
 import { emitRepoWrite, onRepoWrite } from '../db/events'
 import { importTodoist, type TodoistSection } from '../db/todoistImport'
-import type { Client, Task } from '../db/types'
+import type { Client, Task, TodoistComment } from '../db/types'
 import { deterministicUuid } from '../lib/deterministicId'
 import { priorityToTodoist, todoistSubId, type TodoistTask } from '../lib/todoistMap'
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config'
@@ -31,6 +31,7 @@ export interface TodoistProject {
   name: string
   color: string
   isShared: boolean
+  workspaceId?: string // týmový projekt — přístup dává členství, ne sdílení
   isArchived: boolean
   collaborators: Array<{ id: string; name: string; email: string }>
 }
@@ -113,11 +114,50 @@ export async function checkTodoistLinked(): Promise<boolean> {
 export async function fetchTodoistProjects(): Promise<{
   projects: TodoistProject[]
   user: { id: string; email: string; name: string }
+  // kolik úkolů na mě čeká v jednotlivých projektech (i těch nespárovaných)
+  assigned: Record<string, number>
 }> {
   const res = await callFn('projects')
   return {
     projects: (res.projects ?? []) as TodoistProject[],
     user: (res.user ?? { id: '', email: '', name: '' }) as { id: string; email: string; name: string },
+    assigned: (res.assigned ?? {}) as Record<string, number>,
+  }
+}
+
+// --- komentáře ---
+
+// Komentáře se netahají při každém stažení — jen když úkol otevřu.
+// Uloží se do záznamu úkolu, takže je pak vidím i offline a dorazí
+// i na druhé zařízení.
+export async function loadTodoistComments(taskId: string): Promise<string | null> {
+  const task = await db.tasks.get(taskId)
+  if (!task?.todoistId) return null
+  if (!navigator.onLine || !getSupabase()) return 'offline'
+  try {
+    const res = await callFn('comments', {
+      taskId: task.todoistId,
+      projectId: task.todoistProjectId,
+    })
+    const comments = (res.comments ?? []) as TodoistComment[]
+    if (JSON.stringify(task.todoistComments ?? []) !== JSON.stringify(comments)) {
+      await db.tasks.update(taskId, { todoistComments: comments, updatedAt: now() })
+      emitRepoWrite()
+    }
+    return null
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e)
+  }
+}
+
+export async function postTodoistComment(taskId: string, text: string): Promise<string | null> {
+  const task = await db.tasks.get(taskId)
+  if (!task?.todoistId) return 'úkol není z Todoistu'
+  try {
+    await callFn('comment', { taskId: task.todoistId, content: text })
+    return await loadTodoistComments(taskId)
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e)
   }
 }
 

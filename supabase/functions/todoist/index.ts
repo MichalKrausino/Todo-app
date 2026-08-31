@@ -1,5 +1,7 @@
 // Brána do Todoistu (Fáze 8). Klient s ní mluví přes POST {action, ...}:
-//   projects  {}                              → projekty + spolupracovníci (párování s klienty)
+//   projects  {}                              → projekty, spolupracovníci, úkoly v nespárovaných projektech
+//   comments  {taskId, projectId}              → komentáře u úkolu (i se jmény autorů)
+//   comment   {taskId, content}                → přidá komentář
 //   pull      {projectIds, completedSince}     → sekce, aktivní i hotové úkoly
 //   create    {projectId, sectionId, ...}      → založí úkol v Todoistu
 //   update    {taskId, ...}                    → přepíše název, popis, termín, prioritu
@@ -121,7 +123,11 @@ Deno.serve(async (req) => {
       const projects = (await tdList(token, '/projects')).filter((p) => !p.is_deleted)
       const out: Rec[] = []
       for (const p of projects) {
-        const shared = Boolean(p.is_shared)
+        // Týmový projekt (workspace) se nemusí tvářit jako „sdílený" —
+        // přístup k němu dává členství v týmu, ne sdílení. Bez tohohle
+        // by projekty klientů na Todoist Business zůstaly neviditelné.
+        const workspaceId = s(p.workspace_id)
+        const shared = Boolean(p.is_shared) || Boolean(workspaceId)
         let collaborators: Rec[] = []
         if (shared) {
           collaborators = (await tdList(token, `/projects/${p.id}/collaborators`)).map((c) => ({
@@ -135,15 +141,31 @@ Deno.serve(async (req) => {
           name: (p.name as string) ?? '',
           color: (p.color as string) ?? 'charcoal',
           isShared: shared,
+          workspaceId,
           isArchived: Boolean(p.is_archived),
           isFavorite: Boolean(p.is_favorite),
           parentId: s(p.parent_id),
           collaborators,
         })
       }
+
+      // Kolik úkolů na mě čeká v projektech, které v appce nemám —
+      // ať mi nic neproklouzne jen proto, že jsem je nespároval.
+      const assigned: Record<string, number> = {}
+      try {
+        const mine = await tdList(token, '/tasks/filter', { query: 'assigned to: me' })
+        for (const t of mine) {
+          const pid = s(t.project_id)
+          if (pid) assigned[pid] = (assigned[pid] ?? 0) + 1
+        }
+      } catch {
+        // filtr je pohodlí navíc; když ho Todoist nepřijme, nic se neděje
+      }
+
       return json({
         user: { id: String(me.id ?? ''), email: (me.email as string) ?? '', name: (me.full_name as string) ?? '' },
         projects: out,
+        assigned,
       })
     }
 
@@ -239,6 +261,50 @@ Deno.serve(async (req) => {
         body: JSON.stringify(patch),
       })
       return json({ task: slimTask(updated) })
+    }
+
+    // Komentáře u úkolu. Jména autorů se dotahují ze spolupracovníků
+    // projektu — samotný komentář nese jen uid, a „napsal 49020" nikomu nepomůže.
+    if (action === 'comments') {
+      const taskId = String(body.taskId ?? '')
+      if (!taskId) return json({ error: 'chybí taskId' }, 400)
+      const raw = await tdList(token, '/comments', { task_id: taskId })
+      const names = new Map<string, string>()
+      const projectId = s(body.projectId)
+      if (projectId) {
+        try {
+          for (const c of await tdList(token, `/projects/${projectId}/collaborators`)) {
+            names.set(String(c.id), (c.name as string) ?? '')
+          }
+        } catch {
+          // bez jmen to pořád dává smysl
+        }
+      }
+      const comments = raw
+        .filter((c) => !c.is_deleted)
+        .map((c) => {
+          const att = c.file_attachment as Rec | null
+          return {
+            id: String(c.id),
+            text: (c.content as string) ?? '',
+            at: s(c.posted_at),
+            authorId: s(c.posted_uid),
+            author: names.get(String(c.posted_uid ?? '')) ?? '',
+            attachment: att?.file_name ? String(att.file_name) : undefined,
+          }
+        })
+      return json({ comments })
+    }
+
+    if (action === 'comment') {
+      const taskId = String(body.taskId ?? '')
+      const content = String(body.content ?? '').trim()
+      if (!taskId || !content) return json({ error: 'prázdný komentář' }, 400)
+      await td(token, '/comments', {
+        method: 'POST',
+        body: JSON.stringify({ task_id: taskId, content }),
+      })
+      return json({ ok: true })
     }
 
     if (action === 'close') {

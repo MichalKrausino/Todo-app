@@ -1,10 +1,25 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import type { Priority, Project, Subtask, Task } from '../db/types'
-import { MAX_PINNED, activeClients, clientProjects, removeTask, togglePinned, updateTask } from '../db/repo'
+import type { Priority, Project, Subtask, Task, TodoistComment } from '../db/types'
+import {
+  MAX_PINNED,
+  activeClients,
+  clientProjects,
+  getTask,
+  removeTask,
+  togglePinned,
+  updateTask,
+} from '../db/repo'
 import { Sheet } from './Sheet'
 import { deleteBlockForTask } from '../sync/calendar'
-import { addTodoistSubtask, pushTodoistEdits, sendTaskToTodoist, setTodoistSubtaskDone } from '../sync/todoist'
+import {
+  addTodoistSubtask,
+  loadTodoistComments,
+  postTodoistComment,
+  pushTodoistEdits,
+  sendTaskToTodoist,
+  setTodoistSubtaskDone,
+} from '../sync/todoist'
 import { SUB_PREFIX } from '../lib/todoistMap'
 import { todayISO } from '../lib/dates'
 import { PRIORITY_LABELS } from '../lib/labels'
@@ -166,6 +181,17 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
         <div>
           <label className={label}>Úkol</label>
           <input className={field} value={title} onChange={(e) => setTitle(e.target.value)} />
+          {/* Štítky z Todoistu jsou informace, ne pole k vyplnění —
+              appka s nimi nic nedělá, ale schovávat je by bylo divné. */}
+          {task.todoistLabels?.length ? (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {task.todoistLabels.map((l) => (
+                <span key={l} className="rounded-full bg-well px-2 py-0.5 text-[11px] text-ink-soft">
+                  @{l}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -368,6 +394,8 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           <textarea className={field} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
 
+        {fromTodoist && <TodoistTalk task={task} />}
+
         {/* Lokální úkol u klienta s napojeným Todoistem — jedním ťuknutím
             ho uvidí i klient. Nikdy se to nestane samo bez zapnutí. */}
         {!fromTodoist && todoistClient && (
@@ -424,5 +452,103 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
         </>
       )}
     </Sheet>
+  )
+}
+
+const commentFmt = new Intl.DateTimeFormat('cs-CZ', {
+  day: 'numeric',
+  month: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+// Konverzace u úkolu ve sdíleném projektu. Tady se s klientem doopravdy
+// domlouvá, takže je to v appce k ničemu, když to musím číst jinde.
+// Stahuje se až při otevření úkolu a ukládá se do něj — offline i na
+// druhém zařízení je pak vidět, co bylo řečeno.
+function TodoistTalk({ task }: { task: Task }) {
+  const [comments, setComments] = useState<TodoistComment[]>(task.todoistComments ?? [])
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    void loadTodoistComments(task.id).then(async (err) => {
+      if (!alive) return
+      if (err) setError(err === 'offline' ? null : err)
+      const fresh = await getTask(task.id)
+      if (alive && fresh) setComments(fresh.todoistComments ?? [])
+    })
+    return () => {
+      alive = false
+    }
+  }, [task.id])
+
+  const send = async () => {
+    const body = text.trim()
+    if (!body) return
+    setBusy(true)
+    setError(null)
+    const err = await postTodoistComment(task.id, body)
+    if (err) setError(err)
+    else {
+      setText('')
+      const fresh = await getTask(task.id)
+      setComments(fresh?.todoistComments ?? [])
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div>
+      <label className={label}>Konverzace v Todoistu</label>
+      {comments.length > 0 && (
+        <ul className="mb-1.5 space-y-1.5">
+          {comments.map((c) => (
+            <li key={c.id} className="rounded-lg bg-well px-3 py-2">
+              <p className="text-[11px] text-ink-faint">
+                {c.author || 'někdo'}
+                {c.at && ` · ${commentFmt.format(new Date(c.at))}`}
+              </p>
+              <p className="whitespace-pre-wrap text-[14px] text-ink">{c.text}</p>
+              {c.attachment && (
+                <p className="mt-0.5 text-[12px] text-ink-faint">📎 {c.attachment} (v Todoistu)</p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {comments.length === 0 && (
+        <p className="mb-1.5 text-[13px] text-ink-faint">Zatím nic. Napiš první.</p>
+      )}
+      <div className="flex gap-1.5">
+        <input
+          className={`${field} min-w-0 flex-1`}
+          placeholder="Odpovědět…"
+          value={text}
+          enterKeyHint="send"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              void send()
+            }
+          }}
+        />
+        <button
+          type="button"
+          aria-label="Odeslat komentář"
+          disabled={busy || !text.trim()}
+          onClick={() => void send()}
+          className="flex w-10 shrink-0 items-center justify-center rounded-lg bg-well text-ink-soft transition-transform duration-150 active:scale-90 disabled:opacity-30"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 12h14M13 6l6 6-6 6" />
+          </svg>
+        </button>
+      </div>
+      {error && <p className="mt-1 text-[12px] text-danger">{error}</p>}
+    </div>
   )
 }

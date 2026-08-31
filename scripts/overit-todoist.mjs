@@ -41,6 +41,11 @@ const PROJECTS_PAGE2 = [
     is_favorite: false, is_deleted: false, parent_id: null, child_order: 3 },
   { id: '223', name: 'Projekt bez přístupu', color: 'grey', is_shared: true, is_archived: false,
     is_favorite: false, is_deleted: false, parent_id: null, child_order: 4 },
+  // Týmový projekt: is_shared je false, přístup dává členství ve workspace.
+  { id: '224', name: 'Notino — tým', color: 'teal', is_shared: false, is_archived: false,
+    is_favorite: false, is_deleted: false, parent_id: null, child_order: 5,
+    workspace_id: 'w1', role: 'MEMBER', status: 'ACTIVE', is_link_sharing_enabled: false,
+    collaborator_role_default: 'MEMBER', folder_id: null, is_invite_only: false },
 ]
 
 const TASKS = [
@@ -64,6 +69,10 @@ const TASKS = [
 
 const CREATED = []
 const UPDATES = []
+const COMMENTS = [
+  { id: 'c1', item_id: '7001', content: 'Můžeme to posunout na pátek?', posted_at: '2026-08-29T10:00:00Z',
+    posted_uid: 'nekdo-jiny', file_attachment: { file_name: 'brief.pdf' }, is_deleted: false },
+]
 
 const COMPLETED = [
   { id: '7005', project_id: '220', section_id: '55', parent_id: '7001', content: 'Domluvit přístupy',
@@ -96,6 +105,31 @@ function startFakeTodoist() {
     }
     if (p === '/api/v1/projects/222/collaborators') return send({ results: [], next_cursor: null })
     if (p === '/api/v1/projects/223/collaborators') return send({ results: [], next_cursor: null })
+    if (p === '/api/v1/projects/224/collaborators') {
+      return send({ results: [{ id: '49020', name: 'Michal', email: 'michal@example.com' }], next_cursor: null })
+    }
+    if (p === '/api/v1/tasks/filter') {
+      // úkoly přiřazené mně napříč účtem — i v nespárovaných projektech
+      return send({ results: [
+        { ...TASKS[0] },
+        { id: '8001', project_id: '224', content: 'Zkontrolovat feed', responsible_uid: '49020',
+          priority: 1, labels: [], checked: false, is_deleted: false, due: null, deadline: null, duration: null },
+      ], next_cursor: null })
+    }
+    if (p === '/api/v1/comments' && req.method === 'POST') {
+      let raw = ''
+      req.on('data', (c) => { raw += c })
+      return req.on('end', () => {
+        const b = JSON.parse(raw || '{}')
+        COMMENTS.push({ id: `c${COMMENTS.length + 1}`, item_id: b.task_id, content: b.content,
+          posted_at: '2026-08-30T14:00:00Z', posted_uid: '49020', file_attachment: null, is_deleted: false })
+        send({ id: `c${COMMENTS.length}` })
+      })
+    }
+    if (p === '/api/v1/comments') {
+      const tid = url.searchParams.get('task_id')
+      return send({ results: COMMENTS.filter((c) => c.item_id === tid), next_cursor: null })
+    }
     if (p === '/api/v1/sections') {
       const pid = url.searchParams.get('project_id')
       if (pid === '223') return send({ error: 'project not found' }, 404)
@@ -198,7 +232,8 @@ export const getSupabase = () => ({
 export { db } from '${ROOT}src/db/db'
 export { addClient, updateClient, addTask } from '${ROOT}src/db/repo'
 export { refreshTodoist, fetchTodoistProjects, getTodoistStatus, sendTaskToTodoist,
-         pushTodoistEdits, addTodoistSubtask, setTodoistSubtaskDone } from '${ROOT}src/sync/todoist'
+         pushTodoistEdits, addTodoistSubtask, setTodoistSubtaskDone,
+         loadTodoistComments, postTodoistComment } from '${ROOT}src/sync/todoist'
 `)
   const out = '/tmp/klient-bundle.mjs'
   await esbuild.build({
@@ -238,14 +273,18 @@ globalThis.fetch = async (input, init) => {
 
 const { db, addClient, updateClient, addTask, refreshTodoist, fetchTodoistProjects,
         getTodoistStatus, sendTaskToTodoist, pushTodoistEdits, addTodoistSubtask,
-        setTodoistSubtaskDone } = await buildClient()
+        setTodoistSubtaskDone, loadTodoistComments, postTodoistComment } = await buildClient()
 
 console.log('\n— párovací obrazovka —')
-const { projects, user } = await fetchTodoistProjects()
+const { projects, user, assigned } = await fetchTodoistProjects()
 ok('edge funkce vrátila přihlášeného uživatele', user.id === '49020', user.email)
-ok('stránkování projektů funguje (2 stránky)', projects.length === 4, `${projects.length} projektů`)
-const shared = projects.filter((p) => p.isShared)
-ok('sdílené projekty se poznají', shared.length === 3, shared.map((p) => p.name).join(', '))
+ok('stránkování projektů funguje (2 stránky)', projects.length === 5, `${projects.length} projektů`)
+const shared = projects.filter((p) => p.isShared || p.workspaceId)
+ok('sdílené i týmové projekty se poznají', shared.length === 4, shared.map((p) => p.name).join(', '))
+const tym = projects.find((p) => p.id === '224')
+ok('týmový projekt je spárovatelný, i když není „shared"', Boolean(tym?.workspaceId) && tym.isShared,
+   `workspace ${tym?.workspaceId}`)
+ok('vidím, kde na mě čekají úkoly', assigned['224'] === 1, JSON.stringify(assigned))
 const alza = projects.find((p) => p.id === '220')
 ok('u sdíleného projektu jsou spolupracovníci', alza.collaborators.length === 2,
    alza.collaborators.map((c) => c.email).join(', '))
@@ -345,6 +384,24 @@ ok('vrácení kroku ho v Todoistu otevře', calls.includes('POST /api/v1/tasks/7
 calls.length = 0
 await setTodoistSubtaskDone('muj-vlastni-krok', true)
 ok('vlastní krok nikam nevolá', calls.length === 0, calls.join(', '))
+
+console.log('\n— konverzace s klientem —')
+const errC = await loadTodoistComments(report.id)
+ok('komentáře se stáhly', !errC, errC ?? 'ok')
+const withComments = await db.tasks.get(report.id)
+ok('komentář je uložený u úkolu (vidím ho i offline)', withComments?.todoistComments?.length === 1,
+   withComments?.todoistComments?.[0]?.text)
+ok('u komentáře je jméno autora, ne uid', withComments?.todoistComments?.[0]?.author === 'Petra z Alzy',
+   withComments?.todoistComments?.[0]?.author)
+ok('příloha je vidět aspoň názvem', withComments?.todoistComments?.[0]?.attachment === 'brief.pdf')
+const errP = await postTodoistComment(report.id, 'Pátek beru.')
+ok('odpověď odešla', !errP, errP ?? 'ok')
+const after2 = await db.tasks.get(report.id)
+ok('odpověď se hned objevila v konverzaci', after2?.todoistComments?.length === 2,
+   `${after2?.todoistComments?.length} komentáře`)
+
+ok('štítky z Todoistu jsou u úkolu', after2?.todoistLabels?.includes('klient'),
+   (after2?.todoistLabels ?? []).join(', '))
 
 console.log('\n— ztracený přístup k jednomu projektu —')
 await updateClient(created.id, { todoistProjectIds: ['220', '223'] })
