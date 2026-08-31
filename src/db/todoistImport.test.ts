@@ -12,11 +12,14 @@ const PROJ = '220'
 
 const clientOf = () => new Map([[PROJ, CLIENT]])
 
+// Do appky chodí jen úkoly, na kterých jsem označený — proto je přiřazení
+// na mě výchozí stav a testy, které řeší něco jiného, se jím nezdržují.
 const td = (patch: Partial<TodoistTask> = {}): TodoistTask => ({
   id: '7001',
   projectId: PROJ,
   content: 'Připravit report',
   priority: 1,
+  responsibleUid: 'me',
   ...patch,
 })
 
@@ -261,9 +264,22 @@ describe('importTodoist', () => {
     expect(task?.title).toBe('Připravit report')
   })
 
-  it('projekt bez spárovaného klienta se ignoruje', async () => {
-    await importTodoist(snap({ tasks: [td({ projectId: '999' })] }), push)
-    expect(await db.tasks.count()).toBe(0)
+  it('z nespárovaného projektu bere jen to, co je přiřazené mně', async () => {
+    // Přiřazený úkol přijde i odsud (bez klienta, do inboxu), cizí ani
+    // nepřiřazený ne — v cizím projektu je to práce někoho jiného.
+    await importTodoist(
+      snap({
+        tasks: [
+          td({ id: '9101', projectId: '999', responsibleUid: undefined }),
+          td({ id: '9102', projectId: '999', responsibleUid: 'nekdo' }),
+          td({ id: '9103', projectId: '999', responsibleUid: 'me' }),
+        ],
+        assignedProjects: ['999'],
+      }),
+      push,
+    )
+    expect(await db.tasks.count()).toBe(1)
+    expect((await db.tasks.get(await localId('9103')))?.clientId).toBeUndefined()
   })
 
   it('naplánování na den import nepřepíše', async () => {
@@ -340,5 +356,92 @@ describe('úkoly přiřazené mně z nenapojených projektů', () => {
 
     await importTodoist(snap({ tasks: [], assignedProjects: [CIZI] }), push)
     expect((await db.tasks.get(id))?.deletedAt).toBeTruthy()
+  })
+})
+
+// Jádro pravidla: do appky patří jen to, na čem jsem označený já.
+describe('beru jen úkoly přiřazené mně', () => {
+  it('nepřiřazený úkol ve spárovaném projektu klienta nezaloží', async () => {
+    await importTodoist(snap({ tasks: [td({ responsibleUid: undefined })] }), push)
+    expect(await db.tasks.count()).toBe(0)
+  })
+
+  it('úkol přiřazený kolegovi nezaloží', async () => {
+    await importTodoist(snap({ tasks: [td({ responsibleUid: 'kolega' })] }), push)
+    expect(await db.tasks.count()).toBe(0)
+  })
+
+  it('když mi úkol někdo přebere, zmizí i z appky', async () => {
+    await importTodoist(snap({ tasks: [td({ due: { date: '2026-05-04' } })] }), push)
+    const id = await localId('7001')
+    expect((await db.tasks.get(id))?.deletedAt).toBeUndefined()
+
+    await importTodoist(snap({ tasks: [td({ responsibleUid: 'kolega' })] }), push)
+    expect((await db.tasks.get(id))?.deletedAt).toBeTruthy()
+  })
+
+  // Todoist zakládá úkoly přes API bez přiřazení. Bez značky `todoistFromApp`
+  // by si appka hned prvním stažením smazala vlastní odeslaný úkol.
+  it('vlastní úkol odeslaný do Todoistu si appka nesmaže', async () => {
+    await db.tasks.add({
+      id: 'muj-ukol',
+      createdAt: '2026-05-01T08:00:00.000Z',
+      updatedAt: '2026-05-01T08:00:00.000Z',
+      title: 'Poslat nabídku',
+      status: 'active',
+      order: 0,
+      priority: 'normal',
+      clientId: CLIENT,
+      todoistId: '7001',
+      todoistProjectId: PROJ,
+      todoistFromApp: true,
+    })
+
+    await importTodoist(snap({ tasks: [td({ responsibleUid: undefined })] }), push)
+
+    const task = await db.tasks.get('muj-ukol')
+    expect(task?.deletedAt).toBeUndefined()
+    expect(task?.title).toBe('Připravit report') // dál se srovnává s Todoistem
+  })
+
+  // Rodič je cizí, ale krok pod ním visí na mně: jako položka checklistu by
+  // se schoval do úkolu, který se do appky nedostane, a zmizel by úplně.
+  it('podúkol přiřazený mně pod cizím úkolem přijde jako vlastní úkol', async () => {
+    await importTodoist(
+      snap({
+        tasks: [
+          td({ id: '7100', responsibleUid: 'kolega', content: 'Kampaň' }),
+          td({ id: '7101', parentId: '7100', responsibleUid: 'me', content: 'Napsat texty' }),
+        ],
+      }),
+      push,
+    )
+    expect(await db.tasks.count()).toBe(1)
+    expect((await db.tasks.get(await localId('7101')))?.title).toBe('Napsat texty')
+  })
+
+  it('podúkoly mého úkolu zůstávají checklistem, i když na nich nikdo není', async () => {
+    await importTodoist(
+      snap({
+        tasks: [
+          td({ id: '7200', content: 'Web' }),
+          td({ id: '7201', parentId: '7200', responsibleUid: undefined, content: 'Wireframe' }),
+        ],
+      }),
+      push,
+    )
+    expect(await db.tasks.count()).toBe(1)
+    const task = await db.tasks.get(await localId('7200'))
+    expect(task?.subtasks?.map((x) => x.title)).toEqual(['Wireframe'])
+  })
+
+  // Kdyby server neposlal myUid, filtr by neprohlásil za moje nic a úklid
+  // by smazal úplně všechno, co z Todoistu kdy přišlo.
+  it('bez myUid radši nemaže nic', async () => {
+    await importTodoist(snap({ tasks: [td({ due: { date: '2026-05-04' } })] }), push)
+    const id = await localId('7001')
+
+    await importTodoist(snap({ myUid: undefined, tasks: [] }), push)
+    expect((await db.tasks.get(id))?.deletedAt).toBeUndefined()
   })
 })

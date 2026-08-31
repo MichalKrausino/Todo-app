@@ -286,7 +286,8 @@ export function TodoistSheet({ onClose }: { onClose: () => void }) {
           )}
 
           <p className="px-1 text-[11px] leading-relaxed text-ink-faint">
-            Z Todoistu se berou úkoly přiřazené tobě a nepřiřazené. Název, termín
+            Z Todoistu chodí jen úkoly, na kterých jsi označený ty — nepřiřazené
+            ani cizí ne. Když ti někdo úkol přebere, zmizí i odsud. Název, termín
             a priorita patří Todoistu — tady je neměň, další stažení by to přepsalo.
             Odškrtnutí letí zpátky, takže klient vidí, co je hotové.
           </p>
