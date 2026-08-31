@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findFreeSlot, freeGaps, freeMinutes, mergeBusy } from './freeSlot'
+import { findFreeSlot, freeGaps, freeMinutes, mergeBusy, minutesToLabel } from './freeSlot'
 
 const b = (startMin: number, endMin: number) => ({ startMin, endMin })
 
@@ -78,5 +78,38 @@ describe('freeGaps', () => {
 
   it('respektuje posunutý začátek (od teď)', () => {
     expect(freeGaps([b(600, 660)], 700)).toEqual([b(700, 1020)])
+  })
+})
+
+describe('minutesToLabel', () => {
+  it('pod hodinu mluví v minutách', () => {
+    expect(minutesToLabel(0)).toBe('0 min')
+    expect(minutesToLabel(30)).toBe('30 min')
+    expect(minutesToLabel(45)).toBe('45 min')
+    expect(minutesToLabel(59)).toBe('59 min')
+  })
+
+  it('celé hodiny bez desetinné části', () => {
+    expect(minutesToLabel(60)).toBe('1 h')
+    expect(minutesToLabel(480)).toBe('8 h')
+  })
+
+  it('půlhodiny si nechávají zavedený zápis', () => {
+    expect(minutesToLabel(90)).toBe('1,5 h')
+    expect(minutesToLabel(690)).toBe('11,5 h')
+  })
+
+  it('čtvrthodiny se neohýbají na půlhodinu', () => {
+    // Regrese: dřív padal každý zbytek na „,5", takže 70 i 100 minut
+    // hlásilo „1,5 h". Odhad 45 min (fakturace) tenhle případ vyrábí běžně.
+    expect(minutesToLabel(70)).toBe('1 h 10')
+    expect(minutesToLabel(75)).toBe('1 h 15')
+    expect(minutesToLabel(100)).toBe('1 h 40')
+    expect(minutesToLabel(225)).toBe('3 h 45')
+  })
+
+  it('záporná a neceločíselná hodnota nerozbijí popisek', () => {
+    expect(minutesToLabel(-10)).toBe('0 min')
+    expect(minutesToLabel(89.6)).toBe('1,5 h')
   })
 })

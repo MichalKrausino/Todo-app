@@ -6,7 +6,7 @@
 import { db } from '../db/db'
 import { updateTask } from '../db/repo'
 import type { CalendarEvent, Task } from '../db/types'
-import { addDays, fromISODate, toISODate, todayISO } from '../lib/dates'
+import { addDays, fromISODate, toISODate, todayISO, jePlatnyCas } from '../lib/dates'
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config'
 import { getSupabase } from './engine'
 import { getSyncStatus, subscribeSyncStatus } from './status'
@@ -97,7 +97,10 @@ export async function refreshCalendar(): Promise<void> {
     const fetchedAt = new Date().toISOString()
     await db.transaction('rw', db.calendarEvents, async () => {
       await db.calendarEvents.clear()
-      await db.calendarEvents.bulkAdd(events.map((e) => ({ ...e, fetchedAt })))
+      // Schůzka bez použitelného času se do cache vůbec nedostane —
+      // jinak by v ní zůstala ležet i po opravě serveru.
+      const pouzitelne = events.filter((e) => e.allDay || (jePlatnyCas(e.start) && jePlatnyCas(e.end)))
+      await db.calendarEvents.bulkAdd(pouzitelne.map((e) => ({ ...e, fetchedAt })))
     })
     setCalStatus({ lastSuccessAt: fetchedAt, eventCount: events.length, lastError: undefined })
   } catch (e) {

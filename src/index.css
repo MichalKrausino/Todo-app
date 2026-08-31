@@ -273,26 +273,127 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
 }
 
 /* Sklo spodního doku. Samotný backdrop-blur dělá prosvítající obsah
-   plochý a šedivý — saturate mu vrátí barvu, jako to dělá iOS. */
+   plochý a šedivý — saturate mu vrátí barvu, jako to dělá iOS, a špetka
+   brightness nadzvedne sklo nad podklad, aby nevypadalo jako špinavá fólie. */
 .dock {
+  position: relative; /* kotva pro světelný prstenec v ::before */
   /* Průhlednost řídíme tady, ne utilitou — ať jde doladit zvlášť pro
      oba režimy. Nezapsaný CSS přebíjí Tailwind utility (jsou ve vrstvě). */
-  background: color-mix(in oklab, var(--color-card) 66%, transparent);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
-  /* světelná hrana nahoře — sklo tím dostane tloušťku */
+  background: color-mix(in oklab, var(--color-card) 62%, transparent);
+  /* Prefix první, standard poslední: Lightning CSS deklarace slučuje a
+     nechá tu poslední — obráceně by v buildu zbyl jen -webkit- tvar,
+     který Chromium vůbec nezná, a sklo by se rozmazalo jen v Safari. */
+  -webkit-backdrop-filter: blur(40px) saturate(200%) brightness(1.06);
+  backdrop-filter: blur(40px) saturate(200%) brightness(1.06);
+  /* Dvě vnitřní hrany dávají sklu tloušťku: ostré světlo shora,
+     slabší odlesk zdola (odražené světlo od podkladu).
+     Stín je psaný ručně, ne přes --shadow-float: ten nese i rovnoměrný
+     1px kroužek kolem dokola, a ten sklu škodí — obtažená pilulka místo
+     hrany, která podle natočení ke světlu mění jas. Obvod dělá ::before. */
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.55),
-    var(--shadow-float);
+    inset 0 1px 0 rgb(255 255 255 / 0.6),
+    inset 0 -1px 0 rgb(255 255 255 / 0.18),
+    0 4px 14px -4px rgb(22 22 26 / 0.14);
+}
+
+/* Světelný prstenec po obvodu. Rovný border je na skle vidět jako
+   nalepená linka; skutečná skleněná hrana mění jas podle toho, jak je
+   natočená ke světlu — nahoře svítí, po bocích mizí, dole se slabě vrací.
+   Dělá se 1px gradientovou výplní, které maska vykrojí střed. */
+.dock::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 0.75),
+    rgb(255 255 255 / 0.14) 38%,
+    rgb(255 255 255 / 0) 62%,
+    rgb(255 255 255 / 0.3)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Vnitřní prosvětlení. Apple skládá sklo ze tří vrstev — hrana, stín a
+   prosvětlení materiálu; první dvě dělá ::before a --shadow-float, tahle
+   je ta třetí. Bez ní je dok jen průhledná deska; s ní má tělo, protože
+   světlo shora prostupuje hmotou a dole slábne.
+   z-index -1 ho drží nad výplní, ale POD popisky záložek — jinak by
+   gradient ležel přes text a vybledl ho. */
+.dock::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 0.3),
+    rgb(255 255 255 / 0.07) 45%,
+    rgb(255 255 255 / 0) 72%
+  );
 }
 
 @media (prefers-color-scheme: dark) {
   .dock {
-    /* na tmavém podkladu potřebuje sklo víc krytí, jinak text plave */
-    background: color-mix(in oklab, var(--color-card) 76%, transparent);
+    /* Na tmavém podkladu potřebuje sklo víc krytí, jinak text plave.
+       Brightness jde dolů — na tmavém se prosvítající obsah má utlumit,
+       ne rozzářit, jinak sklo vypadá jako mléčná fólie. */
+    background: color-mix(in oklab, var(--color-card) 70%, transparent);
+    -webkit-backdrop-filter: blur(40px) saturate(190%) brightness(0.92);
+    backdrop-filter: blur(40px) saturate(190%) brightness(0.92);
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.08),
-      var(--shadow-float);
+      inset 0 1px 0 rgb(255 255 255 / 0.1),
+      inset 0 -1px 0 rgb(255 255 255 / 0.04),
+      0 2px 12px rgb(0 0 0 / 0.5);
+  }
+
+  .dock::before {
+    background: linear-gradient(
+      to bottom,
+      rgb(255 255 255 / 0.24),
+      rgb(255 255 255 / 0.06) 38%,
+      rgb(255 255 255 / 0) 62%,
+      rgb(255 255 255 / 0.08)
+    );
+  }
+
+  .dock::after {
+    background: linear-gradient(
+      to bottom,
+      rgb(255 255 255 / 0.07),
+      rgb(255 255 255 / 0.02) 45%,
+      rgb(255 255 255 / 0) 72%
+    );
+  }
+}
+
+/* „Omezit průhlednost" v Nastavení iOS — sklo se vypne, dok zůstane čitelný. */
+@media (prefers-reduced-transparency: reduce) {
+  .dock {
+    background: var(--color-card);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Kde backdrop-filter není, byl by dok průhledné okno na scrollující
+   obsah — bez rozmazání ho musí zaclonit skoro plná barva. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .dock {
+    background: color-mix(in oklab, var(--color-card) 95%, transparent);
   }
 }
 

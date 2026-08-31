@@ -9,6 +9,9 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import * as webpush from 'jsr:@negrel/webpush@0.3'
+// Skórování a výběr jsou čistá logika ve vlastním souboru — testuje je
+// pick.test.ts vitestem, sem se jen zavolají.
+import { eff, pickSuggestions, scoreAndReason } from './pick.ts'
 
 type Rec = Record<string, unknown>
 
@@ -16,20 +19,6 @@ const APP_URL = 'https://michalkrausino.github.io/Todo-app/'
 
 const pragueToday = (): string =>
   new Date().toLocaleDateString('sv', { timeZone: 'Europe/Prague' })
-
-const addDaysISO = (iso: string, n: number): string => {
-  const d = new Date(`${iso}T12:00:00Z`)
-  d.setUTCDate(d.getUTCDate() + n)
-  return d.toISOString().slice(0, 10)
-}
-
-const daysBetween = (a: string, b: string): number =>
-  Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86400000)
-
-const eff = (t: Rec): string | undefined => {
-  const dates = [t.scheduledFor, t.dueDate].filter(Boolean) as string[]
-  return dates.sort()[0]
-}
 
 // Deterministické UUID (stejný algoritmus jako v appce) — opakované spuštění
 // téhož dne přepíše tentýž záznam, nevzniknou duplikáty.
@@ -41,68 +30,6 @@ async function deterministicUuid(...parts: string[]): Promise<string> {
   b[8] = (b[8] & 0x3f) | 0x80
   const hex = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
-}
-
-function scoreAndReason(
-  t: Rec,
-  clientsById: Map<string, Rec>,
-  today: string,
-): { score: number; reason: string } {
-  const d = eff(t)
-  const client = t.clientId ? clientsById.get(t.clientId as string) : undefined
-  let score = 0
-  const reasons: Array<{ w: number; text: string }> = []
-
-  if (d) {
-    if (d < today) {
-      const over = daysBetween(d, today)
-      score += 4 + Math.min(over, 5) * 0.5
-      reasons.push({ w: 5, text: over === 1 ? 'termín byl včera' : `po termínu už ${over} dní` })
-    } else if (d === today) {
-      score += 5
-      reasons.push({ w: 4, text: 'termín je dnes' })
-    } else if (d === addDaysISO(today, 1)) {
-      score += 1.5
-      reasons.push({ w: 2, text: 'termín je zítra' })
-    }
-  }
-
-  const prio = t.priority as string
-  if (prio === 'critical') {
-    score += 4
-    reasons.push({ w: 3, text: 'kritická priorita' })
-  } else if (prio === 'high') {
-    score += 2
-    reasons.push({ w: 1.5, text: 'vysoká priorita' })
-  } else if (prio === 'low') {
-    score -= 1
-  }
-
-  const postponed = (t.postponeCount as number) ?? 0
-  if (postponed >= 2) {
-    score += Math.min(postponed, 4) * 0.75
-    reasons.push({ w: 2.5, text: `odkládáš to už ${postponed}×` })
-  }
-
-  if (t.isClientCheck && d && d <= today) {
-    score += 1
-    reasons.push({ w: 1, text: 'pravidelná kontrola' })
-  }
-
-  if (client) {
-    const interval = client.checkIntervalDays as number | undefined
-    const last = (client.lastActivityAt as string | undefined)?.slice(0, 10)
-    if (interval && last) {
-      const idle = daysBetween(last, today)
-      if (idle > interval) {
-        score += 2 + Math.min(idle, 30) * 0.1
-        reasons.push({ w: 3.5, text: `u klienta ${client.name} se ${idle} dní nic nedělo` })
-      }
-    }
-  }
-
-  reasons.sort((a, b) => b.w - a.w)
-  return { score, reason: reasons[0]?.text ?? 'dlouho čeká v seznamu' }
 }
 
 Deno.serve(async () => {
@@ -176,18 +103,10 @@ Deno.serve(async () => {
         .filter((t) => t.status === 'active' || t.status === 'inbox')
         .map((t) => ({ t, ...scoreAndReason(t, clientsById, today) }))
         .filter((x) => x.score > 0)
-        .sort((a, b) => b.score - a.score)
 
-      // pestrost: max 2 úkoly od jednoho klienta, celkem 3–6 návrhů
-      const picked: typeof candidates = []
-      const perClient = new Map<string, number>()
-      for (const c of candidates) {
-        const key = (c.t.clientId as string) ?? 'none'
-        if ((perClient.get(key) ?? 0) >= 2) continue
-        picked.push(c)
-        perClient.set(key, (perClient.get(key) ?? 0) + 1)
-        if (picked.length >= 6) break
-      }
+      // Pestrost, rezerva pro úkoly bez termínu a jejich vážení prioritou
+      // řeší pickSuggestions — viz pick.ts.
+      const picked = pickSuggestions(candidates)
       if (picked.length === 0 && !isSunday) continue
 
       if (picked.length > 0) {

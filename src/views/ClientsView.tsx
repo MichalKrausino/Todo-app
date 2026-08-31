@@ -114,23 +114,25 @@ function ClientList({
 
   return (
     <div className="space-y-5">
-      <header className="flex items-center justify-between pr-24">
-        <div>
-          <h1 className="display text-[2.1rem] font-semibold leading-tight">Klienti</h1>
-          <p className="text-sm text-ink-soft">Klienti i oblasti jako „Interní“ nebo „Osobní“</p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          <button
-            onClick={onTemplates}
-            className="rounded-full border border-line bg-card px-3.5 py-2 text-sm font-medium text-ink-soft"
-          >
-            Šablony
-          </button>
+      {/* Titulek přes celou šířku jako na Dnes a v Plánu. Dřív stál vedle
+          sloupce dvou tlačítek, takže se podtitulek mačkal do dvou řádků
+          a lámal se pod „+ Nový" — vypadalo to jako popisek tlačítka.
+          Akce teď stojí na vlastním řádku pod ním. */}
+      <header>
+        <h1 className="display text-[2.1rem] font-semibold leading-tight">Klienti</h1>
+        <p className="text-sm text-ink-soft">Klienti i oblasti jako „Interní“ nebo „Osobní“</p>
+        <div className="mt-3 flex items-center gap-2">
           <button
             onClick={() => setAdding((v) => !v)}
-            className="rounded-full bg-accent px-3.5 py-2 text-sm font-medium text-card"
+            className="rounded-full bg-accent px-3.5 py-2 text-sm font-medium text-card transition-transform duration-150 active:scale-95"
           >
             {adding ? 'Zavřít' : '+ Nový'}
+          </button>
+          <button
+            onClick={onTemplates}
+            className="rounded-full border border-line bg-card px-3.5 py-2 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-95"
+          >
+            Šablony
           </button>
         </div>
       </header>
@@ -143,10 +145,19 @@ function ClientList({
         </div>
       )}
 
-      <ProjectsOverview clients={clients} open={open} onSelect={onSelect} />
+      {/* Projekt se zakládá pod klienta, takže bez klientů není co nabízet —
+          dřív pod prázdným stavem svítilo „+ Nový projekt" do prázdna. */}
+      {clients.length > 0 && <ProjectsOverview clients={clients} open={open} onSelect={onSelect} />}
 
-      {clients.length > 0 && <h2 className="section-label mb-2">klienti a oblasti</h2>}
-      <ul className="rise divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{clients.map(item)}</ul>
+      {/* Celá sekce až od prvního klienta: prázdný <ul> má pořád bg-card
+          a shadow-card, a ten nese 1px prstenec — na prázdné obrazovce
+          z toho byla osamocená čárka pod výzvou k založení. */}
+      {clients.length > 0 && (
+        <>
+          <h2 className="section-label mb-2">klienti a oblasti</h2>
+          <ul className="rise divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{clients.map(item)}</ul>
+        </>
+      )}
 
       {archived.length > 0 && (
         <section>

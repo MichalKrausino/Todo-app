@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { CalendarEvent, Priority, Task } from '../db/types'
 import { activeClients, addTask, allProjects, calendarCacheCount, calendarEventsOn, openTasks, removeTask } from '../db/repo'
-import { formatDayLabel, fromISODate, addDays, nextMonday, toISODate, todayISO } from '../lib/dates'
+import { addDays, formatDayLabel, formatEventRange, fromISODate, nextMonday, toISODate, todayISO } from '../lib/dates'
 import { WORK_END, WORK_START, freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { PRIORITY_LABELS } from '../lib/labels'
 import { foldToken, mentionToken, parseQuickAdd } from '../lib/quickAdd'
@@ -14,7 +14,6 @@ import { MonthPicker } from './MonthPicker'
 const plural = (n: number, one: string, few: string, many: string) =>
   n === 1 ? one : n < 5 ? few : many
 
-const timeFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
 
 // Rozepsaný @klient / #projekt na konci textu → našeptávač nad polem.
 const RE_MENTION = /(^|\s)([@#])(\S*)$/
@@ -421,7 +420,7 @@ export function QuickAdd({
               {previewAgenda.slice(0, 3).map((e) => (
                 <div key={e.id} className="flex items-center gap-2 px-3 py-1 text-[13px]">
                   <span className="w-[5.5rem] shrink-0 whitespace-nowrap tabular-nums text-ink-soft">
-                    {e.allDay ? 'celý den' : `${timeFmt.format(new Date(e.start))}–${timeFmt.format(new Date(e.end))}`}
+                    {formatEventRange(e)}
                   </span>
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent/60" />
                   <span className="min-w-0 flex-1 truncate text-ink">{e.title}</span>

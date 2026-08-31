@@ -27,7 +27,16 @@ export async function exportBackup(): Promise<BackupFile> {
 // poslal všechno na server (tam rozhodne last-write-wins).
 export async function importBackup(parsed: unknown): Promise<number> {
   const file = parsed as Partial<BackupFile> | null
-  if (!file || file.app !== 'todo-app' || file.format !== 1 || typeof file.data !== 'object') {
+  // `typeof null === 'object'`, takže bez explicitní kontroly by soubor
+  // s `data: null` validací prošel, nic neobnovil a tvářil se úspěšně —
+  // uživatel by z „0 záznamů" usoudil, že záloha byla prázdná.
+  if (
+    !file ||
+    file.app !== 'todo-app' ||
+    file.format !== 1 ||
+    typeof file.data !== 'object' ||
+    file.data === null
+  ) {
     throw new Error('Tohle není záloha z téhle appky.')
   }
   let count = 0

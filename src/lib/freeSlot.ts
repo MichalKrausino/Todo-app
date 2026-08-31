@@ -80,9 +80,20 @@ export function freeGaps(
   return gaps.filter((g) => g.endMin > g.startMin)
 }
 
+// Doba jako člověk: „45 min", „2 h", „2,5 h", „2 h 15".
+//
+// Dřív tu bylo `m === 0 ? h h : h,5 h`, takže KAŽDÝ zbytek vyšel jako půl
+// hodiny — 70 minut i 100 minut hlásilo „1,5 h". Nebyla to teoretická vada:
+// odhady úkolů jsou 120/90/60/45/30 min, takže stačí jedna fakturace (45)
+// v součtu a den spadne na čtvrthodinu; volno mezi schůzkami má minuty
+// úplně libovolné. Půlky si notace nechává, protože „2,5 h" se čte líp než
+// „2 h 30", ale čtvrthodiny se odteď říkají rovnou.
 export const minutesToLabel = (min: number): string => {
-  const h = Math.floor(min / 60)
-  const m = min % 60
-  if (h === 0) return `${m} min`
-  return m === 0 ? `${h} h` : `${h},5 h`
+  const total = Math.max(0, Math.round(min))
+  if (total < 60) return `${total} min`
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  if (m === 0) return `${h} h`
+  if (m === 30) return `${h},5 h`
+  return `${h} h ${m}`
 }

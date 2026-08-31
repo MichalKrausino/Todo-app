@@ -50,8 +50,45 @@ export function mondayOf(iso: string): string {
 }
 
 // Celé dny od daného ISO datetime do dneška (lokálně, po dnech).
+//
+// Razítka (`lastActivityAt`, `updatedAt`) vyrábí `new Date().toISOString()`,
+// takže nesou UTC. Uříznout je na deset znaků znamená vzít UTC den — a co
+// se stalo po místní půlnoci, spadne na včerejšek: v létě (UTC+2) všechno
+// mezi 00:00 a 02:00. Klient by pak vyšel o den zanedbanější, než je.
+// Je to tatáž past, před kterou varuje pravidlo o toISOString(), jen
+// obráceně, takže se instant nejdřív převede na MÍSTNÍ den.
 export function daysSince(isoDatetime: string, todayRef: string = todayISO()): number {
-  const then = fromISODate(isoDatetime.slice(0, 10))
+  const den = isoDatetime.length <= 10 ? isoDatetime : toISODate(new Date(isoDatetime))
+  const then = fromISODate(den)
   const today = fromISODate(todayRef)
+  if (Number.isNaN(then.getTime()) || Number.isNaN(today.getTime())) return 0
+  // Přes přechod na letní čas nevyjde rozdíl na celé dny (den má 23 nebo
+  // 25 hodin), proto zaokrouhlení — hodinová odchylka se tím srovná.
   return Math.round((today.getTime() - then.getTime()) / 86400000)
+}
+
+const casFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
+
+/** Je z toho řetězce použitelný čas? Prázdno, undefined ani nesmysl není. */
+export const jePlatnyCas = (iso: unknown): iso is string =>
+  typeof iso === 'string' && iso !== '' && !Number.isNaN(Date.parse(iso))
+
+// Čas schůzky do řádku: „9:00–10:00", u celodenní „celý den".
+//
+// Formátuje se přes Intl, a `Intl.DateTimeFormat.format()` na neplatném
+// datu VYHODÍ RangeError — na rozdíl od toLocaleDateString, které jen vrátí
+// „Invalid Date". Bez téhle pojistky stačila jedna schůzka bez `start`
+// (Google umí vrátit start jen s timeZone, a JSON pak klíč vypustí) a celý
+// Plán zbělal: React bez error boundary shodí při chybě celý strom.
+export function formatEventRange(e: {
+  start?: string
+  end?: string
+  allDay?: boolean
+}): string {
+  if (e.allDay) return 'celý den'
+  const od = jePlatnyCas(e.start) ? casFmt.format(new Date(e.start)) : null
+  const doo = jePlatnyCas(e.end) ? casFmt.format(new Date(e.end)) : null
+  if (od && doo) return `${od}–${doo}`
+  if (od) return od
+  return 'čas neznámý'
 }

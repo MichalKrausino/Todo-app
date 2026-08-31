@@ -8,6 +8,7 @@ import { TaskEditSheet } from './components/TaskEditSheet'
 import { TodayView } from './views/TodayView'
 import { UpcomingView } from './views/UpcomingView'
 import { ClientsView } from './views/ClientsView'
+import { WeeklyReviewSheet } from './components/WeeklyReviewSheet'
 
 type Tab = 'today' | 'upcoming' | 'clients'
 
@@ -49,6 +50,24 @@ const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
 export default function App() {
   const [tab, setTab] = useState<Tab>('today')
   const [editing, setEditing] = useState<Task | null>(null)
+  // Týdenní ohlédnutí bydlí v Plánu, ale sheet drží App: notifikace
+  // otevře appku na Dnes, takže deep-link #review musí zabrat bez ohledu
+  // na to, který pohled je zrovna vykreslený.
+  const [reviewOpen, setReviewOpen] = useState(false)
+
+  // Deep-link #review z nedělní notifikace. Dřív ho odchytával TodayView,
+  // jenže tam už karta ohlédnutí není — a hlavně: handler v pohledu funguje
+  // jen dokud je ten pohled vykreslený. Tady zabere vždycky.
+  useEffect(() => {
+    const check = () => {
+      if (window.location.hash !== '#review') return
+      setReviewOpen(true)
+      history.replaceState(null, '', window.location.pathname + window.location.search)
+    }
+    check()
+    window.addEventListener('hashchange', check)
+    return () => window.removeEventListener('hashchange', check)
+  }, [])
   const [syncOpen, setSyncOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   // Zadávání úkolu je složené do pluska — dok tak zůstane slim kapsle
@@ -97,13 +116,14 @@ export default function App() {
     return () => window.removeEventListener('todo:prefill', open)
   }, [])
 
-  // Deep-linky z notifikací. #review a #shutdown si přebírá TodayView
-  // (a hash uklidí), tady stačí přepnout na Dnes. #task-{id} otevře
-  // rovnou detail konkrétního úkolu — připomínka termínu vede k němu.
+  // Deep-linky z notifikací. #shutdown si přebírá TodayView (a hash uklidí),
+  // tady stačí přepnout na Dnes; #review otevírá sheet výš a záložku nechává
+  // být — ohlédnutí se dívá zpátky, přepínat kvůli němu na Dnes nedává smysl.
+  // #task-{id} otevře rovnou detail úkolu — připomínka termínu vede k němu.
   useEffect(() => {
     const check = () => {
       const hash = window.location.hash
-      if (hash === '#review' || hash === '#shutdown') setTab('today')
+      if (hash === '#shutdown') setTab('today')
       const task = /^#task-(.+)$/.exec(hash)
       if (task) {
         history.replaceState(null, '', window.location.pathname + window.location.search)
@@ -174,7 +194,11 @@ export default function App() {
             />
           )}
           {tab === 'upcoming' && (
-            <UpcomingView onOpenTask={setEditing} onShowToday={() => setTab('today')} />
+            <UpcomingView
+              onOpenTask={setEditing}
+              onShowToday={() => setTab('today')}
+              onOpenReview={() => setReviewOpen(true)}
+            />
           )}
           {tab === 'clients' && (
             <ClientsView
@@ -195,7 +219,7 @@ export default function App() {
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.5rem)' }}
       >
         <div
-          className={`dock pointer-events-auto overflow-hidden border border-line/60 transition-[border-radius] duration-300 ease-ios ${
+          className={`dock pointer-events-auto overflow-hidden transition-[border-radius] duration-300 ease-ios ${
             addOpen ? 'rounded-[28px]' : 'rounded-full'
           }`}
         >
@@ -267,6 +291,7 @@ export default function App() {
       )}
       {editing && <TaskEditSheet task={editing} onClose={() => setEditing(null)} />}
       {syncOpen && <SyncSheet onClose={() => setSyncOpen(false)} />}
+      {reviewOpen && <WeeklyReviewSheet onClose={() => setReviewOpen(false)} />}
     </div>
   )
 }
