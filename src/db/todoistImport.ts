@@ -37,6 +37,10 @@ export interface TodoistSnapshot {
   // zmizelo" se smí týkat jenom jich — u projektu, na který jsem přišel
   // o přístup, by jinak zmizely úkoly, které tam pořád jsou.
   pulled?: string[]
+  // Nenapojené projekty, ze kterých přišel jen výběr „přiřazeno mně".
+  // Server je pošle jen tehdy, když prošel i dotaz na hotové úkoly —
+  // teprve pak se pozná odškrtnutí od smazání a smí se uklízet.
+  assignedProjects?: string[]
 }
 
 const now = () => new Date().toISOString()
@@ -110,7 +114,7 @@ export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): P
   const active = snap.tasks.filter((t) => isMine(t, snap.myUid))
   const completed = snap.completed.filter((t) => isMine(t, snap.myUid))
   const projectOfSection = await importSections(snap.sections, snap.clientOf)
-  const projectIds = snap.pulled ?? [...snap.clientOf.keys()]
+  const projectIds = [...(snap.pulled ?? [...snap.clientOf.keys()]), ...(snap.assignedProjects ?? [])]
 
   // Podúkoly (parent_id) nejsou samostatné úkoly — jsou to položky
   // checklistu. Hotové podúkoly chodí v completed, proto se sbírají z obou
@@ -131,8 +135,14 @@ export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): P
 
   for (const td of active) {
     if (td.parentId && rootIds.has(td.parentId)) continue // je to položka checklistu
+    // Úkol z nenapojeného projektu klienta nemá — je to úkol přiřazený
+    // mně osobně a spadne do inboxu. Dřív se takový úkol přeskočil, takže
+    // co mi někdo zadal mimo spárované projekty, se do appky nedostalo.
+    // Bereme z nich ale jen to, co na mě vysloveně visí: nepřiřazený úkol
+    // v cizím projektu je práce někoho jiného, ne moje.
     const clientId = td.projectId ? snap.clientOf.get(td.projectId) : undefined
-    if (!clientId) continue
+    const prirazenoMne = Boolean(snap.myUid) && td.responsibleUid === snap.myUid
+    if (!clientId && !prirazenoMne) continue
     const localId = await deterministicUuid('todoist', td.id)
     const existing = await byTodoistId(td.id, localId)
     seen.add(existing?.id ?? localId)

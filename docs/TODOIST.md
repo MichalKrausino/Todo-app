@@ -236,10 +236,24 @@ horší než ji zobrazit.
 
 ### Nic nesmí proklouznout
 
-Párovací obrazovka se ptá i na `\`/tasks/filter?query=assigned to: me\``
-a u každého projektu ukáže, kolik úkolů na mě čeká. Když jsou nějaké
-v projektu, který v appce nemám spárovaný, řekne to nahlas — jinak by
-o nich člověk nevěděl.
+Úkol přiřazený **mně osobně** se do appky dostane vždycky — i když je
+v projektu, který nemám spárovaný s klientem. Každé stažení se proto ptá
+i na `\`/tasks/filter?query=assigned to: me\`` a co z toho nepřišlo přes
+spárované projekty, přidá. Takový úkol nemá klienta a spadne do inboxu;
+zařadit ho pod klienta jde ručně a stažení mu to nesebere (zařazení
+vlastní Todoist jen u spárovaných projektů). Nepřiřazené úkoly z cizích
+projektů se neberou — to je práce někoho jiného.
+
+Kvůli tomu se stahuje i tehdy, když v appce zatím není žádný napojený
+klient; stačí uložený token.
+
+Úklid „co v Todoistu zmizelo" se u těchhle projektů smí spustit jen když
+projde i dotaz na hotové úkoly (`filter_query`) — server je proto pošle
+v `assignedProjects` teprve tehdy. Jinak by odškrtnutí v Todoistu vypadalo
+jako smazání a úkol by z appky tiše zmizel, místo aby spadl do hotových.
+
+Párovací obrazovka navíc u každého projektu ukáže, kolik úkolů na mě čeká,
+takže je vidět, kde se vyplatí projekt spárovat a přitáhnout ho celý.
 
 ### Checklist a podúkoly
 
@@ -266,8 +280,10 @@ vidělo týdenní ohlédnutí) a živý řádek se vrátí do hry s novým term�
 - **Tahají se jen sdílené projekty.** Vlastní todoistí projekty zůstávají
   stranou — to, co si vedu sám, patří rovnou do appky. Párovací obrazovka
   je ukáže jen jako počet, aby bylo jasné, že se ignorují.
-- **Berou se úkoly přiřazené mně a nepřiřazené.** Cizí přiřazené úkoly ve
-  sdíleném projektu nechávám být (`isMine` v `src/lib/todoistMap.ts`).
+- **Ze spárovaných projektů se berou úkoly přiřazené mně a nepřiřazené.**
+  Cizí přiřazené úkoly ve sdíleném projektu nechávám být (`isMine`
+  v `src/lib/todoistMap.ts`). Z nespárovaných projektů přijde jen to, co je
+  vysloveně přiřazené mně — bez klienta, do inboxu.
 - **Psaní ven je vypnuté, dokud ho nezapnu**, a to zvlášť u každého klienta.
   Zapnutí si pamatuje čas (`Client.todoistPushSince`), takže se do klientova
   projektu nevyvalí všechno, co jsem si u něj kdy poznamenal — jen to, co

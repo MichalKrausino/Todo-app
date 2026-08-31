@@ -128,7 +128,9 @@ export function TodoistSheet({ onClose }: { onClose: () => void }) {
   // Todoist Business by tu vůbec nešly spárovat.
   const shared = (projects ?? []).filter((p) => p.isShared || p.workspaceId)
   const own = (projects ?? []).filter((p) => !p.isShared && !p.workspaceId)
-  // Nespárované projekty, ve kterých na mě přesto něco čeká.
+  // Nespárované projekty, ve kterých na mě něco čeká. Ty úkoly se stáhnou
+  // i bez spárování (přijdou bez klienta) — párování je navíc zařadí
+  // a přitáhne i zbytek projektu.
   const missed = shared.filter((p) => !mapped(p.id) && (assigned[p.id] ?? 0) > 0)
 
   return (
@@ -186,9 +188,10 @@ export function TodoistSheet({ onClose }: { onClose: () => void }) {
             <>
               {missed.length > 0 && (
                 <p className="rounded-2xl bg-note px-3 py-2 text-xs leading-relaxed text-note-ink">
-                  V Todoistu na tebe čekají úkoly v {missed.length === 1 ? 'projektu' : 'projektech'},
-                  {' '}které tu nemáš spárované: {missed.map((p) => p.name).join(', ')}. Vyber u nich
-                  klienta a přestanou být neviditelné.
+                  Úkoly přiřazené tobě chodí i z {missed.length === 1 ? 'projektu' : 'projektů'},
+                  {' '}které tu nemáš spárované ({missed.map((p) => p.name).join(', ')}) — jsou
+                  v inboxu bez klienta. Když u nich klienta vybereš, přijde i zbytek projektu
+                  a úkoly se zařadí.
                 </p>
               )}
 

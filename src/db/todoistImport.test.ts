@@ -276,3 +276,69 @@ describe('importTodoist', () => {
     expect(task?.pinnedFor).toBe('2026-05-02')
   })
 })
+
+// Úkol, který mi někdo zadal v projektu, jaký v appce nemám napojený na
+// klienta. Dřív takový úkol import zahodil a nebylo ho kde vidět.
+describe('úkoly přiřazené mně z nenapojených projektů', () => {
+  const CIZI = '999'
+
+  it('přijme úkol z cizího projektu — bez klienta, do inboxu', async () => {
+    const s = snap({
+      tasks: [td({ id: '8001', projectId: CIZI, content: 'Zkontrolovat texty', responsibleUid: 'me' })],
+      assignedProjects: [CIZI],
+    })
+    expect(await importTodoist(s, push)).toBe(1)
+
+    const task = await db.tasks.get(await localId('8001'))
+    expect(task?.title).toBe('Zkontrolovat texty')
+    expect(task?.clientId).toBeUndefined()
+    expect(task?.status).toBe('inbox')
+    expect(task?.todoistProjectId).toBe(CIZI)
+  })
+
+  it('úkol cizího člověka z cizího projektu nebere', async () => {
+    const s = snap({
+      tasks: [td({ id: '8002', projectId: CIZI, responsibleUid: 'nekdo-jiny' })],
+      assignedProjects: [CIZI],
+    })
+    await importTodoist(s, push)
+    expect(await db.tasks.get(await localId('8002'))).toBeUndefined()
+  })
+
+  it('klienta, kterého jsem mu přiřadil ručně, další stažení nesebere', async () => {
+    const prvni = snap({
+      tasks: [td({ id: '8003', projectId: CIZI, responsibleUid: 'me', updatedAt: 'u1' })],
+      assignedProjects: [CIZI],
+    })
+    await importTodoist(prvni, push)
+    const id = await localId('8003')
+    await db.tasks.update(id, { clientId: CLIENT })
+
+    await importTodoist(
+      snap({
+        tasks: [td({ id: '8003', projectId: CIZI, responsibleUid: 'me', updatedAt: 'u2' })],
+        assignedProjects: [CIZI],
+      }),
+      push,
+    )
+    expect((await db.tasks.get(id))?.clientId).toBe(CLIENT)
+  })
+
+  it('když se úkol přestane týkat mě, zmizí — ale jen když server hlásí úklid', async () => {
+    await importTodoist(
+      snap({
+        tasks: [td({ id: '8004', projectId: CIZI, responsibleUid: 'me' })],
+        assignedProjects: [CIZI],
+      }),
+      push,
+    )
+    const id = await localId('8004')
+
+    // dotaz na hotové neprošel → assignedProjects je prázdné, nic se neuklízí
+    await importTodoist(snap({ tasks: [], assignedProjects: [] }), push)
+    expect((await db.tasks.get(id))?.deletedAt).toBeUndefined()
+
+    await importTodoist(snap({ tasks: [], assignedProjects: [CIZI] }), push)
+    expect((await db.tasks.get(id))?.deletedAt).toBeTruthy()
+  })
+})

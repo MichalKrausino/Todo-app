@@ -189,6 +189,10 @@ export function initTodoist(): void {
 // (src/sync/live.ts) i návrat do popředí.
 export async function maybeRefreshTodoist(): Promise<void> {
   if (Date.now() - lastFetchAt < REFRESH_MIN_INTERVAL_MS) return
+  // Dřív stačilo koukat na napojené klienty. Teď chodí i úkoly přiřazené
+  // mně osobně z nespárovaných projektů, takže bez klientů je potřeba
+  // aspoň vědět, jestli vůbec máme token — jinak by se nestáhlo nic.
+  if (status.linked === undefined) await checkTodoistLinked()
   await refreshTodoist()
 }
 
@@ -201,8 +205,11 @@ async function linkedClients(): Promise<Client[]> {
 export async function refreshTodoist(force = false): Promise<void> {
   if (refreshing || !navigator.onLine || !getSupabase()) return
   if (force) lastFetchAt = 0
+  // Napojení klienti nejsou podmínka: úkoly přiřazené mně osobně chodí
+  // i z projektů, které v appce nemám spárované. Bez tokenu ovšem není
+  // koho se ptát.
   const clients = await linkedClients()
-  if (clients.length === 0) return
+  if (clients.length === 0 && !getTodoistStatus().linked) return
 
   const clientOf = new Map<string, string>() // todoist projekt → náš klient
   for (const c of clients) for (const pid of c.todoistProjectIds ?? []) clientOf.set(pid, c.id)
@@ -227,6 +234,7 @@ export async function refreshTodoist(force = false): Promise<void> {
         completed: (res.completed ?? []) as TodoistTask[],
         clientOf,
         pulled: (res.pulled as string[]) ?? projectIds,
+        assignedProjects: (res.assignedProjects as string[]) ?? [],
       },
       { close: pushClose, reopen: pushReopen },
     )

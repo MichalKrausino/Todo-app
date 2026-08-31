@@ -142,7 +142,7 @@ export interface TodoistOwnedFields {
 export function ownedFields(
   t: TodoistTask,
   children: TodoistTask[],
-  link: { clientId: string; projectId?: string },
+  link: { clientId?: string; projectId?: string },
 ): TodoistOwnedFields {
   const dates = datesFrom(t)
   return {
@@ -175,8 +175,6 @@ const ALWAYS_OWNED = [
   'priority',
   'dueDate',
   'dueTime',
-  'clientId',
-  'projectId',
   'todoistId',
   'todoistProjectId',
   'todoistUpdatedAt',
@@ -192,6 +190,15 @@ export function patchFrom(fields: TodoistOwnedFields): Partial<Task> {
   for (const k of ALWAYS_OWNED) Object.assign(patch, { [k]: fields[k] })
   for (const k of OWNED_WHEN_SET) {
     if (fields[k] !== undefined) Object.assign(patch, { [k]: fields[k] })
+  }
+  // Zařazení (klient a projekt) vlastní Todoist jen u projektů napojených
+  // na klienta — tam sekce určuje projekt a přesun se má propsat. Úkol
+  // přiřazený mně v cizím, nenapojeném projektu klienta nemá; kdyby se
+  // clientId přepisovalo i tehdy, každé stažení by mi ho zase odebralo,
+  // takže by takový úkol nešlo zařadit pod klienta ani ručně.
+  if (fields.clientId !== undefined) {
+    patch.clientId = fields.clientId
+    patch.projectId = fields.projectId
   }
   return patch
 }
