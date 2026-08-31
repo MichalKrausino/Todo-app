@@ -1,10 +1,9 @@
 import type { Task } from '../db/types'
 import type { Signals } from '../lib/signals'
+import { plural } from '../lib/labels'
 
 const MAX_LINES = 6
 
-const plural = (n: number, one: string, few: string, many: string) =>
-  n === 1 ? one : n < 5 ? few : many
 
 interface Line {
   key: string

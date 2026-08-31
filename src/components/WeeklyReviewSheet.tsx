@@ -3,6 +3,7 @@ import { allClients, allLiveTasks, allProjects } from '../db/repo'
 import { fromISODate, todayISO } from '../lib/dates'
 import { computeWeekStats } from '../lib/weekReview'
 import { Sheet } from './Sheet'
+import { plural } from '../lib/labels'
 
 const stagger = (i: number) => ({ '--stagger': i }) as React.CSSProperties
 
@@ -114,7 +115,7 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
 
         <section className="rise" style={stagger(6)}>
           <h3 className="section-label mb-2">
-            příštích 7 dní · {nextTotal} {nextTotal === 1 ? 'úkol' : nextTotal < 5 ? 'úkoly' : 'úkolů'}
+            příštích 7 dní · {nextTotal} {plural(nextTotal, 'úkol', 'úkoly', 'úkolů')}
           </h3>
           <div className="rounded-2xl bg-card px-4 pb-2.5 pt-4 shadow-card">
             <div className="flex items-end justify-between gap-2">

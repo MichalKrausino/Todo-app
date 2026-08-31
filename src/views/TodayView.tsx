@@ -23,6 +23,7 @@ import { HelpSheet } from '../components/HelpSheet'
 import { ShutdownSheet } from '../components/ShutdownSheet'
 import { SignalsBlock } from '../components/SignalsBlock'
 import { TaskRow } from '../components/TaskRow'
+import { plural } from '../lib/labels'
 
 // Nejbližší relevantní den úkolu — dřívější z „naplánováno“ a „termín“.
 const effectiveDate = (t: Task): string | undefined => {
@@ -517,7 +518,7 @@ export function TodayView({
                     onClick={() => setAllEvents(true)}
                     className="w-full px-4 py-2 text-left text-[13px] font-medium text-accent transition-colors duration-150 active:bg-well/60"
                   >
-                    …a další {hidden} {hidden === 1 ? 'schůzka' : hidden < 5 ? 'schůzky' : 'schůzek'}
+                    …a další {hidden} {plural(hidden, 'schůzka', 'schůzky', 'schůzek')}
                   </button>
                 </li>
               )}
@@ -694,7 +695,7 @@ export function TodayView({
             <span className="block text-[15px] font-semibold">Uzávěrka dne</span>
             <span className="text-[13px] text-ink-soft">
               {unfinished.length}{' '}
-              {unfinished.length === 1 ? 'nedokončený úkol' : unfinished.length < 5 ? 'nedokončené úkoly' : 'nedokončených úkolů'}{' '}
+              {plural(unfinished.length, 'nedokončený úkol', 'nedokončené úkoly', 'nedokončených úkolů')}{' '}
               — zavři den s čistou hlavou
             </span>
           </span>

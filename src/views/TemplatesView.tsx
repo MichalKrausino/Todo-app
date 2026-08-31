@@ -13,7 +13,7 @@ import {
   updateTemplate,
 } from '../db/templates'
 import { addDays, formatDayLabel, fromISODate, toISODate, todayISO } from '../lib/dates'
-import { PRIORITY_LABELS } from '../lib/labels'
+import { PRIORITY_LABELS, plural } from '../lib/labels'
 import { parseTemplateItem } from '../lib/quickAdd'
 import { RULE_EPOCH, humanizeRule, occurrencesBetween } from '../lib/rrule'
 import { TEMPLATE_GALLERY } from '../lib/templateGallery'
@@ -118,7 +118,7 @@ export function TemplatesView({ onBack }: { onBack: () => void }) {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-medium">{t.name}</span>
                   <span className="text-xs text-ink-faint">
-                    {t.items.length} {t.items.length === 1 ? 'položka' : t.items.length < 5 ? 'položky' : 'položek'}
+                    {t.items.length} {plural(t.items.length, 'položka', 'položky', 'položek')}
                     {deployedCount(t.id) > 0 && ` · u ${deployedCount(t.id)} klientů`}
                   </span>
                 </span>
