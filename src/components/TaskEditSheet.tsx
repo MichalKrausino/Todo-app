@@ -206,7 +206,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
                 setProjectId('')
               }}
             >
-              <option value="">—</option>
+              <option value="">Bez klienta</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -222,7 +222,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
               onChange={(e) => setProjectId(e.target.value)}
               disabled={fromTodoist || !clientId}
             >
-              <option value="">—</option>
+              <option value="">{clientId ? 'Bez projektu' : 'Nejdřív vyber klienta'}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -234,31 +234,16 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={label}>Termín (dokdy)</label>
+            <label className={label}>Termín</label>
             <input
               type="date"
               className={field}
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
             />
-            {/* čas patří k termínu — bez popisku vypadal jako osiřelé pole */}
-            <label className="mt-1.5 flex items-center gap-2">
-              <span className="shrink-0 text-xs font-medium text-ink-soft">Čas</span>
-              <input
-                type="time"
-                aria-label="Čas termínu"
-                className={`${field} min-w-0 flex-1`}
-                value={dueTime}
-                onChange={(e) => {
-                  setDueTime(e.target.value)
-                  // čas na prázdném datu doplní dnešek, ať se neztratí
-                  if (e.target.value && !dueDate) setDueDate(todayISO())
-                }}
-              />
-            </label>
           </div>
           <div>
-            <label className={label}>Naplánováno na</label>
+            <label className={label}>Naplánováno</label>
             <input
               type="date"
               className={field}
@@ -266,7 +251,34 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
               onChange={(e) => setScheduledFor(e.target.value)}
             />
           </div>
+          <div>
+            {/* Popisek nad polem jako u všech ostatních. Dřív stál vedle
+                něj a pole bylo užší než datum nad ním, takže sloupec
+                vypadal rozsypaně. Čas patří k termínu, proto je v jeho
+                sloupci hned pod ním. */}
+            <label className={label} htmlFor="cas-terminu">
+              Čas termínu
+            </label>
+            <input
+              id="cas-terminu"
+              type="time"
+              className={field}
+              value={dueTime}
+              onChange={(e) => {
+                setDueTime(e.target.value)
+                // čas na prázdném datu doplní dnešek, ať se neztratí
+                if (e.target.value && !dueDate) setDueDate(todayISO())
+              }}
+            />
+          </div>
         </div>
+        {/* Dvě data vedle sebe jsou nejčastější zádrhel celé appky —
+            bez věty pod nimi si nikdo nedomyslí, čím se liší. */}
+        <p className="-mt-1 text-[12px] leading-relaxed text-ink-faint">
+          <strong className="font-medium text-ink-soft">Termín</strong> je dokdy to musí být
+          hotové. <strong className="font-medium text-ink-soft">Naplánováno</strong> je den, kdy
+          se tomu chceš věnovat — ten se ukáže na Dnes.
+        </p>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
