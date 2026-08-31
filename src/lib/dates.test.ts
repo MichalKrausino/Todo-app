@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import {
   addDays,
   formatEventRange,
+  toDayString,
   daysSince,
   formatDayLabel,
   fromISODate,
@@ -157,5 +158,42 @@ describe('formatEventRange', () => {
   it('když chybí jen konec, ukáže aspoň začátek', () => {
     const start = new Date(2026, 7, 31, 9, 15).toISOString()
     expect(formatEventRange({ start, end: '', allDay: false })).toBe('09:15')
+  })
+})
+
+describe('fromISODate přijme i datetime', () => {
+  it('vezme z plného ISO datetime jen den', () => {
+    // Regrese: dělení po pomlčkách dalo z „05T10:00:00.000Z" NaN, z toho
+    // neplatné datum — a to shodilo Plán. Todoist vrací u úkolů s časem
+    // `due.date` právě takhle.
+    expect(toISODate(fromISODate('2026-09-05T10:00:00.000Z'))).toBe('2026-09-05')
+  })
+
+  it('běžný denní tvar zůstává beze změny', () => {
+    expect(toISODate(fromISODate('2026-09-05'))).toBe('2026-09-05')
+  })
+})
+
+describe('toDayString', () => {
+  it('ořízne datetime na den', () => {
+    expect(toDayString('2026-09-05T10:00:00.000Z')).toBe('2026-09-05')
+    expect(toDayString('2026-09-05')).toBe('2026-09-05')
+  })
+
+  it('nesmysl zahodí', () => {
+    for (const x of ['', 'zítra', 'Invalid Date', null, undefined, 42, {}]) {
+      expect(toDayString(x)).toBeUndefined()
+    }
+  })
+})
+
+describe('formatDayLabel nespadne na vadném datu', () => {
+  it('vadné datum popíše, místo aby vyhodilo výjimku', () => {
+    // Regrese: Intl vyhodí „Invalid time value" (Chrome) resp. „Date value
+    // is not finite in DateTimeFormat" (Safari) a React shodí celý strom.
+    for (const spatny of ['Invalid Date', 'zítra', '', 'abcd-ef-gh']) {
+      expect(() => formatDayLabel(spatny)).not.toThrow()
+      expect(formatDayLabel(spatny)).toBe('bez data')
+    }
   })
 })

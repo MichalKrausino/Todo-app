@@ -8,9 +8,22 @@ export function toISODate(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
+// Přijímá i plný ISO datetime a bere z něj jen den. Dřív se řetězec dělil
+// po pomlčkách, takže „2026-09-05T10:00:00.000Z" dalo den = NaN a z toho
+// neplatné datum — a to pak při formátování shodilo celou obrazovku.
+// Takový tvar se do denního pole dostane snadno: Todoist vrací u úkolů
+// s časem `due.date` jako datetime, ne jako YYYY-MM-DD.
 export function fromISODate(iso: string): Date {
-  const [y, m, d] = iso.split('-').map(Number)
+  const [y, m, d] = String(iso ?? '').slice(0, 10).split('-').map(Number)
   return new Date(y, m - 1, d)
+}
+
+/** Vytáhne z čehokoli denní řetězec YYYY-MM-DD, nebo undefined. */
+export function toDayString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const den = value.slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(den)) return undefined
+  return Number.isNaN(fromISODate(den).getTime()) ? undefined : den
 }
 
 export const todayISO = () => toISODate(new Date())
@@ -35,7 +48,12 @@ export function formatDayLabel(iso: string): string {
   if (iso === today) return 'Dnes'
   if (iso === toISODate(addDays(fromISODate(today), 1))) return 'Zítra'
   if (iso === toISODate(addDays(fromISODate(today), -1))) return 'Včera'
-  return dayFmt.format(fromISODate(iso))
+  // Popisek se nikdy nesmí stát důvodem pádu: Intl na neplatném datu
+  // vyhodí výjimku („Invalid time value" v Chromu, „Date value is not
+  // finite in DateTimeFormat" v Safari) a React na ni shodí celý strom.
+  const d = fromISODate(iso)
+  if (Number.isNaN(d.getTime())) return 'bez data'
+  return dayFmt.format(d)
 }
 
 export function formatFullDate(d: Date): string {
