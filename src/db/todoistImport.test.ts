@@ -435,6 +435,47 @@ describe('beru jen úkoly přiřazené mně', () => {
     expect(task?.subtasks?.map((x) => x.title)).toEqual(['Wireframe'])
   })
 
+  // Cizí úkol musí zmizet i tehdy, když ho závěrečný úklid nevidí: ten
+  // bere jen záznamy s todoistProjectId ze stažených projektů, takže
+  // starší nebo neúplný záznam by mu propadl sítem.
+  it('cizí úkol bez todoistProjectId zmizí taky', async () => {
+    const id = await localId('7001')
+    await db.tasks.add({
+      id,
+      createdAt: '2026-08-01T08:00:00.000Z',
+      updatedAt: '2026-08-01T08:00:00.000Z',
+      title: 'Stará nálož',
+      status: 'active',
+      order: 0,
+      priority: 'normal',
+      clientId: CLIENT,
+      todoistId: '7001',
+      // todoistProjectId schází — přesně ten případ, který úklid mine
+    })
+
+    await importTodoist(snap({ tasks: [td({ responsibleUid: 'kolega' })] }), push)
+    expect((await db.tasks.get(id))?.deletedAt).toBeTruthy()
+  })
+
+  it('hotový úkol se nemaže, i když ho zadal někdo jiný', async () => {
+    const id = await localId('7001')
+    await db.tasks.add({
+      id,
+      createdAt: '2026-08-01T08:00:00.000Z',
+      updatedAt: '2026-08-01T08:00:00.000Z',
+      title: 'Odpracováno',
+      status: 'done',
+      completedAt: '2026-08-02T08:00:00.000Z',
+      order: 0,
+      priority: 'normal',
+      todoistId: '7001',
+      todoistProjectId: PROJ,
+    })
+
+    await importTodoist(snap({ tasks: [td({ responsibleUid: 'kolega' })] }), push)
+    expect((await db.tasks.get(id))?.deletedAt).toBeUndefined()
+  })
+
   // Kdyby server neposlal myUid, filtr by neprohlásil za moje nic a úklid
   // by smazal úplně všechno, co z Todoistu kdy přišlo.
   it('bez myUid radši nemaže nic', async () => {

@@ -156,6 +156,18 @@ export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): P
   const t = now()
   let count = 0
 
+  // Co v Todoistu je, ale není moje, z appky rovnou zmizí. Nečeká se
+  // s tím na závěrečný úklid: ten se opírá o seznam stažených projektů,
+  // takže záznam bez `todoistProjectId` by mu propadl sítem a cizí úkol
+  // by v appce zůstal napořád. Hotové úkoly necháváme být — na těch jsem
+  // odvedl práci, ať už je zadal kdokoli.
+  if (vimKdoJsem) {
+    for (const z of zaznamy) {
+      if (z.beru || !z.existing || z.existing.deletedAt || z.existing.status === 'done') continue
+      await db.tasks.update(z.existing.id, { deletedAt: t, updatedAt: t })
+    }
+  }
+
   for (const { td, existing, localId } of brane) {
     if (td.parentId && rootIds.has(td.parentId)) continue // je to položka checklistu
     // Úkol z nenapojeného projektu klienta nemá — je přiřazený mně osobně
