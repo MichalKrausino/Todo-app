@@ -531,42 +531,6 @@ export function TodayView({
         )
       })()}
 
-      {/* Večerní uzávěrka: od 16:00, dokud zbývá nedokončené a den není zavřený */}
-      {isEvening && !dayClosed && unfinished.length > 0 && (
-        <button
-          onClick={() => setShutdownOpen(true)}
-          className="rise flex w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-card transition-[background-color,transform] duration-150 active:scale-[0.99] active:bg-well/60"
-          style={stagger(3)}
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-wash text-accent">
-            <svg viewBox="0 0 24 24" className="breathe h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z" />
-            </svg>
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[15px] font-semibold">Uzávěrka dne</span>
-            <span className="text-[13px] text-ink-soft">
-              {unfinished.length}{' '}
-              {unfinished.length === 1 ? 'nedokončený úkol' : unfinished.length < 5 ? 'nedokončené úkoly' : 'nedokončených úkolů'}{' '}
-              — zavři den s čistou hlavou
-            </span>
-          </span>
-          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint/70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </button>
-      )}
-      {isEvening && dayClosed && (
-        <p className="rise px-1 text-sm font-medium text-moss">✓ Den uzavřen — večer je tvůj.</p>
-      )}
-
-      <SignalsBlock
-        signals={computeSignals(clients, projects, [...open, ...done], today)}
-        onOpenClient={onOpenClient}
-        onOpenTask={onOpenTask}
-        onOpenInbox={onOpenInbox}
-      />
-
       {/* Batching podle klienta — jeden klient v kuse, méně přepínání kontextu */}
       {batchClients.length >= 2 && (
         <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1" style={{ scrollbarWidth: 'none' }}>
@@ -710,6 +674,45 @@ export function TodayView({
           <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{done.map((t) => row(t))}</ul>
         </section>
       )}
+
+      {/* Večerní uzávěrka: od 16:00, dokud zbývá nedokončené a den není
+          zavřený. Stojí až pod seznamem — je to akce na konec dne, ne to
+          první, co má člověk po otevření appky řešit. Stejně jako týdenní
+          ohlédnutí sedí na konci Plánu. */}
+      {isEvening && !dayClosed && unfinished.length > 0 && (
+        <button
+          onClick={() => setShutdownOpen(true)}
+          className="rise flex w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-card transition-[background-color,transform] duration-150 active:scale-[0.99] active:bg-well/60"
+          style={stagger(9)}
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-wash text-accent">
+            <svg viewBox="0 0 24 24" className="breathe h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z" />
+            </svg>
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold">Uzávěrka dne</span>
+            <span className="text-[13px] text-ink-soft">
+              {unfinished.length}{' '}
+              {unfinished.length === 1 ? 'nedokončený úkol' : unfinished.length < 5 ? 'nedokončené úkoly' : 'nedokončených úkolů'}{' '}
+              — zavři den s čistou hlavou
+            </span>
+          </span>
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint/70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
+      )}
+      {isEvening && dayClosed && (
+        <p className="rise px-1 text-sm font-medium text-moss">✓ Den uzavřen — večer je tvůj.</p>
+      )}
+
+      <SignalsBlock
+        signals={computeSignals(clients, projects, [...open, ...done], today)}
+        onOpenClient={onOpenClient}
+        onOpenTask={onOpenTask}
+        onOpenInbox={onOpenInbox}
+      />
 
       {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
       {shutdownOpen && (

@@ -11,7 +11,7 @@ const SYNTAX: Array<{ example: string; means: string }> = [
   { example: 'zavolat Pepovi do 14:00', means: 'termín i s časem' },
   { example: 'report @klient', means: 'přiřadí klienta' },
   { example: 'bannery #kampaň', means: 'přiřadí projekt' },
-  { example: 'zaplatit fakturu !!', means: 'vysoká priorita (!!! kritická)' },
+  { example: 'zaplatit fakturu !!', means: 'vysoká priorita (i samotné !, !!! kritická)' },
   { example: 'každý pátek report', means: 'opakující se úkol' },
   { example: 'schůzka // vzít podklady', means: 'poznámka za dvěma lomítky' },
 ]

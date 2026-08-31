@@ -3,6 +3,8 @@
 //   comments  {taskId, projectId}              → komentáře u úkolu (i se jmény autorů)
 //   comment   {taskId, content}                → přidá komentář
 //   pull      {projectIds, completedSince}     → sekce, aktivní i hotové úkoly
+//                                                (a navíc všechno, co je přiřazené mně,
+//                                                 i z projektů mimo `projectIds`)
 //   create    {projectId, sectionId, ...}      → založí úkol v Todoistu
 //   update    {taskId, ...}                    → přepíše název, popis, termín, prioritu
 //   close     {taskId}                         → odškrtne úkol v Todoistu
@@ -177,7 +179,6 @@ Deno.serve(async (req) => {
       // i na druhém zařízení, které párování nedělalo.
       const me = await td(token, '/user')
       const myUid = String(me.id ?? '')
-      if (projectIds.length === 0) return json({ myUid, sections: [], tasks: [], completed: [] })
       const since = (body.completedSince as string) ?? new Date(Date.now() - 30 * 86400_000).toISOString()
       const until = new Date(Date.now() + 86400_000).toISOString()
 
@@ -214,7 +215,48 @@ Deno.serve(async (req) => {
           failed.push({ projectId, error: e instanceof Error ? e.message : String(e) })
         }
       }
-      return json({ myUid, sections, tasks, completed, pulled, failed })
+      // Úkoly přiřazené mně napříč Todoistem — i z projektů, které v appce
+      // nejsou napojené na klienta. Bez tohohle se úkol, který mi někdo
+      // zadal v cizím projektu, do appky nikdy nedostal: stahovaly se jen
+      // spárované projekty. Takové úkoly přijdou bez klienta (do inboxu).
+      //
+      // `assignedProjects` říká, ze kterých projektů jde jen tenhle výběr.
+      // Úklid „co v Todoistu zmizelo" se o ně smí opřít jen tehdy, když
+      // vyšel i dotaz na hotové — jinak by odškrtnutí v Todoistu vypadalo
+      // jako smazání a úkol by z appky tiše zmizel místo do hotových.
+      const znameId = new Set(tasks.map((t) => String(t.id)))
+      const zPrirazenych = new Set<string>()
+      let assignedProjects: string[] = []
+      try {
+        for (const t of await tdList(token, '/tasks/filter', { query: 'assigned to: me' })) {
+          if (t.is_deleted) continue
+          const pid = s(t.project_id)
+          if (pid && !projectIds.includes(pid)) zPrirazenych.add(pid)
+          if (!znameId.has(String(t.id))) {
+            znameId.add(String(t.id))
+            tasks.push(slimTask(t))
+          }
+        }
+        const doneMine = await td(
+          token,
+          `/tasks/completed/by_completion_date?${new URLSearchParams({
+            since,
+            until,
+            filter_query: 'assigned to: me',
+            limit: '200',
+          })}`,
+        )
+        for (const t of ((doneMine.items ?? doneMine.results ?? []) as Rec[])) {
+          completed.push(slimTask({ ...t, checked: true }))
+        }
+        // Až když prošlo obojí, smí se na tyhle projekty pouštět úklid.
+        assignedProjects = [...zPrirazenych]
+      } catch {
+        // Filtr Todoist odmítl (starší plán, jiný jazyk dotazu). Co se
+        // stihlo natáhnout, platí; úklid se o to opírat nebude.
+      }
+
+      return json({ myUid, sections, tasks, completed, pulled, failed, assignedProjects })
     }
 
     // Založení úkolu v Todoistu. Na drátě jsou klíče snake_case a datum

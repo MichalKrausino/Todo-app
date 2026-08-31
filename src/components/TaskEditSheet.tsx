@@ -21,7 +21,7 @@ import {
   setTodoistSubtaskDone,
 } from '../sync/todoist'
 import { SUB_PREFIX } from '../lib/todoistMap'
-import { jePlatnyCas, todayISO } from '../lib/dates'
+import { addDays, fromISODate, jePlatnyCas, toISODate, todayISO } from '../lib/dates'
 import { PRIORITY_LABELS } from '../lib/labels'
 import {
   PRESET_LABELS,
@@ -33,6 +33,40 @@ import {
 
 const field = 'w-full rounded-lg border border-line bg-card px-3 py-2 text-[16px] outline-none focus:border-accent/60 disabled:bg-well disabled:text-ink-soft'
 const label = 'mb-1 block text-xs font-medium text-ink-soft'
+const dayChip = 'rounded-full px-2 py-0.5 text-[11px] font-medium transition-transform duration-150 active:scale-95'
+
+// Rychlé volby pod polem s datem. Dva důvody: nejčastější posun je stejně
+// „dnes / zítra", a hlavně — nativní <input type="date"> na iPhonu nemá
+// jak vyprázdnit, takže bez křížku šel termín přidat, ale ne odebrat.
+function DenChipy({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const dnes = todayISO()
+  const zitra = toISODate(addDays(fromISODate(dnes), 1))
+  return (
+    <div className="mt-1 flex items-center gap-1">
+      {([['Dnes', dnes], ['Zítra', zitra]] as const).map(([popisek, iso]) => (
+        <button
+          key={popisek}
+          type="button"
+          onClick={() => onChange(iso)}
+          aria-pressed={value === iso}
+          className={`${dayChip} ${value === iso ? 'bg-ink text-paper' : 'bg-accent-wash text-accent-deep'}`}
+        >
+          {popisek}
+        </button>
+      ))}
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label="Vymazat datum"
+          className={`${dayChip} bg-well text-ink-soft`}
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  )
+}
 
 export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => void }) {
   const [title, setTitle] = useState(task.title)
@@ -241,6 +275,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
             />
+            <DenChipy value={dueDate} onChange={setDueDate} />
           </div>
           <div>
             <label className={label}>Naplánováno</label>
@@ -250,6 +285,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
               value={scheduledFor}
               onChange={(e) => setScheduledFor(e.target.value)}
             />
+            <DenChipy value={scheduledFor} onChange={setScheduledFor} />
           </div>
           <div>
             {/* Popisek nad polem jako u všech ostatních. Dřív stál vedle
