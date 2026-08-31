@@ -43,9 +43,11 @@ function loadClass(count: number): string {
 export function UpcomingView({
   onOpenTask,
   onShowToday,
+  onOpenReview,
 }: {
   onOpenTask: (t: Task) => void
   onShowToday?: () => void
+  onOpenReview?: () => void
 }) {
   const today = todayISO()
   const open = useLiveQuery(openTasks, []) ?? []
@@ -64,6 +66,9 @@ export function UpcomingView({
     groups.set(d, list)
   }
   const inbox = sortTasks(open.filter((t) => !effectiveDate(t)))
+
+  // Neděle a pondělí — stejné okno, v jakém chodí nedělní push notifikace.
+  const reviewDay = [0, 1].includes(fromISODate(today).getDay())
 
   const horizon = toISODate(addDays(fromISODate(today), HORIZON_DAYS))
   const events = useLiveQuery(() => calendarEventsBetween(today, horizon), [today, horizon]) ?? []
@@ -237,6 +242,31 @@ export function UpcomingView({
           <h2 className="section-label mb-2">bez termínu · {inbox.length}</h2>
           <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{inbox.map((t) => row(t, true))}</ul>
         </section>
+      )}
+
+      {/* Ohlédnutí za týdnem bydlí tady, ne na Dnes: ráno po otevření appky
+          je podstatné, co mám dneska udělat — ne co bylo minulý týden.
+          V Plánu sedí na konci, pod výhledem dopředu, a nabízí se jen
+          v neděli a v pondělí, kdy má smysl. */}
+      {onOpenReview && reviewDay && (
+        <button
+          onClick={onOpenReview}
+          className="rise flex w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-card transition-[background-color,transform] duration-150 active:scale-[0.99] active:bg-well/60"
+          style={{ '--stagger': Math.min(dates.length + 2, 9) } as React.CSSProperties}
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-wash text-accent">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19.5V13M10 19.5V8M16 19.5v-9M20.5 19.5H3.5" />
+            </svg>
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold">Týdenní ohlédnutí</span>
+            <span className="text-[13px] text-ink-soft">Jak šel týden a co čeká v tom dalším</span>
+          </span>
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint/70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
       )}
     </div>
   )

@@ -13,6 +13,11 @@
 // v pruhu uprostřed a zbytek ostrý, takže by screenshot lhal.
 // Vynucený softwarový ANGLE/SwiftShader to spraví a rozmaže celou plochu
 // stejně jako Safari na zařízení. Proto ty přepínače níž nejsou kosmetika.
+//
+// Zbylý artefakt: nad otevřeným sheetem (scrolluje se uvnitř) softwarový
+// kompozitor občas domaluje pruh jeho obsahu i na horní okraj stránky —
+// vypadá to jako zdvojená tlačítka. Než takový nález opravíš, ověř ho
+// proti DOM (page.getByText(...).count()), ať nehoníš přelud.
 
 import { spawn } from 'node:child_process'
 import { mkdir, rm } from 'node:fs/promises'
@@ -41,12 +46,12 @@ const SCREENS = [
 const UKOLY = [
   'dnes poslat report Alze !!',
   'dnes zavolat Pepovi do 14:00',
-  'dnes dodělat bannery !',
+  'dnes dodělat bannery !!',
   'dnes revize textů na web',
   'dnes kontrola kampaně Meta',
   'dnes odpovědět na maily',
   'dnes sesumírovat výsledky',
-  'dnes návrh rozpočtu !',
+  'dnes návrh rozpočtu',
   'dnes briefing týmu',
   'dnes korektura newsletteru',
   'dnes export podkladů pro tisk',
@@ -120,6 +125,10 @@ try {
         '--use-gl=angle',
         '--use-angle=swiftshader',
         '--enable-unsafe-swiftshader',
+        // <input type="date"> se formátuje podle jazyka prohlížeče, ne podle
+        // locale stránky — bez tohohle by termíny na snímcích svítily jako
+        // 08/31/2026, i když na českém iPhonu vypadají jinak.
+        '--lang=cs-CZ',
       ],
     })
     const page = await (
@@ -167,6 +176,33 @@ try {
         pocet++
       }
     }
+    // Sheety: půlka appky bydlí v nich, takže bez nich je audit slepý.
+    if (!arg('jen') && !has('prazdne')) {
+      await page.click(`button:has-text("Dnes")`)
+      await cekej(600)
+      const prvni = page.locator('main button').filter({ hasText: 'poslat report' }).first()
+      if (await prvni.count()) {
+        await prvni.click()
+        await cekej(700)
+        await page.screenshot({ path: path.join(OUT, `sheet-detail-${rezim}.png`) })
+        console.log(path.join(OUT, `sheet-detail-${rezim}.png`))
+        pocet++
+        await page.keyboard.press('Escape')
+        await cekej(500)
+      }
+      for (const [label, jmeno] of [['Hledat', 'hledani'], ['Synchronizace', 'sync']]) {
+        const b = page.locator(`button[aria-label^="${label}"]`).first()
+        if (!(await b.count())) continue
+        await b.click()
+        await cekej(700)
+        await page.screenshot({ path: path.join(OUT, `sheet-${jmeno}-${rezim}.png`) })
+        console.log(path.join(OUT, `sheet-${jmeno}-${rezim}.png`))
+        pocet++
+        await page.keyboard.press('Escape')
+        await cekej(500)
+      }
+    }
+
     await browser.close()
   }
 } finally {

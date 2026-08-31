@@ -23,7 +23,6 @@ import { HelpSheet } from '../components/HelpSheet'
 import { ShutdownSheet } from '../components/ShutdownSheet'
 import { SignalsBlock } from '../components/SignalsBlock'
 import { TaskRow } from '../components/TaskRow'
-import { WeeklyReviewSheet } from '../components/WeeklyReviewSheet'
 
 // Nejbližší relevantní den úkolu — dřívější z „naplánováno“ a „termín“.
 const effectiveDate = (t: Task): string | undefined => {
@@ -90,7 +89,6 @@ export function TodayView({
   onOpenInbox: () => void
 }) {
   const today = todayISO()
-  const [reviewOpen, setReviewOpen] = useState(false)
   // Rozhodnuté ranní návrhy odplouvají do strany a řádek se složí —
   // zápis do DB až po animaci, aby liveQuery řádek neutrhl skokem.
   const [leavingSuggestions, setLeavingSuggestions] = useState<
@@ -137,22 +135,18 @@ export function TodayView({
     }
   }, [])
 
-  // Deep-linky z notifikací: #review otevře týdenní ohlédnutí,
-  // #shutdown podvečerní uzávěrku dne.
+  // Deep-link #shutdown z podvečerní notifikace otevře uzávěrku dne.
+  // (#review řeší App — týdenní ohlédnutí bydlí v Plánu.)
   useEffect(() => {
     const check = () => {
-      const hash = window.location.hash
-      if (hash !== '#review' && hash !== '#shutdown') return
-      if (hash === '#review') setReviewOpen(true)
-      else setShutdownOpen(true)
+      if (window.location.hash !== '#shutdown') return
+      setShutdownOpen(true)
       history.replaceState(null, '', window.location.pathname + window.location.search)
     }
     check()
     window.addEventListener('hashchange', check)
     return () => window.removeEventListener('hashchange', check)
   }, [])
-  // Ohlédnutí za týdnem se nabízí v neděli (plán: nedělní shrnutí) a v pondělí.
-  const reviewDay = [0, 1].includes(fromISODate(today).getDay())
   const open = useLiveQuery(openTasks, []) ?? []
   const done = useLiveQuery(() => doneOn(today), [today]) ?? []
   const clients = useLiveQuery(allClients, []) ?? []
@@ -267,28 +261,25 @@ export function TodayView({
             </span>
           </div>
         )}
+        {/* Jeden tichý řádek místo tří. Dřív tu byl odhad práce, pod ním
+            oranžová bublina „Den je přeplněný" a nad tím pruh postupu —
+            tři pásy metadat, než člověk uviděl první úkol. Přeplnění teď
+            nese ten samý řádek barvou a dovětkem; tečka u něj drží
+            semafor, takže se informace neztratila, jen přestala křičet. */}
         {unfinished.length > 0 && (
-          <>
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-soft">
-              <span
-                className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${overloaded ? 'bg-note-ink' : 'bg-moss'}`}
-              />
-              práce ~{minutesToLabel(workMin)}
-              {/* stejné slovo jako v hlavičce kalendáře — jde o totéž číslo */}
-              {freeMin !== null && <> · zbývá ~{minutesToLabel(freeMin)}</>}
-            </p>
-            {/* varování na vlastním řádku — v jedné větě se lámalo přes
-                dva řádky a ztrácelo důraz */}
-            {overloaded && (
-              <p className="pop-soft mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-note px-2.5 py-1 text-xs font-medium text-note-ink">
-                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 8v5M12 16.5v.5" />
-                  <circle cx="12" cy="12" r="9" />
-                </svg>
-                Den je přeplněný — zvaž něco na zítra
-              </p>
-            )}
-          </>
+          <p
+            className={`mt-2 flex items-center gap-1.5 text-xs ${
+              overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'
+            }`}
+          >
+            <span
+              className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${overloaded ? 'bg-note-ink' : 'bg-moss'}`}
+            />
+            práce ~{minutesToLabel(workMin)}
+            {/* stejné slovo jako v hlavičce kalendáře — jde o totéž číslo */}
+            {freeMin !== null && <> · zbývá ~{minutesToLabel(freeMin)}</>}
+            {overloaded && <> · na den je toho moc</>}
+          </p>
         )}
       </header>
 
@@ -565,27 +556,6 @@ export function TodayView({
         <p className="rise px-1 text-sm font-medium text-moss">✓ Den uzavřen — večer je tvůj.</p>
       )}
 
-      {reviewDay && (
-        <button
-          onClick={() => setReviewOpen(true)}
-          className="rise flex w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-card transition-[background-color,transform] duration-150 active:scale-[0.99] active:bg-well/60"
-          style={stagger(3)}
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-wash text-accent">
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 19.5V13M10 19.5V8M16 19.5v-9M20.5 19.5H3.5" />
-            </svg>
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[15px] font-semibold">Týdenní ohlédnutí</span>
-            <span className="text-[13px] text-ink-soft">Jak šel týden a co čeká v tom dalším</span>
-          </span>
-          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint/70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </button>
-      )}
-
       <SignalsBlock
         signals={computeSignals(clients, projects, [...open, ...done], today)}
         onOpenClient={onOpenClient}
@@ -738,7 +708,6 @@ export function TodayView({
       )}
 
       {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
-      {reviewOpen && <WeeklyReviewSheet onClose={() => setReviewOpen(false)} />}
       {shutdownOpen && (
         <ShutdownSheet
           tasks={unfinished}
