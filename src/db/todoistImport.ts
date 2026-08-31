@@ -111,15 +111,38 @@ async function archiveOccurrence(task: Task, t: string): Promise<void> {
 }
 
 export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): Promise<number> {
-  const active = snap.tasks.filter((t) => isMine(t, snap.myUid))
-  const completed = snap.completed.filter((t) => isMine(t, snap.myUid))
+  const active = snap.tasks
+  const completed = snap.completed
   const projectOfSection = await importSections(snap.sections, snap.clientOf)
   const projectIds = [...(snap.pulled ?? [...snap.clientOf.keys()]), ...(snap.assignedProjects ?? [])]
+
+  // Bez myUid se nedá poznat, co je moje. Nesmí se pak ani zakládat, ani
+  // uklízet — jinak by jedna nepovedená odpověď serveru smetla všechny
+  // todoistí úkoly naráz.
+  const vimKdoJsem = Boolean(snap.myUid)
+
+  // Co z Todoistu vůbec bereme: jen úkoly, na kterých jsem označený —
+  // s jedinou výjimkou. Úkol, který vznikl tady a do Todoistu byl teprve
+  // odeslaný, se přes API zakládá bez přiřazení, takže by se sám sobě
+  // jevil jako cizí a hned první stažení by ho smazalo. Pozná se podle
+  // značky `todoistFromApp`, kterou mu dá odesílací vrstva.
+  const zaznamy: Array<{ td: TodoistTask; existing?: Task; localId: string; beru: boolean }> = []
+  for (const td of active) {
+    const localId = await deterministicUuid('todoist', td.id)
+    const existing = await byTodoistId(td.id, localId)
+    const beru = vimKdoJsem && (isMine(td, snap.myUid) || Boolean(existing?.todoistFromApp))
+    zaznamy.push({ td, existing, localId, beru })
+  }
+  const brane = zaznamy.filter((z) => z.beru)
 
   // Podúkoly (parent_id) nejsou samostatné úkoly — jsou to položky
   // checklistu. Hotové podúkoly chodí v completed, proto se sbírají z obou
   // seznamů, jinak by odškrtnutý krok z checklistu prostě zmizel.
-  const rootIds = new Set(active.filter((t) => !t.parentId).map((t) => t.id))
+  //
+  // Za rodiče se počítají jen úkoly, které opravdu beru: podúkol přiřazený
+  // mně pod cizím úkolem by se jinak schoval do checklistu rodiče, který se
+  // do appky nedostane, a zmizel by úplně. Takhle přijde jako vlastní úkol.
+  const rootIds = new Set(brane.filter((z) => !z.td.parentId).map((z) => z.td.id))
   const children = new Map<string, TodoistTask[]>()
   for (const t of [...active, ...completed]) {
     if (t.parentId && rootIds.has(t.parentId)) {
@@ -133,18 +156,11 @@ export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): P
   const t = now()
   let count = 0
 
-  for (const td of active) {
+  for (const { td, existing, localId } of brane) {
     if (td.parentId && rootIds.has(td.parentId)) continue // je to položka checklistu
-    // Úkol z nenapojeného projektu klienta nemá — je to úkol přiřazený
-    // mně osobně a spadne do inboxu. Dřív se takový úkol přeskočil, takže
-    // co mi někdo zadal mimo spárované projekty, se do appky nedostalo.
-    // Bereme z nich ale jen to, co na mě vysloveně visí: nepřiřazený úkol
-    // v cizím projektu je práce někoho jiného, ne moje.
+    // Úkol z nenapojeného projektu klienta nemá — je přiřazený mně osobně
+    // a spadne do inboxu.
     const clientId = td.projectId ? snap.clientOf.get(td.projectId) : undefined
-    const prirazenoMne = Boolean(snap.myUid) && td.responsibleUid === snap.myUid
-    if (!clientId && !prirazenoMne) continue
-    const localId = await deterministicUuid('todoist', td.id)
-    const existing = await byTodoistId(td.id, localId)
     seen.add(existing?.id ?? localId)
     count++
     if (existing?.deletedAt) continue // smazal jsem ho tady — tombstone vyhrává
@@ -229,18 +245,24 @@ export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): P
   }
 
   // Co v Todoistu není ani mezi aktivními, ani mezi hotovými, tam přestalo
-  // existovat (smazáno, přesunuto jinam). Hotové úkoly necháváme být — ty
-  // jen vypadly z okna hotových a jsou to naše záznamy o odvedené práci.
-  const gone = await db.tasks
-    .filter(
-      (x) =>
-        !x.deletedAt &&
-        Boolean(x.todoistId) &&
-        x.status !== 'done' &&
-        Boolean(x.todoistProjectId && projectIds.includes(x.todoistProjectId)) &&
-        !seen.has(x.id),
-    )
-    .toArray()
+  // existovat (smazáno, přesunuto jinam) — a stejně tak to, co na mě
+  // přestalo být přiřazené: pak je to práce někoho jiného a v appce nemá
+  // co dělat. Hotové úkoly necháváme být — ty jen vypadly z okna hotových
+  // a jsou to naše záznamy o odvedené práci.
+  //
+  // Když server neřekl, kdo jsem, nemaže se nic.
+  const gone = !vimKdoJsem
+    ? []
+    : await db.tasks
+        .filter(
+          (x) =>
+            !x.deletedAt &&
+            Boolean(x.todoistId) &&
+            x.status !== 'done' &&
+            Boolean(x.todoistProjectId && projectIds.includes(x.todoistProjectId)) &&
+            !seen.has(x.id),
+        )
+        .toArray()
   for (const x of gone) await db.tasks.update(x.id, { deletedAt: t, updatedAt: t })
 
   return count

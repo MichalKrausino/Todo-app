@@ -82,10 +82,18 @@ describe('estimateFrom', () => {
 })
 
 describe('isMine', () => {
-  it('nepřiřazené beru, cizí ne', () => {
-    expect(isMine(td(), 'me')).toBe(true)
+  it('beru jen to, na čem jsem označený já', () => {
     expect(isMine(td({ responsibleUid: 'me' }), 'me')).toBe(true)
     expect(isMine(td({ responsibleUid: 'nekdo' }), 'me')).toBe(false)
+  })
+
+  it('nepřiřazený úkol je pořád otázka, ne moje práce', () => {
+    expect(isMine(td(), 'me')).toBe(false)
+  })
+
+  it('bez znalosti vlastního uid neprohlásí za svoje nic', () => {
+    expect(isMine(td({ responsibleUid: 'me' }), undefined)).toBe(false)
+    expect(isMine(td(), undefined)).toBe(false)
   })
 })
 

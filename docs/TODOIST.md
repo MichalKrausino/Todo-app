@@ -237,7 +237,8 @@ horší než ji zobrazit.
 ### Nic nesmí proklouznout
 
 Úkol přiřazený **mně osobně** se do appky dostane vždycky — i když je
-v projektu, který nemám spárovaný s klientem. Každé stažení se proto ptá
+v projektu, který nemám spárovaný s klientem. A nic jiného se do ní
+nedostane: viz pravidlo v části 6. Každé stažení se proto ptá
 i na `\`/tasks/filter?query=assigned to: me\`` a co z toho nepřišlo přes
 spárované projekty, přidá. Takový úkol nemá klienta a spadne do inboxu;
 zařadit ho pod klienta jde ručně a stažení mu to nesebere (zařazení
@@ -280,10 +281,20 @@ vidělo týdenní ohlédnutí) a živý řádek se vrátí do hry s novým term�
 - **Tahají se jen sdílené projekty.** Vlastní todoistí projekty zůstávají
   stranou — to, co si vedu sám, patří rovnou do appky. Párovací obrazovka
   je ukáže jen jako počet, aby bylo jasné, že se ignorují.
-- **Ze spárovaných projektů se berou úkoly přiřazené mně a nepřiřazené.**
-  Cizí přiřazené úkoly ve sdíleném projektu nechávám být (`isMine`
-  v `src/lib/todoistMap.ts`). Z nespárovaných projektů přijde jen to, co je
-  vysloveně přiřazené mně — bez klienta, do inboxu.
+- **Do appky chodí jen úkoly, na kterých jsem označený já** (`isMine`
+  v `src/lib/todoistMap.ts`) — ať už jsou ve spárovaném projektu, nebo
+  kdekoli jinde. Nepřiřazený úkol ve sdíleném projektu je pořád ještě
+  otázka, ne moje práce, a cizí přiřazený teprve ne. Když mi někdo úkol
+  přebere, zmizí i z appky.
+  Dvě výjimky, bez kterých by to škodilo:
+  - **Úkol, který vznikl v appce** a do Todoistu byl teprve odeslaný.
+    API ho zakládá bez přiřazení, takže by se sám sobě jevil jako cizí
+    a hned první stažení by ho smazalo. Nese proto značku
+    `Task.todoistFromApp`, kterou mu dá `adoptCreated`.
+  - **Podúkoly mého úkolu** jsou položky checklistu, ne samostatná práce —
+    berou se bez ohledu na přiřazení. Naopak podúkol přiřazený mně pod
+    cizím úkolem přijde jako vlastní úkol; kdyby se počítal za položku
+    checklistu rodiče, který se do appky nedostane, zmizel by úplně.
 - **Psaní ven je vypnuté, dokud ho nezapnu**, a to zvlášť u každého klienta.
   Zapnutí si pamatuje čas (`Client.todoistPushSince`), takže se do klientova
   projektu nevyvalí všechno, co jsem si u něj kdy poznamenal — jen to, co

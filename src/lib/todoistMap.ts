@@ -85,10 +85,15 @@ export function estimateFrom(duration: TodoistTask['duration']): number | undefi
   return Math.min(minutes, 8 * 60)
 }
 
-// Ve sdíleném projektu klienta jsou i úkoly cizích lidí. Beru svoje
-// a nepřiřazené (klienti často jen píšou úkoly a nepřiřazují je).
+// Ve sdíleném projektu klienta jsou i úkoly cizích lidí a spousta těch,
+// které nikdo nikomu nepřidělil. Do appky patří JEN to, na čem jsem
+// označený já — nepřiřazený úkol je pořád ještě otázka, ne moje práce.
+//
+// Výjimku má úkol, který vznikl v appce a do Todoistu byl teprve odeslaný:
+// ten se přes API zakládá bez přiřazení, takže by se sám sobě jevil jako
+// cizí. Pozná se podle značky `todoistFromApp` a řeší ho `importTodoist`,
+// ne tahle funkce — tady jde čistě o to, co říká Todoist.
 export function isMine(t: TodoistTask, myUid: string | undefined): boolean {
-  if (!t.responsibleUid) return true
   return Boolean(myUid) && t.responsibleUid === myUid
 }
 

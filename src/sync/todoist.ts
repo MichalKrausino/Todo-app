@@ -330,6 +330,10 @@ async function adoptCreated(task: Task, created: TodoistTask): Promise<void> {
     todoistUpdatedAt: created.updatedAt,
     todoistHasDeadline: Boolean(created.deadline?.date) || undefined,
     todoistRecurring: Boolean(created.due?.isRecurring) || undefined,
+    // Todoist zakládá úkoly přes API bez přiřazení, takže by tenhle úkol
+    // příštímu stažení připadal cizí a filtr „beru jen to, co je přiřazené
+    // mně" by ho smazal. Značka říká, že vznikl tady.
+    todoistFromApp: true,
   }
   const targetId = await deterministicUuid('todoist', created.id)
   if (targetId === task.id || (await db.tasks.get(targetId))) {

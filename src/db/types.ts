@@ -94,6 +94,11 @@ export interface Task extends BaseRecord {
   todoistRecurring?: boolean // opakuje se v Todoistu — odškrtnutím se posune na další termín, nezmizí
   todoistHasDeadline?: boolean // termín přišel z todoistího `deadline` (ne z `due`) — úprava se musí vrátit do stejného pole
   todoistDirty?: boolean // lokální úprava čeká na odeslání; do té doby ji stažení nesmí přepsat
+  // Úkol vznikl tady a do Todoistu byl teprve odeslaný. Todoist na něm
+  // nikoho neeviduje (API ho zakládá bez přiřazení), takže bez téhle
+  // značky by ho filtr „beru jen to, co je přiřazené mně" považoval za
+  // cizí a první stažení by ho smazalo.
+  todoistFromApp?: boolean
   todoistLabels?: string[] // štítky z Todoistu — jen na ukázání, appka s nimi nepracuje
   todoistComments?: TodoistComment[] // stažené komentáře (dotahují se při otevření úkolu)
   order: number
