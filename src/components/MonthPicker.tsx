@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { calendarEventsBetween, openTasks } from '../db/repo'
 import { addDays, fromISODate, toISODate, todayISO } from '../lib/dates'
@@ -15,6 +15,8 @@ const monthFmt = new Intl.DateTimeFormat('cs-CZ', { month: 'long', year: 'numeri
 // modrá = pár věcí, oranžová = nabito, červená = plno. Wash odstíny
 // byly na displeji k nerozeznání od bílé (ověřeno pixelově), proto
 // průhledné varianty plných barev — viditelné v obou režimech.
+// Legenda pod kalendářem být nemusí: stoupající teplota barvy se čte
+// sama a přesné číslo řekne náhled vybraného dne pod kalendářem.
 function heatClass(count: number): string {
   if (count <= 0) return ''
   if (count <= 2) return 'bg-accent/30'
@@ -62,6 +64,16 @@ export function MonthPicker({
 
   // směr listování — nový měsíc přijíždí ze strany, kam se listuje
   const [dir, setDir] = useState(0)
+
+  // Vybraný den může spadnout do jiného měsíce, než je zrovna vidět —
+  // třicátého prvního srpna míří „Zítra" na září a kalendář zůstával
+  // v srpnu, kde nebylo označeno nic. Měsíc proto jde za výběrem.
+  useEffect(() => {
+    const cil = value?.slice(0, 7)
+    if (!cil || cil === month) return
+    setDir(cil > month ? 1 : -1)
+    setMonth(cil)
+  }, [value, month])
   const shift = (delta: number) => {
     setDir(delta)
     const d = new Date(firstDate.getFullYear(), firstDate.getMonth() + delta, 1)
@@ -72,8 +84,8 @@ export function MonthPicker({
   const keep = (e: React.PointerEvent) => e.preventDefault()
 
   return (
-    <div className="rise mb-2 rounded-2xl bg-card p-2.5 shadow-card">
-      <div className="mb-1 flex items-center justify-between">
+    <div className="rise mb-1.5 rounded-2xl bg-card px-2 py-1.5 shadow-card">
+      <div className="mb-0.5 flex items-center justify-between">
         <button
           type="button"
           onPointerDown={keep}
@@ -148,20 +160,6 @@ export function MonthPicker({
             </button>
           )
         })}
-      </div>
-
-      {/* vizuální legenda — barvy rovnou s významem */}
-      <div className="mt-1 flex items-center justify-center gap-3 text-[10px] text-ink-faint">
-        <span className="inline-flex items-center gap-1">
-          <span className="h-2.5 w-2.5 rounded-full bg-accent/30" /> 1–2
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="h-2.5 w-2.5 rounded-full bg-amber/40" /> 3–4
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="h-2.5 w-2.5 rounded-full bg-danger/40" /> 5+
-        </span>
-        <span>schůzek a úkolů za den</span>
       </div>
     </div>
   )

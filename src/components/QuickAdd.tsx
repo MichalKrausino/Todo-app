@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { CalendarEvent, Priority, Task } from '../db/types'
 import { activeClients, addTask, allProjects, calendarCacheCount, calendarEventsOn, openTasks, removeTask } from '../db/repo'
-import { addDays, formatDayLabel, formatEventRange, fromISODate, nextMonday, toISODate, todayISO } from '../lib/dates'
+import { addDays, formatDayLabel, formatEventRange, formatFullDate, fromISODate, nextMonday, toISODate, todayISO } from '../lib/dates'
 import { WORK_END, WORK_START, freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { PRIORITY_LABELS } from '../lib/labels'
 import { foldToken, mentionToken, parseQuickAdd } from '../lib/quickAdd'
@@ -29,6 +29,14 @@ interface Overrides {
 }
 
 type PickerKind = 'date' | 'client' | 'project' | 'priority' | null
+
+// Rychlé dny nad kalendářem — jedna definice, ať tlačítka nesou stav
+// (vybraný den se vyplní) a nedublují se s chipem nad polem.
+const QUICK_DAYS: { label: string; day: (today: string) => string }[] = [
+  { label: 'Dnes', day: (t) => t },
+  { label: 'Zítra', day: (t) => toISODate(addDays(fromISODate(t), 1)) },
+  { label: 'Příští týden', day: (t) => toISODate(nextMonday(fromISODate(t))) },
+]
 
 const pill = 'shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium transition-transform duration-150 active:scale-95'
 const chip = 'rounded-full px-2.5 py-0.5 font-medium'
@@ -169,6 +177,41 @@ export function QuickAdd({
   // prázdná cache = kalendář ještě není propojený — říct to na rovinu
   const calendarConnected = (useLiveQuery(calendarCacheCount, []) ?? 0) > 0
 
+  // Shrnutí dne do jedné věty v hlavičce náhledu. Prázdný den řekne
+  // „volný den" a nepotřebuje pod sebou další řádek, který totéž zopakuje.
+  const previewSummary = (() => {
+    const parts: string[] = []
+    if (previewEvents.length > 0)
+      parts.push(`${previewEvents.length} ${plural(previewEvents.length, 'schůzka', 'schůzky', 'schůzek')}`)
+    if (previewTasks.length > 0)
+      parts.push(`${previewTasks.length} ${plural(previewTasks.length, 'úkol', 'úkoly', 'úkolů')}`)
+    if (parts.length === 0) return 'volný den'
+    if (previewEvents.length > 0)
+      parts.push(
+        `${previewDay === todayISO() ? 'zbývá' : 'volno'} ~${minutesToLabel(freeMinutes(previewBusy, previewFrom))}`,
+      )
+    return parts.join(' · ')
+  })()
+
+  // Schůzky a úkoly dne v jednom seznamu, nejvýš tři řádky — kolik jich
+  // je doopravdy, stojí v hlavičce, takže „…a N dalších" je jen šum.
+  const previewRows = [
+    ...previewAgenda.map((e) => ({
+      id: e.id,
+      when: formatEventRange(e),
+      title: e.title,
+      dot: 'color-mix(in oklab, var(--color-accent) 60%, transparent)',
+    })),
+    ...previewTasks.map((t) => ({
+      id: t.id,
+      when: 'úkol',
+      title: t.title,
+      dot:
+        (t.clientId ? clients.find((c) => c.id === t.clientId)?.color : undefined) ??
+        'var(--color-ink-faint)',
+    })),
+  ].slice(0, 3)
+
   const setOv = (patch: Overrides) => {
     setOverrides((o) => ({ ...o, ...patch }))
     setPicker(null)
@@ -228,7 +271,10 @@ export function QuickAdd({
                 ? `${formatDayLabel(lastAdded.dueDate)} — „${lastAdded.title}“`
                 : `Do inboxu — „${lastAdded.title}“`}
             </span>
-            {!lastAdded.dueDate && onShowUpcoming && (
+            {/* „Zobrazit" má smysl u všeho, co po přidání zmizí z očí —
+                nejen u inboxu: úkol na zítřek se z obrazovky Dnes taky
+                ztratí a bez odkazu není kam se za ním podívat. */}
+            {lastAdded.dueDate !== today && onShowUpcoming && (
               <button
                 onClick={() => {
                   setLastAdded(null)
@@ -270,11 +316,11 @@ export function QuickAdd({
       {/* náhled — chipy jsou klikací, ťuknutí otevře příslušný výběr */}
       {hasChips && (
         <div className="flex flex-wrap gap-1.5 px-1 pb-2 text-[11px]">
-          {(effDueDate || impliedToday) && (
+          {(effDueDate || impliedToday) && picker !== 'date' && (
             <button
               type="button"
               onPointerDown={keepFocus}
-              onClick={() => setPicker(picker === 'date' ? null : 'date')}
+              onClick={() => setPicker('date')}
               key={`d:${effDueDate ?? 'dnes'}:${effDueTime ?? ''}`}
               className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}
             >
@@ -331,18 +377,27 @@ export function QuickAdd({
 
       {/* výběr po ťuknutí na tlačítko lišty nebo chip */}
       {picker === 'date' && (
-        <div className="max-h-[54vh] overflow-y-auto overflow-x-hidden overscroll-contain">
-          {/* výběr dne nezavírá sekci — heatmapa i agenda se mění živě */}
-          <div className="rise -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
-            <button type="button" onPointerDown={keepFocus} onClick={() => setOverrides((o) => ({ ...o, dueDate: today }))} className={`${pill} bg-accent-wash text-accent-deep`}>
-              Dnes
-            </button>
-            <button type="button" onPointerDown={keepFocus} onClick={() => setOverrides((o) => ({ ...o, dueDate: toISODate(addDays(fromISODate(today), 1)) }))} className={`${pill} bg-accent-wash text-accent-deep`}>
-              Zítra
-            </button>
-            <button type="button" onPointerDown={keepFocus} onClick={() => setOverrides((o) => ({ ...o, dueDate: toISODate(nextMonday(fromISODate(today))) }))} className={`${pill} bg-accent-wash text-accent-deep`}>
-              Příští týden
-            </button>
+        <div className="max-h-[46vh] overflow-y-auto overflow-x-hidden overscroll-contain">
+          {/* výběr dne nezavírá sekci — heatmapa i agenda se mění živě.
+              Rychlé volby nesou i stav: vybraný den je plný, ne jen nabídka —
+              jinak „Dnes" svítilo v doku dvakrát vedle sebe jako dvě různé věci. */}
+          <div className="rise -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-1.5" style={{ scrollbarWidth: 'none' }}>
+            {QUICK_DAYS.map(({ label, day }) => {
+              const iso = day(today)
+              const on = (effDueDate ?? (impliedToday ? today : undefined)) === iso
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  onPointerDown={keepFocus}
+                  onClick={() => setOverrides((o) => ({ ...o, dueDate: iso }))}
+                  aria-pressed={on}
+                  className={`${pill} ${on ? 'bg-ink text-paper' : 'bg-accent-wash text-accent-deep'}`}
+                >
+                  {label}
+                </button>
+              )
+            })}
             {(effDueDate || impliedToday) && (
               <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: null, dueTime: null })} className={`${pill} bg-well text-ink-soft`}>
                 ✕ Bez termínu
@@ -350,14 +405,18 @@ export function QuickAdd({
             )}
           </div>
 
-          {/* vlastní kalendářík s heatmapou vytížení dnů */}
+          {/* vlastní kalendářík s heatmapou vytížení dnů.
+              Vybraný den se řídí i tichým „dnes" na obrazovce Dnes — jinak
+              svítilo tlačítko Dnes vybrané, ale v kalendáři nebylo označeno nic. */}
           <MonthPicker
-            value={effDueDate}
+            value={effDueDate ?? (impliedToday ? today : undefined)}
             onSelect={(iso) => setOverrides((o) => ({ ...o, dueDate: iso }))}
           />
 
-          {/* čas deadlineu — volitelný; výběr času bez dne míří na dnešek */}
-          <div className="rise -mx-1 mb-2 flex items-center gap-1.5 overflow-x-auto px-1" style={{ scrollbarWidth: 'none' }}>
+          {/* čas termínu — volitelný, a jen když už je vybraný den:
+              čas bez dne nic neznamená a řádek navíc jen roztahoval dok */}
+          {(effDueDate || impliedToday) && (
+          <div className="rise -mx-1 mb-1.5 flex items-center gap-1.5 overflow-x-auto px-1" style={{ scrollbarWidth: 'none' }}>
             <span className="shrink-0 pl-1 text-[12px] font-medium text-ink-faint">Čas</span>
             {['9:00', '12:00', '14:00', '16:00'].map((t) => {
               const v = t.padStart(5, '0')
@@ -398,63 +457,37 @@ export function QuickAdd({
               </button>
             )}
           </div>
+          )}
 
-          {/* mini agenda vybraného dne: schůzky z kalendáře + úkoly + volno */}
+          {/* Náhled vybraného dne. Držet krátce: v doku nad klávesnicí je
+              každý řádek drahý, a přesné počty jsou stejně v hlavičce —
+              proto max tři řádky a žádné „…a N dalších". */}
           {previewDay && (
-            <div className="rise mb-2 overflow-hidden rounded-2xl bg-card shadow-card">
-              <div className="flex items-baseline justify-between gap-2 border-b border-line px-3 py-2">
+            <div className="rise mb-1 overflow-hidden rounded-2xl bg-card shadow-card">
+              <div className="flex items-baseline justify-between gap-2 px-3 py-1.5">
+                {/* plné datum, ne „Dnes" — to už svítí na vybraném tlačítku
+                    nad kalendářem a dvakrát pod sebou působilo jako dvě věci */}
                 <span className="text-[13px] font-semibold text-ink first-letter:uppercase">
-                  {formatDayLabel(previewDay)}
+                  {formatFullDate(fromISODate(previewDay))}
                 </span>
-                <span className="text-[12px] text-ink-soft">
-                  {previewEvents.length > 0 &&
-                    `${previewEvents.length} ${plural(previewEvents.length, 'schůzka', 'schůzky', 'schůzek')} · `}
-                  {previewTasks.length > 0
-                    ? `${previewTasks.length} ${plural(previewTasks.length, 'úkol', 'úkoly', 'úkolů')}`
-                    : 'bez úkolů'}
-                  {previewEvents.length > 0 &&
-                    ` · ${previewDay === today ? 'zbývá' : 'volno'} ~${minutesToLabel(freeMinutes(previewBusy, previewFrom))}`}
-                </span>
+                <span className="shrink-0 text-[12px] text-ink-soft">{previewSummary}</span>
               </div>
 
-              {previewAgenda.slice(0, 3).map((e) => (
-                <div key={e.id} className="flex items-center gap-2 px-3 py-1 text-[13px]">
-                  <span className="w-[5.5rem] shrink-0 whitespace-nowrap tabular-nums text-ink-soft">
-                    {formatEventRange(e)}
-                  </span>
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent/60" />
-                  <span className="min-w-0 flex-1 truncate text-ink">{e.title}</span>
-                </div>
-              ))}
-              {previewAgenda.length > 3 && (
-                <div className="px-3 pb-1 text-[12px] text-ink-faint">
-                  …a {previewAgenda.length - 3} {plural(previewAgenda.length - 3, 'další schůzka', 'další schůzky', 'dalších schůzek')}
-                </div>
-              )}
-
-              {previewTasks.slice(0, 2).map((t) => (
-                <div key={t.id} className="flex items-center gap-2 px-3 py-1 text-[13px]">
-                  <span className="w-[5.5rem] shrink-0 text-ink-faint">úkol</span>
-                  <span
-                    className="h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{
-                      background: t.clientId
-                        ? clients.find((c) => c.id === t.clientId)?.color ?? 'var(--color-ink-faint)'
-                        : 'var(--color-ink-faint)',
-                    }}
-                  />
-                  <span className="min-w-0 flex-1 truncate text-ink">{t.title}</span>
-                </div>
-              ))}
-              {previewTasks.length > 2 && (
-                <div className="px-3 pb-1 text-[12px] text-ink-faint">
-                  …a {previewTasks.length - 2} {plural(previewTasks.length - 2, 'další úkol', 'další úkoly', 'dalších úkolů')}
+              {previewRows.length > 0 && (
+                <div className="border-t border-line">
+                  {previewRows.map((r) => (
+                    <div key={r.id} className="flex items-center gap-2 px-3 py-1 text-[13px]">
+                      <span className="w-[5.5rem] shrink-0 whitespace-nowrap tabular-nums text-ink-soft">
+                        {r.when}
+                      </span>
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: r.dot }} />
+                      <span className="min-w-0 flex-1 truncate text-ink">{r.title}</span>
+                    </div>
+                  ))}
+                  <div className="h-1" />
                 </div>
               )}
 
-              {previewAgenda.length === 0 && previewTasks.length === 0 && (
-                <div className="px-3 py-2 text-[13px] text-ink-soft">Den je zatím volný.</div>
-              )}
               {!calendarConnected && (
                 <div className="border-t border-line px-3 py-1.5 text-[11px] text-ink-faint">
                   Schůzky se ukážou po propojení Google kalendáře (Synchronizace).

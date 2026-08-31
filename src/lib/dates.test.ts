@@ -9,6 +9,7 @@ import {
   toDayString,
   daysSince,
   formatDayLabel,
+  formatDaysAgo,
   fromISODate,
   mondayOf,
   nextMonday,
@@ -195,5 +196,23 @@ describe('formatDayLabel nespadne na vadném datu', () => {
       expect(() => formatDayLabel(spatny)).not.toThrow()
       expect(formatDayLabel(spatny)).toBe('bez data')
     }
+  })
+})
+
+describe('formatDaysAgo', () => {
+  it('dnešek neříká „před 0 dny"', () => {
+    expect(formatDaysAgo('2026-08-31T09:00:00.000Z', '2026-08-31')).toBe('dnes')
+  })
+
+  it('včerejšek je včera, ne „před 1 dny"', () => {
+    expect(formatDaysAgo('2026-08-30T09:00:00.000Z', '2026-08-31')).toBe('včera')
+  })
+
+  it('starší datum uvede počet dnů', () => {
+    expect(formatDaysAgo('2026-08-26T09:00:00.000Z', '2026-08-31')).toBe('před 5 dny')
+  })
+
+  it('razítko z budoucnosti nespadne do záporu', () => {
+    expect(formatDaysAgo('2026-09-02T09:00:00.000Z', '2026-08-31')).toBe('dnes')
   })
 })

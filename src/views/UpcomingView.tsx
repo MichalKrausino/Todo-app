@@ -94,6 +94,16 @@ export function UpcomingView({
     .filter((d) => d > today)
     .sort()
 
+  // Kolik je dnes — dlaždice „dnes" nesla plný modrý proužek pořád,
+  // takže mezi ostatními, kde sytost znamená vytížení, hlásila „plno"
+  // i na prázdný den. Tady se počítá stejně: úkoly na dnešek (i ty
+  // propadlé, ty se na Dnes taky ukážou) plus schůzky.
+  const todayCount =
+    open.filter((t) => {
+      const d = effectiveDate(t)
+      return d !== undefined && d <= today
+    }).length + (eventsPerDay.get(today)?.length ?? 0)
+
   // Pás nejbližších dnů: zítřek + STRIP_DAYS-1 dalších (dnešek zvlášť).
   const strip = Array.from({ length: STRIP_DAYS }, (_, i) =>
     toISODate(addDays(fromISODate(today), i + 1)),
@@ -142,7 +152,7 @@ export function UpcomingView({
             <span className="text-[15px] font-semibold text-accent tabular-nums">
               {fromISODate(today).getDate()}
             </span>
-            <span className="h-1 w-6 rounded-full bg-accent" />
+            <span className={`h-1 w-6 rounded-full ${loadClass(todayCount)}`} />
           </button>
         )}
         {strip.map((d) => {

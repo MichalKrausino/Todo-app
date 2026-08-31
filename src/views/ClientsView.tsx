@@ -32,7 +32,7 @@ import {
   type CheckFrequency,
 } from '../db/clientCheck'
 import { CLIENT_COLORS, KIND_LABELS } from '../lib/labels'
-import { daysSince, formatDayLabel, todayISO } from '../lib/dates'
+import { formatDayLabel, formatDaysAgo, todayISO } from '../lib/dates'
 import { parseQuickAdd } from '../lib/quickAdd'
 import { neglectedDays } from '../lib/signals'
 import { TaskRow } from '../components/TaskRow'
@@ -735,7 +735,7 @@ function ClientDetail({
             <div className="font-medium">Hlídat zanedbání</div>
             <div className="text-xs text-ink-faint">
               {client.lastActivityAt
-                ? `Poslední aktivita před ${daysSince(client.lastActivityAt)} dny`
+                ? `Poslední aktivita ${formatDaysAgo(client.lastActivityAt)}`
                 : 'Zatím žádná aktivita'}
             </div>
           </div>
@@ -746,6 +746,7 @@ function ClientDetail({
               min="0"
               inputMode="numeric"
               defaultValue={client.checkIntervalDays ?? ''}
+              placeholder="14"
               onBlur={(e) => setWatch(e.target.value)}
               className="w-16 rounded-lg border border-line px-2 py-1.5 text-center text-[15px] outline-none focus:border-accent/60"
             />

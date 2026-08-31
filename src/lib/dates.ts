@@ -85,6 +85,15 @@ export function daysSince(isoDatetime: string, todayRef: string = todayISO()): n
   return Math.round((today.getTime() - then.getTime()) / 86400000)
 }
 
+// „dnes" / „včera" / „před 5 dny". Přes daysSince to vycházelo i na
+// „před 0 dny", což u čerstvě založeného klienta znělo jako porucha.
+export function formatDaysAgo(isoDatetime: string, todayRef: string = todayISO()): string {
+  const n = daysSince(isoDatetime, todayRef)
+  if (n <= 0) return 'dnes'
+  if (n === 1) return 'včera'
+  return `před ${n} dny`
+}
+
 const casFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
 
 /** Je z toho řetězce použitelný čas? Prázdno, undefined ani nesmysl není. */

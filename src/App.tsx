@@ -229,7 +229,7 @@ export default function App() {
             <div>
               <div>
                 <QuickAdd
-                  onShowUpcoming={() => setTab('upcoming')}
+                  onShowUpcoming={tab === 'upcoming' ? undefined : () => setTab('upcoming')}
                   defaultToToday={tab === 'today'}
                   autoFocus={addOpen}
                 />
