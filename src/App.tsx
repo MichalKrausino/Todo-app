@@ -261,11 +261,17 @@ export default function App() {
                 {t.label}
               </button>
             ))}
+            {/* Otevřené zadávání má vlastní modré kolečko pro odeslání.
+                Když bylo modré i tohle, stály pod sebou dva skoro stejné
+                kruhy s opačným významem — a ten zavírací byl větší a níž,
+                tedy blíž palci. Zavření je druhotná akce, tak i vypadá. */}
             <button
               aria-label={addOpen ? 'Zavřít zadávání' : 'Nový úkol'}
               aria-expanded={addOpen}
               onClick={() => setAddOpen((v) => !v)}
-              className="ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-card shadow-float transition-transform duration-150 active:scale-90"
+              className={`ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-[background-color,transform] duration-150 active:scale-90 ${
+                addOpen ? 'bg-well text-ink-soft' : 'bg-accent text-card shadow-float'
+              }`}
             >
               <svg
                 viewBox="0 0 24 24"

@@ -293,7 +293,7 @@ export function QuickAdd({
               onPointerDown={keepFocus}
               onClick={() => setPicker(picker === 'client' ? null : 'client')}
               key={`c:${effClient.id}`}
-              className={`${chip} pop-soft inline-flex items-center gap-1.5 bg-well text-ink-soft`}
+              className={`${chip} pop-soft inline-flex items-center gap-1.5 bg-accent-wash text-accent-deep`}
             >
               <span className="h-2 w-2 rounded-full" style={{ background: effClient.color }} />
               {effClient.name}
@@ -305,7 +305,7 @@ export function QuickAdd({
               onPointerDown={keepFocus}
               onClick={() => setPicker(picker === 'project' ? null : 'project')}
               key={`j:${effProject.id}`}
-              className={`${chip} pop-soft inline-block bg-well text-ink-soft`}
+              className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}
             >
               ▸ {effProject.name}
             </button>
@@ -316,13 +316,13 @@ export function QuickAdd({
               onPointerDown={keepFocus}
               onClick={() => setPicker(picker === 'priority' ? null : 'priority')}
               key={`p:${effPriority}`}
-              className={`${chip} pop-soft inline-block bg-well text-ink-soft`}
+              className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}
             >
               {PRIORITY_LABELS[effPriority]}
             </button>
           )}
           {parsed?.notes && (
-            <span key="n" className={`${chip} pop-soft inline-block max-w-40 truncate bg-well text-ink-soft`}>
+            <span key="n" className={`${chip} pop-soft inline-block max-w-40 truncate bg-accent-wash text-accent-deep`}>
               ✎ {parsed.notes}
             </span>
           )}
