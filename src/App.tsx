@@ -195,7 +195,7 @@ export default function App() {
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.5rem)' }}
       >
         <div
-          className={`dock pointer-events-auto overflow-hidden border border-line/60 transition-[border-radius] duration-300 ease-ios ${
+          className={`dock pointer-events-auto overflow-hidden transition-[border-radius] duration-300 ease-ios ${
             addOpen ? 'rounded-[28px]' : 'rounded-full'
           }`}
         >
