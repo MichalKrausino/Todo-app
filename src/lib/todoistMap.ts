@@ -3,7 +3,7 @@
 // je stahovací vrstva (src/sync/todoist.ts) jen tenká slupka kolem nich.
 
 import type { Priority, Subtask, Task } from '../db/types'
-import { toISODate } from './dates'
+import { toDayString, toISODate } from './dates'
 
 export interface TodoistDue {
   date?: string // YYYY-MM-DD
@@ -65,9 +65,12 @@ export function datesFrom(t: TodoistTask): {
   dueTime?: string
   scheduledFor?: string
 } {
-  const deadline = t.deadline?.date
+  const deadline = toDayString(t.deadline?.date)
   const due = t.due ?? undefined
-  const dueDay = due?.datetime ? localDayTime(due.datetime).day : due?.date
+  // `due.date` umí být i plný datetime (Todoist ho tak vrací u úkolů
+  // s časem), a denní pole musí být čistě YYYY-MM-DD — jinak se z něj
+  // stane neplatné datum, které shodí Plán.
+  const dueDay = due?.datetime ? localDayTime(due.datetime).day : toDayString(due?.date)
   const dueTime = due?.datetime ? localDayTime(due.datetime).time : undefined
 
   if (deadline) return { dueDate: deadline, scheduledFor: dueDay, dueTime }

@@ -21,7 +21,7 @@ import {
   setTodoistSubtaskDone,
 } from '../sync/todoist'
 import { SUB_PREFIX } from '../lib/todoistMap'
-import { todayISO } from '../lib/dates'
+import { jePlatnyCas, todayISO } from '../lib/dates'
 import { PRIORITY_LABELS } from '../lib/labels'
 import {
   PRESET_LABELS,
@@ -509,7 +509,9 @@ function TodoistTalk({ task }: { task: Task }) {
             <li key={c.id} className="rounded-lg bg-well px-3 py-2">
               <p className="text-[11px] text-ink-faint">
                 {c.author || 'někdo'}
-                {c.at && ` · ${commentFmt.format(new Date(c.at))}`}
+                {/* datum komentáře je z Todoistu, tedy cizí vstup —
+                    Intl na neplatném datu vyhodí výjimku a shodil by detail */}
+                {jePlatnyCas(c.at) && ` · ${commentFmt.format(new Date(c.at))}`}
               </p>
               <p className="whitespace-pre-wrap text-[14px] text-ink">{c.text}</p>
               {c.attachment && (
