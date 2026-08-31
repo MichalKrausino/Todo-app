@@ -103,7 +103,10 @@ await new Promise((r, j) =>
   build.on('exit', (c) => (c === 0 ? r() : j(new Error(`build skončil s kódem ${c}`)))),
 )
 
-await rm(OUT, { recursive: true, force: true })
+// Úklid jen u plného běhu. S --jen/--rezim by smazání složky vzalo
+// i snímky, které tenhle běh nevyrobí — a člověk by přišel o půlku
+// srovnání zrovna ve chvíli, kdy si dělá rychlou kontrolu jedné věci.
+if (!arg('jen') && !arg('rezim')) await rm(OUT, { recursive: true, force: true })
 await mkdir(OUT, { recursive: true })
 
 const server = await spustPreview()
