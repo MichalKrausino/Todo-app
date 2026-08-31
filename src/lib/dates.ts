@@ -50,8 +50,19 @@ export function mondayOf(iso: string): string {
 }
 
 // Celé dny od daného ISO datetime do dneška (lokálně, po dnech).
+//
+// Razítka (`lastActivityAt`, `updatedAt`) vyrábí `new Date().toISOString()`,
+// takže nesou UTC. Uříznout je na deset znaků znamená vzít UTC den — a co
+// se stalo po místní půlnoci, spadne na včerejšek: v létě (UTC+2) všechno
+// mezi 00:00 a 02:00. Klient by pak vyšel o den zanedbanější, než je.
+// Je to tatáž past, před kterou varuje pravidlo o toISOString(), jen
+// obráceně, takže se instant nejdřív převede na MÍSTNÍ den.
 export function daysSince(isoDatetime: string, todayRef: string = todayISO()): number {
-  const then = fromISODate(isoDatetime.slice(0, 10))
+  const den = isoDatetime.length <= 10 ? isoDatetime : toISODate(new Date(isoDatetime))
+  const then = fromISODate(den)
   const today = fromISODate(todayRef)
+  if (Number.isNaN(then.getTime()) || Number.isNaN(today.getTime())) return 0
+  // Přes přechod na letní čas nevyjde rozdíl na celé dny (den má 23 nebo
+  // 25 hodin), proto zaokrouhlení — hodinová odchylka se tím srovná.
   return Math.round((today.getTime() - then.getTime()) / 86400000)
 }
