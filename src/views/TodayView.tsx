@@ -322,7 +322,11 @@ export function TodayView({
                           <div className="mt-0.5 text-[13px] text-ink-soft">{s.reason}</div>
                         </button>
                         <button
-                          aria-label="Zamítnout návrh"
+                          // Zamítnutý úkol se nikam neposouvá — zůstává, jak
+                          // byl, takže ho ranní návrh zítra nabídne znovu.
+                          // Popisek to říká rovnou, ať „křížek" nevypadá jako
+                          // trvalé odmítnutí.
+                          aria-label="Dnes ne — nabídne se zítra znovu"
                           onClick={() => decide(s.taskId, 'rejected')}
                           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-well text-ink-soft transition-transform duration-150 active:scale-90"
                         >
