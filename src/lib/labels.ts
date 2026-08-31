@@ -26,3 +26,13 @@ export const CLIENT_COLORS = [
   '#AF52DE', // fialová
   '#FF2D55', // růžová
 ]
+
+// Barva klienta je štítek, podle kterého se pozná úkol v seznamu — tři
+// klienti se stejnou modrou tečkou nerozliší nic. Nabídne se proto první
+// nepoužitá; když už jsou všechny rozebrané, jede se dokola.
+export function firstFreeColor(used: Array<string | undefined>): string {
+  return (
+    CLIENT_COLORS.find((c) => !used.includes(c)) ??
+    CLIENT_COLORS[used.length % CLIENT_COLORS.length]
+  )
+}

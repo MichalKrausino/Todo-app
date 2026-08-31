@@ -95,5 +95,5 @@ export const minutesToLabel = (min: number): string => {
   const m = total % 60
   if (m === 0) return `${h} h`
   if (m === 30) return `${h},5 h`
-  return `${h} h ${m}`
+  return `${h} h ${m} min`
 }

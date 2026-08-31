@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { addClient, allClients, updateClient } from '../db/repo'
 import { unlinkTodoistProject } from '../db/todoistImport'
-import { CLIENT_COLORS } from '../lib/labels'
+import { firstFreeColor } from '../lib/labels'
 import {
   checkTodoistLinked,
   fetchTodoistProjects,
@@ -101,7 +101,7 @@ export function TodoistSheet({ onClose }: { onClose: () => void }) {
     if (clientId === '__new__') {
       const created = await addClient({
         name: projectName,
-        color: CLIENT_COLORS[clients.length % CLIENT_COLORS.length],
+        color: firstFreeColor(clients.map((c) => c.color)),
         kind: 'client',
       })
       await updateClient(created.id, { todoistProjectIds: [projectId] })

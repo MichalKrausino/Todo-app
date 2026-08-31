@@ -102,10 +102,10 @@ describe('minutesToLabel', () => {
   it('čtvrthodiny se neohýbají na půlhodinu', () => {
     // Regrese: dřív padal každý zbytek na „,5", takže 70 i 100 minut
     // hlásilo „1,5 h". Odhad 45 min (fakturace) tenhle případ vyrábí běžně.
-    expect(minutesToLabel(70)).toBe('1 h 10')
-    expect(minutesToLabel(75)).toBe('1 h 15')
-    expect(minutesToLabel(100)).toBe('1 h 40')
-    expect(minutesToLabel(225)).toBe('3 h 45')
+    expect(minutesToLabel(70)).toBe('1 h 10 min')
+    expect(minutesToLabel(75)).toBe('1 h 15 min')
+    expect(minutesToLabel(100)).toBe('1 h 40 min')
+    expect(minutesToLabel(225)).toBe('3 h 45 min')
   })
 
   it('záporná a neceločíselná hodnota nerozbijí popisek', () => {

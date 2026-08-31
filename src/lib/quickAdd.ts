@@ -1,7 +1,7 @@
 // Parser rychlého zadávání — běží čistě v prohlížeči, bez sítě a bez modelu.
 // Rozumí: „ve čtvrtek poslat report @klientx #web !vysoká“, „za 3 dny“,
 // „příští týden“, „15.9.“, „15. srpna“, „do pátku“, „víkend“, „koncem měsíce“,
-// „každý všední den“, „!!“ (vysoká) / „!!!“ (kritická), poznámka za „//“,
+// „každý všední den“, „!“ / „!!“ (vysoká) / „!!!“ (kritická), poznámka za „//“,
 // časy „do 14:00“, „ve 14h“, „ráno/poledne/večer“ (čas bez dne = dnešek).
 // Funguje i bez diakritiky. Co nepochopí, nechá v názvu úkolu.
 
@@ -116,8 +116,11 @@ const PRIORITIES: Record<string, Priority> = {
 const WD = 'pondeli|utery|stredu|streda|stredy|ctvrtek|ctvrtka|patek|patku|sobotu|sobota|soboty|nedeli|nedele'
 
 const RE_PRIORITY = /(?<=^|\s)!(kriticka|critical|krit|vysoka|high|nizka|low|normalni|normal)(?=$|[\s,.;!?])/
-// „!!!“ = kritická, „!!“ = vysoká (zkratka jako v Todoistu)
-const RE_BANGS = /(?<=^|\s)(!{2,3})(?=$|[\s,.;])/
+// „!!!“ = kritická, „!!“ i samotné „!“ = vysoká (zkratka jako v Todoistu).
+// Vykřičník musí stát samostatně — před ním mezera nebo začátek. Přilepený
+// („hotovo!“) je interpunkce a v názvu zůstane, kdežto „fakturace !“ nechával
+// v úkolu viset osamělý vykřičník, který nic neznamenal.
+const RE_BANGS = /(?<=^|\s)(!{1,3})(?=$|[\s,.;])/
 const RE_CLIENT = /(?<=^|\s)@([\w-]+)/
 const RE_PROJECT = /(?<=^|\s)#([\w-]+)/
 const RE_NUMDATE = /(?<=^|\s)(?:do\s+)?(\d{1,2})\.\s?(\d{1,2})\.?(?:\s?(\d{4}))?(?=$|[\s,;])/

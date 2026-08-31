@@ -31,7 +31,7 @@ import {
   setClientCheck,
   type CheckFrequency,
 } from '../db/clientCheck'
-import { CLIENT_COLORS, KIND_LABELS } from '../lib/labels'
+import { CLIENT_COLORS, KIND_LABELS, firstFreeColor } from '../lib/labels'
 import { formatDayLabel, formatDaysAgo, todayISO } from '../lib/dates'
 import { parseQuickAdd } from '../lib/quickAdd'
 import { neglectedDays } from '../lib/signals'
@@ -137,7 +137,12 @@ function ClientList({
         </div>
       </header>
 
-      {adding && <NewClientForm onDone={() => setAdding(false)} />}
+      {adding && (
+        <NewClientForm
+          usedColors={clients.map((c) => c.color)}
+          onDone={() => setAdding(false)}
+        />
+      )}
 
       {clients.length === 0 && !adding && (
         <div className="rounded-2xl border border-dashed border-line bg-card/60 px-4 py-8 text-center text-sm text-ink-faint">
@@ -350,10 +355,10 @@ function NewProjectForm({ clients, onDone }: { clients: Client[]; onDone: () => 
   )
 }
 
-function NewClientForm({ onDone }: { onDone: () => void }) {
+function NewClientForm({ usedColors, onDone }: { usedColors: Array<string | undefined>; onDone: () => void }) {
   const [name, setName] = useState('')
   const [kind, setKind] = useState<ClientKind>('client')
-  const [color, setColor] = useState(CLIENT_COLORS[6])
+  const [color, setColor] = useState(() => firstFreeColor(usedColors))
   const [checkOn, setCheckOn] = useState(false)
   const [checkFreq, setCheckFreq] = useState<CheckFrequency>('weekly')
 

@@ -220,3 +220,23 @@ describe('parseQuickAdd', () => {
     expect(r.title).toBe('koupit suroviny na večeři')
   })
 })
+
+describe('samotný vykřičník', () => {
+  it('„!" na konci je vysoká priorita a v názvu nezůstane', () => {
+    const r = parseQuickAdd('projít fakturaci !', [], new Date('2026-08-31T09:00:00'))
+    expect(r.priority).toBe('high')
+    expect(r.title).toBe('projít fakturaci')
+  })
+
+  it('přilepený vykřičník je interpunkce, ne priorita', () => {
+    const r = parseQuickAdd('hotovo!', [], new Date('2026-08-31T09:00:00'))
+    expect(r.priority).toBe('normal')
+    expect(r.title).toBe('hotovo!')
+  })
+
+  it('„!!!" zůstává kritická', () => {
+    const r = parseQuickAdd('spadl web !!!', [], new Date('2026-08-31T09:00:00'))
+    expect(r.priority).toBe('critical')
+    expect(r.title).toBe('spadl web')
+  })
+})
