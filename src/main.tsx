@@ -5,6 +5,7 @@ import App from './App'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { reconcileTemplates } from './db/templates'
 import { initAppBadge } from './lib/badge'
+import { initTheme } from './lib/theme'
 import { initCalendar } from './sync/calendar'
 import { initSync } from './sync/engine'
 import { initLive } from './sync/live'
@@ -25,6 +26,7 @@ registerSW({
     setInterval(check, 15 * 60_000)
   },
 })
+initTheme()
 initSync()
 initCalendar()
 initTodoist()

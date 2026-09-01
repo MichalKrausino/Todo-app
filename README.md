@@ -9,6 +9,18 @@ offline a data drží lokálně v IndexedDB.
 Kompletní technický plán a roadmapa: [`docs/PLAN.md`](docs/PLAN.md).
 Pravidla pro vývoj: [`CLAUDE.md`](CLAUDE.md).
 
+## Čeká na tebe
+
+- [ ] **Publikovat OAuth aplikaci v Google Cloud.** Kalendář přestal fungovat,
+  protože Google zneplatnil uložený refresh token (`invalid_grant`). Typická
+  příčina: OAuth consent screen je v režimu **Testing**, kde tokeny žijí sedm
+  dní. [Google Cloud Console → OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent)
+  → **Publish app**. Bez toho se to bude opakovat každý týden.
+- [ ] **Propojit Google znovu** v appce (obláček vpravo nahoře → „Propojit
+  Google znovu"). Nový refresh token se uloží sám.
+- [ ] Smazat dočasnou edge funkci `calendar-diag` v Supabase → Edge Functions
+  (je vyprázdněná, vrací jen 410, ale nemá tam co dělat).
+
 ## Spuštění
 
 ```bash

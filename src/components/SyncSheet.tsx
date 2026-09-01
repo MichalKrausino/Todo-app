@@ -19,6 +19,12 @@ import {
   syncNow,
 } from '../sync/engine'
 import { getSyncStatus, subscribeSyncStatus, type SyncPhase } from '../sync/status'
+import {
+  getThemeChoice,
+  setThemeChoice,
+  subscribeTheme,
+  type ThemeChoice,
+} from '../lib/theme'
 import { getTodoistStatus, subscribeTodoistStatus } from '../sync/todoist'
 import { HelpSheet } from './HelpSheet'
 import { Sheet } from './Sheet'
@@ -119,6 +125,8 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
           </>
         )}
 
+        <ThemeSection />
+
         <BackupSection />
 
         {/* Todoist (Fáze 8) — sdílené projekty klientů do appky. */}
@@ -159,6 +167,37 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
         </>
       )}
     </Sheet>
+  )
+}
+
+const THEMES: Array<{ id: ThemeChoice; label: string }> = [
+  { id: 'system', label: 'Podle systému' },
+  { id: 'light', label: 'Světlý' },
+  { id: 'dark', label: 'Tmavý' },
+]
+
+// Vzhled. Volba je lokální — na MacBooku můžu chtít světlý režim
+// a na telefonu tmavý, tak se nesynchronizuje.
+function ThemeSection() {
+  const choice = useSyncExternalStore(subscribeTheme, getThemeChoice)
+  return (
+    <section className="space-y-2">
+      <h3 className="section-label">vzhled</h3>
+      <div className="flex gap-1 rounded-2xl bg-well p-1">
+        {THEMES.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setThemeChoice(t.id)}
+            aria-pressed={choice === t.id}
+            className={`flex-1 rounded-xl px-2 py-2 text-[13px] font-medium transition-colors duration-200 ${
+              choice === t.id ? 'bg-card text-ink shadow-card' : 'text-ink-soft'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+    </section>
   )
 }
 

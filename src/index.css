@@ -48,45 +48,56 @@
   --ease-glide: cubic-bezier(0.25, 1, 0.5, 1); /* rychlý start, měkké dosednutí */
 }
 
-/* tmavý režim podle systému — přepis tokenů, komponenty se přebarví samy */
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Ne úplná čerň: obsahová appka na ní tvrdne. Tmavý podklad má
-       stejný teplý nádech jako světlý režim. */
-    --color-paper: #0e0e11;
-    --color-card: #17171b;
-    --color-well: #212127;
-    --color-line: #2c2c33;
-    --color-ink: #f2f2f4;
-    --color-ink-soft: #9a9aa2;
-    --color-ink-faint: #66666e;
+/* Tmavý režim — přepis tokenů, komponenty se přebarví samy.
+   Řídí ho atribut data-theme na <html>, ne media dotaz: režim jde
+   v nastavení přepnout napevno a „podle systému" je jen jedna z voleb,
+   kterou na atribut překládá src/lib/theme.ts (a skript v index.html,
+   aby tmavá appka neproblikla bíle). Díky tomu je tmavá paleta na
+   jednom místě — kdyby se psala i do media dotazu, každá nová barva
+   by se musela přidávat dvakrát. */
+:root[data-theme='dark'] {
+  /* Ne úplná čerň: obsahová appka na ní tvrdne. Tmavý podklad má
+     stejný teplý nádech jako světlý režim. */
+  --color-paper: #0e0e11;
+  --color-card: #17171b;
+  --color-well: #212127;
+  --color-line: #2c2c33;
+  --color-ink: #f2f2f4;
+  --color-ink-soft: #9a9aa2;
+  --color-ink-faint: #66666e;
 
-    --color-accent: #7397ff;
-    --color-accent-deep: #a3bcff;
-    --color-accent-wash: #182140;
+  --color-accent: #7397ff;
+  --color-accent-deep: #a3bcff;
+  --color-accent-wash: #182140;
 
-    --color-danger: #ff453a;
-    --color-danger-wash: #3a1512;
-    --color-note: #2e2410;
-    --color-note-ink: #ffb340;
-    --color-amber: #ff9f0a;
-    --color-moss: #30d158;
+  --color-danger: #ff453a;
+  --color-danger-wash: #3a1512;
+  --color-note: #2e2410;
+  --color-note-ink: #ffb340;
+  --color-amber: #ff9f0a;
+  --color-moss: #30d158;
 
-    /* v tmavém režimu dělá hloubku jemný světlý prstenec místo stínu */
-    --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.07), 0 6px 18px -12px rgb(0 0 0 / 0.8);
-    --shadow-sheet: 0 -8px 40px -8px rgb(0 0 0 / 0.7);
-    --shadow-float: 0 2px 12px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.08);
-  }
+  /* v tmavém režimu dělá hloubku jemný světlý prstenec místo stínu */
+  --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.07), 0 6px 18px -12px rgb(0 0 0 / 0.8);
+  --shadow-sheet: 0 -8px 40px -8px rgb(0 0 0 / 0.7);
+  --shadow-float: 0 2px 12px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.08);
 }
 
 html {
   -webkit-tap-highlight-color: transparent;
-  color-scheme: light dark;
+  /* Barvy systémových prvků (posuvníky, výběry) jdou za volbou appky,
+     ne za systémem — jinak by ve vynuceném světlém režimu zůstaly
+     posuvníky tmavé. */
+  color-scheme: light;
   /* stabilní fullscreen: žádný horizontální posun ani gumování do stran,
      žádné přeškálování textu při otočení, dvojťuk nezoomuje */
   overflow-x: clip;
   -webkit-text-size-adjust: 100%;
   touch-action: manipulation;
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
 }
 
 body {
@@ -348,7 +359,9 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
 
 }
 
-@media (prefers-color-scheme: dark) {
+/* Sklo v tmavém režimu. Vnořené pravidlo drží všechny tři vrstvy
+   (výplň, prstenec, prosvětlení) pohromadě pod jedním přepínačem. */
+:root[data-theme='dark'] {
   .dock {
     /* Na tmavém podkladu potřebuje sklo víc krytí, jinak ikony plavou.
        Brightness jde dolů — na tmavém se prosvítající obsah má utlumit,
@@ -406,10 +419,8 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
   background: color-mix(in oklab, var(--color-ink) 11%, transparent);
 }
 
-@media (prefers-color-scheme: dark) {
-  .tab-on {
-    background: color-mix(in oklab, var(--color-ink) 18%, transparent);
-  }
+:root[data-theme='dark'] .tab-on {
+  background: color-mix(in oklab, var(--color-ink) 18%, transparent);
 }
 
 /* iOS push-back: obsah pod otevřeným sheetem couvne do hloubky.

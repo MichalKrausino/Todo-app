@@ -59,10 +59,14 @@ Tokeny v `src/index.css` (Tailwind v4 `@theme`) — **používat výhradně je**
 `#3a6df0`, ne systémová iOS) + `accent-deep`/`accent-wash`, sémantické
 `danger`, `note`/`note-ink` (signály), `amber`, `moss` (ok).
 
-**Plný tmavý režim**: tokeny se přepisují v `@media (prefers-color-scheme:
-dark)` — nová barva se VŽDY přidává v obou režimech; podklad je teplá
-téměř-čerň (`#0e0e11`), ne plná čerň. Theme-color metas v `index.html`
-jsou dvě (light/dark) a musí sedět s `paper`. Barvy klientů zůstávají
+**Plný tmavý režim**: řídí ho atribut `data-theme` na `<html>`, ne
+`prefers-color-scheme` — v `index.css` není jediný takový dotaz. Volbu
+(systém / světlý / tmavý) překládá `src/lib/theme.ts` a předběhne ji
+skript v `index.html`, aby tmavá appka neproblikla bíle; volba je lokální
+(localStorage), nesynchronizuje se. Tmavá paleta je díky tomu na jednom
+místě — nová barva se přidává jen jednou. Podklad je teplá téměř-čerň
+(`#0e0e11`), ne plná čerň. Jediná `theme-color` meta v `index.html` se
+přepisuje z JS a musí sedět s `paper`. Barvy klientů zůstávají
 systémová paleta iOS (`CLIENT_COLORS`) — jsou to štítky, ne brand.
 Animace `rise`/`pop`/`sheet-*` respektují `prefers-reduced-motion`.
 Ikony PWA jsou v akcentní modré — **při změně akcentu přegenerovat**
