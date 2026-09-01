@@ -31,7 +31,7 @@ import {
   setClientCheck,
   type CheckFrequency,
 } from '../db/clientCheck'
-import { CLIENT_COLORS, KIND_LABELS, firstFreeColor } from '../lib/labels'
+import { CLIENT_COLORS, KIND_LABELS, firstFreeColor, plural } from '../lib/labels'
 import { formatDayLabel, formatDaysAgo, todayISO } from '../lib/dates'
 import { parseQuickAdd } from '../lib/quickAdd'
 import { neglectedDays } from '../lib/signals'
@@ -84,6 +84,30 @@ function ClientList({
     if (t.clientId) counts.set(t.clientId, (counts.get(t.clientId) ?? 0) + 1)
   }
 
+  // Nejbližší den, na který u klienta něco leží. Druhý řádek u klienta
+  // dřív nesl jen slovo „Klient" — u seznamu samých klientů to byl sloupec
+  // téhož slova. Kdy se k němu zase dostanu, je informace, kvůli které se
+  // na seznam kouká.
+  const nextDay = new Map<string, string>()
+  for (const t of open) {
+    const den = [t.scheduledFor, t.dueDate].filter((d): d is string => Boolean(d)).sort()[0]
+    if (!t.clientId || !den) continue
+    const dosud = nextDay.get(t.clientId)
+    if (!dosud || den < dosud) nextDay.set(t.clientId, den)
+  }
+
+  // Samotný den, bez uvozovacího slova: to by se na každém řádku opakovalo
+  // stejně jako dřív slovo „Klient", kdežto datum se liší. Pod jménem
+  // klienta a vedle počtu úkolů se „dnes" čte jako „kdy" samo od sebe.
+  const podtitul = (c: Client): string => {
+    // U oblastí („Interní", „Osobní") se druh hlásí — u klienta je zbytečný.
+    const druh = c.kind === 'client' ? '' : `${KIND_LABELS[c.kind]} · `
+    const pocet = counts.get(c.id) ?? 0
+    if (pocet === 0) return `${druh}žádné úkoly`
+    const den = nextDay.get(c.id)
+    return den ? `${druh}${formatDayLabel(den).toLowerCase()}` : `${druh}nic naplánováno`
+  }
+
   const item = (c: Client) => (
     <li key={c.id}>
       <button
@@ -93,7 +117,7 @@ function ClientList({
         <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: c.color }} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-medium">{c.name}</span>
-          <span className="text-xs text-ink-faint">{KIND_LABELS[c.kind]}</span>
+          <span className="block truncate text-xs text-ink-faint">{podtitul(c)}</span>
         </span>
         {neglectedDays(c) !== null && (
           <span className="rounded-full bg-note px-2 py-0.5 text-xs font-semibold text-note-ink">
@@ -150,10 +174,6 @@ function ClientList({
         </div>
       )}
 
-      {/* Projekt se zakládá pod klienta, takže bez klientů není co nabízet —
-          dřív pod prázdným stavem svítilo „+ Nový projekt" do prázdna. */}
-      {clients.length > 0 && <ProjectsOverview clients={clients} open={open} onSelect={onSelect} />}
-
       {/* Celá sekce až od prvního klienta: prázdný <ul> má pořád bg-card
           a shadow-card, a ten nese 1px prstenec — na prázdné obrazovce
           z toho byla osamocená čárka pod výzvou k založení. */}
@@ -163,6 +183,12 @@ function ClientList({
           <ul className="rise divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{clients.map(item)}</ul>
         </>
       )}
+
+      {/* Přehled projektů je druhý pohled na tytéž věci, takže patří AŽ za
+          seznam klientů. Projekt se navíc zakládá pod klienta, takže když
+          žádný projekt není, nemá se tu co nabízet — dřív nad seznamem
+          viselo osamocené „+ Nový projekt" bez vysvětlení, k čemu patří. */}
+      {clients.length > 0 && <ProjectsOverview clients={clients} open={open} onSelect={onSelect} />}
 
       {archived.length > 0 && (
         <section>
@@ -215,14 +241,10 @@ function ProjectsOverview({
   }
   const today = todayISO()
 
-  if (active.length === 0 && !adding) {
-    // Bez projektů jen nenápadná nabídka — blok si na nic nehraje.
-    return (
-      <button onClick={() => setAdding(true)} className="text-sm font-medium text-accent">
-        + Nový projekt
-      </button>
-    )
-  }
+  // Bez jediného projektu se blok neukáže vůbec: projekt vzniká v detailu
+  // klienta, kde je jasné, komu patří, a samotný odkaz nad seznamem klientů
+  // jen mátl.
+  if (active.length === 0 && !adding) return null
 
   return (
     <section className="rise">
@@ -648,7 +670,7 @@ function ClientDetail({
           <p className="text-[13px] text-ink-soft">
             Napojeno na Todoist
             {todoistCount > 0 &&
-              ` · ${todoistCount} ${todoistCount === 1 ? 'úkol' : todoistCount < 5 ? 'úkoly' : 'úkolů'} odtamtud`}
+              ` · ${todoistCount} ${plural(todoistCount, 'úkol', 'úkoly', 'úkolů')} odtamtud`}
           </p>
           <label className="flex items-start gap-2 text-[12px] leading-snug text-ink-soft">
             <input
@@ -709,56 +731,6 @@ function ClientDetail({
           </div>
         </section>
       )}
-
-      <section className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
-        <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-          <div className="text-sm">
-            <div className="font-medium">Pravidelná kontrola</div>
-            <div className="text-xs text-ink-faint">
-              {checkTask?.dueDate
-                ? `Příště ${formatDayLabel(checkTask.dueDate).toLowerCase()}`
-                : 'Připomínka se vrací sama na Dnes'}
-            </div>
-          </div>
-          <select
-            value={checkFrequencyOf(checkTask) ?? ''}
-            onChange={(e) =>
-              void setClientCheck(client, (e.target.value || null) as CheckFrequency | null)
-            }
-            className="rounded-lg border border-line bg-card px-2 py-1.5 text-sm outline-none focus:border-accent/60"
-          >
-            <option value="">Vypnuto</option>
-            {(Object.keys(CHECK_FREQUENCY_LABELS) as CheckFrequency[]).map((f) => (
-              <option key={f} value={f}>
-                {CHECK_FREQUENCY_LABELS[f]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-          <div className="text-sm">
-            <div className="font-medium">Hlídat zanedbání</div>
-            <div className="text-xs text-ink-faint">
-              {client.lastActivityAt
-                ? `Poslední aktivita ${formatDaysAgo(client.lastActivityAt)}`
-                : 'Zatím žádná aktivita'}
-            </div>
-          </div>
-          <label className="flex items-center gap-1.5 text-sm text-ink-soft">
-            po
-            <input
-              type="number"
-              min="0"
-              inputMode="numeric"
-              defaultValue={client.checkIntervalDays ?? ''}
-              placeholder="14"
-              onBlur={(e) => setWatch(e.target.value)}
-              className="w-16 rounded-lg border border-line px-2 py-1.5 text-center text-[15px] outline-none focus:border-accent/60"
-            />
-            dnech
-          </label>
-        </div>
-      </section>
 
       {noProject.length > 0 && (
         <section>
@@ -892,9 +864,65 @@ function ClientDetail({
         </form>
       ) : (
         <button onClick={() => setAddingProject(true)} className="text-sm font-medium text-accent">
-          + Nový projekt
+          {projects.length === 0 ? '+ Rozdělit práci do projektu' : '+ Nový projekt'}
         </button>
       )}
+
+      {/* Hlídání klienta patří dolů: nastaví se jednou a pak se na něj
+          nesahá, kdežto úkoly jsou to, kvůli čemu sem člověk chodí. Dřív
+          stálo mezi polem pro nový úkol a seznamem, do kterého úkol padá. */}
+      <section>
+        <h2 className="mb-2 section-label">hlídání klienta</h2>
+      <section className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+          <div className="text-sm">
+            <div className="font-medium">Pravidelná kontrola</div>
+            <div className="text-xs text-ink-faint">
+              {checkTask?.dueDate
+                ? `Příště ${formatDayLabel(checkTask.dueDate).toLowerCase()}`
+                : 'Připomínka se vrací sama na Dnes'}
+            </div>
+          </div>
+          <select
+            value={checkFrequencyOf(checkTask) ?? ''}
+            onChange={(e) =>
+              void setClientCheck(client, (e.target.value || null) as CheckFrequency | null)
+            }
+            className="rounded-lg border border-line bg-card px-2 py-1.5 text-sm outline-none focus:border-accent/60"
+          >
+            <option value="">Vypnuto</option>
+            {(Object.keys(CHECK_FREQUENCY_LABELS) as CheckFrequency[]).map((f) => (
+              <option key={f} value={f}>
+                {CHECK_FREQUENCY_LABELS[f]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+          <div className="text-sm">
+            <div className="font-medium">Hlídat zanedbání</div>
+            <div className="text-xs text-ink-faint">
+              {client.lastActivityAt
+                ? `Poslední aktivita ${formatDaysAgo(client.lastActivityAt)}`
+                : 'Zatím žádná aktivita'}
+            </div>
+          </div>
+          <label className="flex items-center gap-1.5 text-sm text-ink-soft">
+            po
+            <input
+              type="number"
+              min="0"
+              inputMode="numeric"
+              defaultValue={client.checkIntervalDays ?? ''}
+              placeholder="14"
+              onBlur={(e) => setWatch(e.target.value)}
+              className="w-16 rounded-lg border border-line px-2 py-1.5 text-center text-[15px] outline-none focus:border-accent/60"
+            />
+            dnech
+          </label>
+        </div>
+      </section>
+      </section>
 
       <footer className="flex gap-4 border-t border-line pt-4">
         <button onClick={archiveToggle} className="text-sm font-medium text-ink-soft">
