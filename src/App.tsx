@@ -111,6 +111,14 @@ export default function App() {
   // (overflow: hidden jde programově scrollovat) a s ním hlavička. Obal má
   // teď overflow: clip, což scrollovat nejde vůbec, a když viditelná část
   // sedí přesně, nemá iOS ani co odkrývat.
+  // Klávesnice jako v chatu: pole je přilepené nad ní, seznam pod ním jde
+  // listovat — a když se listuje doopravdy (ne jen o kousek, aby člověk
+  // něco dohledal), klávesnice se uklidí a uvolní místo. Kotva je pozice
+  // seznamu ve chvíli, kdy klávesnice vyjela; rozepsaný text zůstává.
+  const kbRef = useRef(0)
+  const kbAnchor = useRef(0)
+  const KB_SCROLL_DISMISS = 120
+
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
@@ -121,6 +129,8 @@ export default function App() {
       // když iOS přece jen viditelnou část posune, jede obal s ní
       root.setProperty('--vv-top', `${Math.round(vv.offsetTop)}px`)
       const kb = Math.max(0, Math.round(window.innerHeight - vv.height))
+      if (kb > 0 && kbRef.current === 0) kbAnchor.current = mainRef.current?.scrollTop ?? 0
+      kbRef.current = kb
       root.setProperty('--kb', `${kb}px`)
       // nad klávesnicí není domovní lišta, safe-area by byla prázdný pruh
       root.setProperty('--dock-safe', kb > 0 ? '0px' : 'env(safe-area-inset-bottom)')
@@ -212,7 +222,15 @@ export default function App() {
 
       <main
         ref={mainRef}
-        onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 24)}
+        onScroll={(e) => {
+          const top = e.currentTarget.scrollTop
+          setScrolled(top > 24)
+          // listování s otevřenou klávesnicí: po delším kusu ji uklidit
+          if (kbRef.current > 0 && Math.abs(top - kbAnchor.current) > KB_SCROLL_DISMISS) {
+            const active = document.activeElement
+            if (active instanceof HTMLElement && dockRef.current?.contains(active)) active.blur()
+          }
+        }}
         className="flex-1 overflow-y-auto overflow-x-hidden px-4"
         style={{
           paddingTop: 'calc(1rem + env(safe-area-inset-top))',
