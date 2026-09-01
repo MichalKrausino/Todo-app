@@ -3,7 +3,7 @@
 // dodá synchronizační vrstva. Díky tomu se dá celé srovnání otestovat.
 
 import { db } from './db'
-import type { Project, Task } from './types'
+import type { Project, Task, TodoistComment } from './types'
 import { deterministicUuid } from '../lib/deterministicId'
 import { estimateTaskMinutes } from '../lib/estimate'
 import {
@@ -41,6 +41,18 @@ export interface TodoistSnapshot {
   // Server je pošle jen tehdy, když prošel i dotaz na hotové úkoly —
   // teprve pak se pozná odškrtnutí od smazání a smí se uklízet.
   assignedProjects?: string[]
+  // Komentáře, které od minule přibyly (přírůstek ze /sync). Nepovinné —
+  // když je server nepošle, komentáře se dotáhnou při otevření úkolu.
+  notes?: TodoistNote[]
+}
+
+export interface TodoistNote {
+  id: string
+  taskId: string // id úkolu v Todoistu
+  text: string
+  at?: string
+  authorId?: string
+  attachment?: string
 }
 
 const now = () => new Date().toISOString()
@@ -50,6 +62,7 @@ const now = () => new Date().toISOString()
 async function importSections(
   sections: TodoistSection[],
   clientOf: Map<string, string>,
+  pulledClients: Set<string>,
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>()
   for (const sec of sections) {
@@ -71,10 +84,32 @@ async function importSections(
         todoistSectionId: sec.id,
       }
       await db.projects.add(project)
-    } else if (!existing.deletedAt && (existing.name !== sec.name || existing.clientId !== clientId)) {
-      await db.projects.update(id, { name: sec.name, clientId, updatedAt: t })
+    } else if (
+      !existing.deletedAt &&
+      (existing.name !== sec.name || existing.clientId !== clientId || existing.status === 'archived')
+    ) {
+      await db.projects.update(id, { name: sec.name, clientId, status: 'active', updatedAt: t })
     }
   }
+
+  // Sekce, která v Todoistu zmizela, tu nechávala prázdný projekt navěky.
+  // Nemažeme ho — úkoly na něj můžou být navázané — ale uklidíme ho do
+  // archivu. Jen u klientů, jejichž projekty se tentokrát opravdu stáhly.
+  const zive = new Set(sections.map((sec) => sec.id))
+  const osirele = await db.projects
+    .filter(
+      (p) =>
+        !p.deletedAt &&
+        p.status !== 'archived' &&
+        Boolean(p.todoistSectionId) &&
+        !zive.has(p.todoistSectionId!) &&
+        pulledClients.has(p.clientId),
+    )
+    .toArray()
+  for (const p of osirele) {
+    await db.projects.update(p.id, { status: 'archived', updatedAt: now() })
+  }
+
   return out
 }
 
@@ -113,7 +148,12 @@ async function archiveOccurrence(task: Task, t: string): Promise<void> {
 export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): Promise<number> {
   const active = snap.tasks
   const completed = snap.completed
-  const projectOfSection = await importSections(snap.sections, snap.clientOf)
+  const pulledClients = new Set(
+    (snap.pulled ?? [...snap.clientOf.keys()])
+      .map((pid) => snap.clientOf.get(pid))
+      .filter((c): c is string => Boolean(c)),
+  )
+  const projectOfSection = await importSections(snap.sections, snap.clientOf, pulledClients)
   const projectIds = [...(snap.pulled ?? [...snap.clientOf.keys()]), ...(snap.assignedProjects ?? [])]
 
   // Bez myUid se nedá poznat, co je moje. Nesmí se pak ani zakládat, ani
@@ -277,7 +317,40 @@ export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): P
         .toArray()
   for (const x of gone) await db.tasks.update(x.id, { deletedAt: t, updatedAt: t })
 
+  await importNotes(snap.notes ?? [], snap.myUid, t)
+
   return count
+}
+
+// Přírůstek komentářů. Cizí komentář navíc zvedne značku „nepřečteno" —
+// jinak by mi zpráva od klienta ležela v appce a já o ní nevěděl.
+// Jména autorů tady nejsou (přírůstek nese jen uid); doplní se, až úkol
+// otevřu a komentáře se natáhnou i se spolupracovníky projektu.
+async function importNotes(notes: TodoistNote[], myUid: string | undefined, t: string): Promise<void> {
+  const perTask = new Map<string, TodoistNote[]>()
+  for (const n of notes) {
+    const list = perTask.get(n.taskId) ?? []
+    list.push(n)
+    perTask.set(n.taskId, list)
+  }
+  for (const [todoistId, list] of perTask) {
+    const task = await db.tasks.where('todoistId').equals(todoistId).first()
+    if (!task || task.deletedAt) continue
+    const existing = task.todoistComments ?? []
+    const known = new Set(existing.map((c) => c.id))
+    const pridane = list.filter((n) => !known.has(n.id))
+    if (pridane.length === 0) continue
+    const comments: TodoistComment[] = [
+      ...existing,
+      ...pridane.map((n) => ({ id: n.id, text: n.text, at: n.at, attachment: n.attachment })),
+    ].sort((a, b) => (a.at ?? '').localeCompare(b.at ?? ''))
+    const odNekohoJineho = pridane.some((n) => n.authorId && n.authorId !== myUid)
+    await db.tasks.update(task.id, {
+      todoistComments: comments,
+      todoistUnread: odNekohoJineho ? true : task.todoistUnread,
+      updatedAt: t,
+    })
+  }
 }
 
 // Odpojení projektu od klienta. Úkoly zůstávají — jen přestanou být

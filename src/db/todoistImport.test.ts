@@ -254,6 +254,71 @@ describe('importTodoist', () => {
     expect(after?.subtasks?.map((x) => x.title)).toEqual(['Krok z Todoistu', 'Ještě zavolat'])
   })
 
+  it('nový komentář od klienta se přidá a rozsvítí značku', async () => {
+    await importTodoist(snap({ tasks: [td()] }), push)
+    const id = await localId('7001')
+    await importTodoist(
+      snap({
+        tasks: [td()],
+        notes: [
+          { id: 'n1', taskId: '7001', text: 'Můžeme to posunout?', at: '2026-05-01T10:00:00Z', authorId: 'klient' },
+        ],
+      }),
+      push,
+    )
+    const task = await db.tasks.get(id)
+    expect(task?.todoistComments?.map((c) => c.text)).toEqual(['Můžeme to posunout?'])
+    expect(task?.todoistUnread).toBe(true)
+  })
+
+  it('vlastní komentář značku nerozsvítí', async () => {
+    await importTodoist(snap({ tasks: [td()] }), push)
+    await importTodoist(
+      snap({ tasks: [td()], notes: [{ id: 'n1', taskId: '7001', text: 'Beru.', authorId: 'me' }] }),
+      push,
+    )
+    expect((await db.tasks.get(await localId('7001')))?.todoistUnread).toBeUndefined()
+  })
+
+  it('tentýž komentář se nepřidá dvakrát', async () => {
+    await importTodoist(snap({ tasks: [td()] }), push)
+    const note = { id: 'n1', taskId: '7001', text: 'Ahoj', authorId: 'klient' }
+    await importTodoist(snap({ tasks: [td()], notes: [note] }), push)
+    await importTodoist(snap({ tasks: [td()], notes: [note] }), push)
+    expect((await db.tasks.get(await localId('7001')))?.todoistComments).toHaveLength(1)
+  })
+
+  it('komentář k úkolu, který tu není, se tiše ignoruje', async () => {
+    await importTodoist(
+      snap({ notes: [{ id: 'n9', taskId: 'neznamy', text: 'nikam', authorId: 'klient' }] }),
+      push,
+    )
+    expect(await db.tasks.count()).toBe(0)
+  })
+
+  it('sekce, která v Todoistu zmizela, skončí v archivu — a při návratu ožije', async () => {
+    const sekce = [{ id: '55', projectId: PROJ, name: 'Kampaně' }]
+    await importTodoist(snap({ sections: sekce, tasks: [td({ sectionId: '55' })] }), push)
+    const projId = await deterministicUuid('todoist-section', '55')
+    expect((await db.projects.get(projId))?.status).toBe('active')
+
+    await importTodoist(snap({ sections: [], tasks: [td()] }), push)
+    expect((await db.projects.get(projId))?.status).toBe('archived')
+
+    await importTodoist(snap({ sections: sekce, tasks: [td({ sectionId: '55' })] }), push)
+    expect((await db.projects.get(projId))?.status).toBe('active')
+  })
+
+  it('projekt cizího klienta se archivací sekcí nedotkne', async () => {
+    const t2 = new Date().toISOString()
+    await db.projects.add({
+      id: 'projekt-jineho-klienta', createdAt: t2, updatedAt: t2, clientId: 'jiny-klient',
+      name: 'Ruční projekt', status: 'active', order: 0, todoistSectionId: '999',
+    })
+    await importTodoist(snap({ sections: [], tasks: [td()] }), push)
+    expect((await db.projects.get('projekt-jineho-klienta'))?.status).toBe('active')
+  })
+
   it('odpojení projektu úkoly nechá, jen z nich sundá značky', async () => {
     await importTodoist(snap({ tasks: [td()] }), push)
     const count = await unlinkTodoistProject(PROJ)

@@ -35,14 +35,14 @@ const CORS = {
 
 const json = (body: Rec, status = 200) => Response.json(body, { status, headers: CORS })
 
-async function tokenFor(userId: string): Promise<string> {
+async function tokenFor(userId: string): Promise<{ token: string; syncToken?: string }> {
   const { data } = await admin
     .from('todoist_tokens')
-    .select('api_token')
+    .select('api_token, sync_token')
     .eq('user_id', userId)
     .maybeSingle()
   if (!data?.api_token) throw new Error('Todoist není propojený')
-  return data.api_token as string
+  return { token: data.api_token as string, syncToken: (data.sync_token as string | null) ?? undefined }
 }
 
 async function td(token: string, path: string, init?: RequestInit): Promise<Rec> {
@@ -116,7 +116,7 @@ Deno.serve(async (req) => {
 
     const body = (await req.json().catch(() => ({}))) as Rec
     const action = body.action as string
-    const token = await tokenFor(userId)
+    const { token, syncToken } = await tokenFor(userId)
 
     // Projekty pro párovací obrazovku. Spolupracovníky tahá jen u sdílených
     // — u vlastních projektů by to bylo N zbytečných volání.
@@ -256,7 +256,44 @@ Deno.serve(async (req) => {
         // stihlo natáhnout, platí; úklid se o to opírat nebude.
       }
 
-      return json({ myUid, sections, tasks, completed, pulled, failed, assignedProjects })
+      // Nové komentáře. Ptát se na ně u každého úkolu zvlášť by znamenalo
+      // desítky volání při každém stažení, takže se bere přírůstek přes
+      // /sync: jedno volání vrátí jen to, co od minule přibylo.
+      // Poprvé se jen vyzvedne kurzor (na `user`, ta odpověď je malá) —
+      // stahovat celou historii komentářů účtu by nemělo smysl.
+      // Celé je to navíc k dobru: když Todoist tenhle dotaz odmítne,
+      // komentáře se pořád dotáhnou při otevření úkolu.
+      let notes: Rec[] = []
+      try {
+        const syncRes = await td(token, '/sync', {
+          method: 'POST',
+          body: JSON.stringify({
+            sync_token: syncToken ?? '*',
+            resource_types: syncToken ? ['notes'] : ['user'],
+          }),
+        })
+        const next = s(syncRes.sync_token)
+        if (next && next !== syncToken) {
+          await admin.from('todoist_tokens').update({ sync_token: next }).eq('user_id', userId)
+        }
+        notes = ((syncRes.notes ?? []) as Rec[])
+          .filter((n) => !n.is_deleted && n.item_id)
+          .slice(0, 500)
+          .map((n) => ({
+            id: String(n.id),
+            taskId: String(n.item_id),
+            text: (n.content as string) ?? '',
+            at: s(n.posted_at),
+            authorId: s(n.posted_uid),
+            attachment: (n.file_attachment as Rec | null)?.file_name
+              ? String((n.file_attachment as Rec).file_name)
+              : undefined,
+          }))
+      } catch {
+        // kurzor se nepovedl — nevadí, příště znovu
+      }
+
+      return json({ myUid, sections, tasks, completed, pulled, failed, assignedProjects, notes })
     }
 
     // Založení úkolu v Todoistu. Na drátě jsou klíče snake_case a datum
@@ -346,6 +383,15 @@ Deno.serve(async (req) => {
         method: 'POST',
         body: JSON.stringify({ task_id: taskId, content }),
       })
+      return json({ ok: true })
+    }
+
+    // Smazání úkolu i v Todoistu. Volá se jen na výslovné potvrzení —
+    // u sdíleného projektu tím úkol mizí i klientovi.
+    if (action === 'delete') {
+      const taskId = String(body.taskId ?? '')
+      if (!taskId) return json({ error: 'chybí taskId' }, 400)
+      await td(token, `/tasks/${taskId}`, { method: 'DELETE' })
       return json({ ok: true })
     }
 

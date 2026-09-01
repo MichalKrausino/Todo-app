@@ -10,7 +10,7 @@
 
 import { db } from '../db/db'
 import { emitRepoWrite, onRepoWrite } from '../db/events'
-import { importTodoist, type TodoistSection } from '../db/todoistImport'
+import { importTodoist, type TodoistNote, type TodoistSection } from '../db/todoistImport'
 import type { Client, Task, TodoistComment } from '../db/types'
 import { deterministicUuid } from '../lib/deterministicId'
 import { priorityToTodoist, todoistSubId, type TodoistTask } from '../lib/todoistMap'
@@ -140,8 +140,14 @@ export async function loadTodoistComments(taskId: string): Promise<string | null
       projectId: task.todoistProjectId,
     })
     const comments = (res.comments ?? []) as TodoistComment[]
-    if (JSON.stringify(task.todoistComments ?? []) !== JSON.stringify(comments)) {
-      await db.tasks.update(taskId, { todoistComments: comments, updatedAt: now() })
+    // Otevřením úkolu je konverzace přečtená — značka může dolů.
+    const zmena = JSON.stringify(task.todoistComments ?? []) !== JSON.stringify(comments)
+    if (zmena || task.todoistUnread) {
+      await db.tasks.update(taskId, {
+        todoistComments: comments,
+        todoistUnread: undefined,
+        updatedAt: now(),
+      })
       emitRepoWrite()
     }
     return null
@@ -233,6 +239,7 @@ export async function refreshTodoist(force = false): Promise<void> {
         tasks: (res.tasks ?? []) as TodoistTask[],
         completed: (res.completed ?? []) as TodoistTask[],
         clientOf,
+        notes: (res.notes ?? []) as TodoistNote[],
         pulled: (res.pulled as string[]) ?? projectIds,
         assignedProjects: (res.assignedProjects as string[]) ?? [],
       },
@@ -395,6 +402,19 @@ async function pushNewTasks(): Promise<void> {
     )
     .toArray()
   for (const task of fresh.slice(0, 20)) await sendTaskToTodoist(task.id)
+}
+
+// Smazání úkolu i v Todoistu. Volá se jen na výslovné potvrzení — ve
+// sdíleném projektu tím úkol mizí i klientovi.
+export async function deleteTodoistTask(taskId: string): Promise<string | null> {
+  const task = await db.tasks.get(taskId)
+  if (!task?.todoistId) return null
+  try {
+    await callFn('delete', { taskId: task.todoistId })
+    return null
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e)
+  }
 }
 
 async function pushClose(todoistId: string): Promise<void> {

@@ -259,7 +259,7 @@ export function TaskRow({
             )}
             {task.title}
           </div>
-          {(client || project || (showDate && task.dueDate) || task.dueTime || subs.length > 0 || prio || task.recurrenceRule || task.sourceTemplateItemId || task.todoistId) && (
+          {(client || project || (showDate && task.dueDate) || task.dueTime || subs.length > 0 || prio || task.recurrenceRule || task.sourceTemplateItemId || task.todoistId || task.todoistUnread) && (
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
               {client && (
                 <span className="inline-flex items-center gap-1.5 text-ink-soft">
@@ -299,10 +299,20 @@ export function TaskRow({
                   ↻
                 </span>
               )}
-              {/* úkol přišel z Todoistu — tichá tečka, ne cizí logo */}
-              {task.todoistId && (
+              {/* úkol přišel z Todoistu — tichá značka, ne cizí logo.
+                  Když v něm leží nepřečtený komentář, řekne to nahlas:
+                  zpráva od klienta je to poslední, co má člověku uniknout. */}
+              {task.todoistId && !task.todoistUnread && (
                 <span className="text-ink-faint" title="Z Todoistu">
                   ⇢ Todoist
+                </span>
+              )}
+              {task.todoistUnread && (
+                <span className="inline-flex items-center gap-1 font-medium text-accent" title="Nový komentář">
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z" />
+                  </svg>
+                  nový komentář
                 </span>
               )}
               {prio && <span className={prio.cls}>{prio.label}</span>}

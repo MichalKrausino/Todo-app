@@ -14,6 +14,7 @@ import { Sheet } from './Sheet'
 import { deleteBlockForTask } from '../sync/calendar'
 import {
   addTodoistSubtask,
+  deleteTodoistTask,
   loadTodoistComments,
   postTodoistComment,
   pushTodoistEdits,
@@ -172,11 +173,15 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   }
 
   const del = async (close: () => void) => {
-    if (confirm('Smazat úkol?')) {
-      if (task.calendarEventId) void deleteBlockForTask(task)
-      await removeTask(task.id)
-      close()
+    if (!confirm('Smazat úkol?')) return
+    // U todoistího úkolu se ptáme zvlášť: smazat ho tam znamená smazat ho
+    // i klientovi ve sdíleném projektu. Bez doptání zmizí jen z appky.
+    if (task.todoistId && confirm('Smazat ho i v Todoistu? Jinak zmizí jen odsud, klientovi zůstane.')) {
+      await deleteTodoistTask(task.id)
     }
+    if (task.calendarEventId) void deleteBlockForTask(task)
+    await removeTask(task.id)
+    close()
   }
 
   return (
@@ -441,6 +446,20 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           <label className={label}>Poznámky</label>
           <textarea className={field} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
+
+        {fromTodoist && (
+          <a
+            href={`https://app.todoist.com/app/task/${task.todoistId}`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 text-[13px] font-medium text-accent"
+          >
+            Otevřít v Todoistu
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 5h5v5M19 5l-8 8M18 13.5V19H5V6h5.5" />
+            </svg>
+          </a>
+        )}
 
         {fromTodoist && <TodoistTalk task={task} />}
 

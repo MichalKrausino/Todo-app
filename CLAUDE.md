@@ -94,4 +94,4 @@ Pravidelná připomínka kontroly klienta = opakující se úkol s markerem
   se neberou a když úkol přiřazení ztratí, zmizí. Výjimky: úkol odeslaný
   z appky (Todoist ho přes API zakládá bez přiřazení — značka
   `Task.todoistFromApp`, jinak by si ho appka sama smazala) a podúkoly
-  mého úkolu (jsou to položky checklistu). Bez `myUid` se neuklízí nic. Komentáře u úkolu se stahují až při otevření a bydlí v `Task.todoistComments` (offline i na druhém zařízení), odpovídat jde z detailu. Podrobně v **`docs/TODOIST.md`** — zbývá spustit SQL a nasadit edge funkci
+  mého úkolu (jsou to položky checklistu). Bez `myUid` se neuklízí nic. Komentáře u úkolu bydlí v `Task.todoistComments` (offline i na druhém zařízení) a odpovídat jde z detailu; nové hlídá přírůstek přes `/sync` s uloženým `sync_token` (jedno volání za stažení) a cizí komentář rozsvítí `todoistUnread` na řádku úkolu. Podrobně v **`docs/TODOIST.md`** — zbývá spustit SQL a nasadit edge funkci
