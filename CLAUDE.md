@@ -48,7 +48,13 @@ Nativní chování Apple aplikace, ale vlastní vzhled — inspirace Things 3
 stínů). Systémový font (na iPhonu SF Pro — nic se nestahuje), seskupené
 karty (`divide-y divide-line` v `rounded-2xl bg-card`) na **teplém**
 podkladu `paper` (ne studená iOS šeď), hairline oddělovače, plovoucí skleněný dok
-(kapsle bez obrysu, samé ikony, vybraná má pod sebou neutrální pilulku), velké titulky (`display`), hlavičky sekcí `section-label` —
+(kapsle bez obrysu, samé ikony, vybraná má pod sebou neutrální pilulku).
+Zadávání úkolu v doku má **jednu stavovou řádku** (Termín / Klient /
+Projekt / Priorita — prázdný slot nabízí, vyplněný ukazuje hodnotu,
+otevřený je plný akcent) a **jeden panel nad ní**, do kterého se vejdou
+všechny výběry. Řádka se nikdy nezalamuje a panel má strop podle
+viditelné výšky (`--vvh`), takže se pole nikdy neposune — jinak iOS
+nechá kurzor viset mimo něj, velké titulky (`display`), hlavičky sekcí `section-label` —
 **tiché, ne verzálky**: velké písmeno dělá `::first-letter`, takže texty
 v kódu zůstávají psané malými.
 
