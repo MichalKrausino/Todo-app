@@ -32,6 +32,12 @@ const CORS = {
 
 const json = (body: Rec, status = 200) => Response.json(body, { status, headers: CORS })
 
+// Google přestal uznávat uložený refresh token (odvolaný přístup, nebo
+// OAuth aplikace v režimu „Testing", kde tokeny platí sedm dní). Není to
+// porucha serveru — je to výzva k novému přihlášení, a appka podle toho
+// musí umět zareagovat, ne to jen hlásit jako pětistovku.
+class PotrebujeZnovuPrihlasit extends Error {}
+
 // --- volná okna (kopie src/lib/freeSlot.ts) ---
 
 interface Busy {
@@ -99,7 +105,17 @@ async function accessTokenFor(userId: string): Promise<{ token: string; todoCale
     }),
   })
   const data = (await res.json()) as Rec
-  if (!res.ok) throw new Error(`Google token: ${data.error_description ?? data.error}`)
+  if (!res.ok) {
+    // Kód chyby patří do hlášky: `error_description` bývá u invalid_grant
+    // jen „Bad Request", z čeho se nikdo nic nedozví.
+    const kod = String(data.error ?? '')
+    if (kod === 'invalid_grant') {
+      throw new PotrebujeZnovuPrihlasit(
+        'Google odpojil přístup ke kalendáři (invalid_grant) — propoj ho prosím znovu.',
+      )
+    }
+    throw new Error(`Google token: ${kod}${data.error_description ? ` — ${data.error_description}` : ''}`)
+  }
   return { token: data.access_token as string, todoCalendarId: row.todo_calendar_id }
 }
 
@@ -272,6 +288,10 @@ Deno.serve(async (req) => {
 
     return json({ error: `neznámá akce: ${action}` }, 400)
   } catch (e) {
+    if (e instanceof PotrebujeZnovuPrihlasit) {
+      // 401 + příznak: klient přestane zkoušet dokola a nabídne přihlášení.
+      return json({ error: e.message, reauth: true }, 401)
+    }
     return json({ error: e instanceof Error ? e.message : String(e) }, 500)
   }
 })

@@ -310,6 +310,16 @@ function CalendarSection() {
           )}
         </div>
       )}
+      {/* Odpojený Google potřebuje jedinou věc: znovu se přihlásit.
+          Rada „odhlas se a přihlas" je návod; tohle je to tlačítko. */}
+      {cal.needsReauth && !busy && (
+        <button
+          onClick={() => void signInWithGoogle()}
+          className="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-card transition-transform duration-150 active:scale-[0.98]"
+        >
+          Propojit Google znovu
+        </button>
+      )}
       {tokenErr && (
         <p className="rounded-2xl bg-danger-wash px-3 py-2 text-xs text-danger">
           Uložení Google klíče selhalo: {tokenErr} — serverová migrace (krok 1) nejspíš neproběhla.
