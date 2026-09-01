@@ -259,7 +259,10 @@ export function QuickAdd({
     parsed?.recurrenceRule || parsed?.notes
 
   return (
-    <div className="relative px-3 pt-2.5">
+    // pb: iOS kolem zaostřeného pole kreslí vlastní modrý prstenec kus za
+    // jeho okrajem. Zadávání se kvůli skládací animaci ořezává, takže bez
+    // téhle rezervy byl prstenec dole seříznutý.
+    <div className="relative px-3 pt-2.5 pb-1.5">
       {lastAdded && createPortal(
         <div
           className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-3"
