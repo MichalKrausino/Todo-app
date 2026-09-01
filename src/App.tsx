@@ -101,30 +101,39 @@ export default function App() {
     return () => ro.disconnect()
   }, [])
   // Klávesnice na iOS nezmenšuje layout (100dvh zůstává), jen překryje
-  // spodek obrazovky — dok přibitý k bottom: 0 by pod ní zmizel. Jediné,
-  // co o klávesnici ví, je visualViewport: rozdíl mezi výškou okna a
-  // výškou viditelné části je přesně to, o kolik má dok vyjet nahoru.
+  // spodek obrazovky. Jediné, co o ní ví, je visualViewport. Místo aby se
+  // před ní uhýbal jen dok, je celý obal appky vysoký přesně jako viditelná
+  // část — dok u jeho spodního okraje je tak nad klávesnicí sám od sebe
+  // a seznam scrolluje jen v tom, co je vidět.
   //
-  // Druhá půlka problému: iOS při fokusu pole odscrolluje CELÉ okno, aby
-  // pole odkryl — a s ním odjede i hlavička. Appka ale scrolluje uvnitř
-  // <main>, okno má stát na nule; tady se to vrací zpátky.
+  // Proč ne jen posunout dok: iOS při fokusu pole „pomáhá" a odscrolluje
+  // nejbližší předky, aby pole odkryl — dřív tak odjel i obal appky
+  // (overflow: hidden jde programově scrollovat) a s ním hlavička. Obal má
+  // teď overflow: clip, což scrollovat nejde vůbec, a když viditelná část
+  // sedí přesně, nemá iOS ani co odkrývat.
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
     const apply = () => {
-      const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop))
       const root = document.documentElement.style
-      root.setProperty('--kb', `${inset}px`)
+      const h = Math.round(vv.height)
+      root.setProperty('--vvh', `${h}px`)
+      // když iOS přece jen viditelnou část posune, jede obal s ní
+      root.setProperty('--vv-top', `${Math.round(vv.offsetTop)}px`)
+      const kb = Math.max(0, Math.round(window.innerHeight - vv.height))
+      root.setProperty('--kb', `${kb}px`)
       // nad klávesnicí není domovní lišta, safe-area by byla prázdný pruh
-      root.setProperty('--dock-safe', inset > 0 ? '0px' : 'env(safe-area-inset-bottom)')
+      root.setProperty('--dock-safe', kb > 0 ? '0px' : 'env(safe-area-inset-bottom)')
       if (window.scrollY !== 0) window.scrollTo(0, 0)
     }
     vv.addEventListener('resize', apply)
     vv.addEventListener('scroll', apply)
+    window.addEventListener('resize', apply)
     apply()
     return () => {
       vv.removeEventListener('resize', apply)
       vv.removeEventListener('scroll', apply)
+      window.removeEventListener('resize', apply)
     }
   }, [])
   useEffect(() => {
@@ -165,7 +174,10 @@ export default function App() {
   }, [])
 
   return (
-    <div className="app-shell relative mx-auto flex h-dvh max-w-lg flex-col bg-paper text-ink antialiased">
+    <div
+      className="app-shell relative mx-auto flex max-w-lg flex-col bg-paper text-ink antialiased"
+      style={{ height: 'var(--vvh, 100dvh)', top: 'var(--vv-top, 0px)' }}
+    >
       {/* Horní lišta ve stylu iOS: v klidu průhledná (velký titulek si
           svítí sám), po odscrollování se zamlží a obsah pod ni podjede —
           jinak by ikony seděly přímo na textu úkolů. Průchozí na dotyk,
@@ -204,7 +216,7 @@ export default function App() {
         className="flex-1 overflow-y-auto overflow-x-hidden px-4"
         style={{
           paddingTop: 'calc(1rem + env(safe-area-inset-top))',
-          paddingBottom: 'calc(var(--dock-h, 9rem) + var(--kb, 0px) + 0.75rem)',
+          paddingBottom: 'calc(var(--dock-h, 9rem) + 0.75rem)',
         }}
       >
         {/* key vynutí novou instanci pohledu → směrová nástupní animace */}
@@ -242,11 +254,8 @@ export default function App() {
           jen samotná deska — u okrajů tak jde dál scrollovat obsah. */}
       <footer
         ref={dockRef}
-        className="pointer-events-none absolute inset-x-0 z-30 px-3 transition-[bottom] duration-150 ease-out"
-        style={{
-          bottom: 'var(--kb, 0px)',
-          paddingBottom: 'calc(var(--dock-safe, env(safe-area-inset-bottom)) + 0.5rem)',
-        }}
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-3"
+        style={{ paddingBottom: 'calc(var(--dock-safe, env(safe-area-inset-bottom)) + 0.5rem)' }}
       >
         <div
           className={`dock pointer-events-auto overflow-hidden transition-[border-radius] duration-300 ease-ios ${

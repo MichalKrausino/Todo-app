@@ -84,10 +84,29 @@
 }
 
 :root {
-  /* Klávesnice: o kolik má spodní dok vyjet nahoru (píše App.tsx podle
-     visualViewport). Bez klávesnice nula a dok sedí nad domovní lištou. */
+  /* Viditelná výška a klávesnice — píše App.tsx podle visualViewport.
+     --vvh je výška obalu appky (bez klávesnice = celá obrazovka), --kb
+     výška klávesnice pro věci mimo obal (lišta „Zpět" v portálu). */
+  --vvh: 100dvh;
+  --vv-top: 0px;
   --kb: 0px;
   --dock-safe: env(safe-area-inset-bottom);
+}
+
+html,
+body {
+  /* Dokument se nikdy nescrolluje — scrolluje jen <main> uvnitř obalu.
+     clip (ne hidden): hidden jde programově odscrollovat, a přesně to
+     dělá iOS při fokusu pole, aby ho „odkryl". */
+  height: 100%;
+  overflow: clip;
+}
+
+body {
+  /* iOS jinak pod klávesnicí nechá okno popojíždět; přibité tělo ne. */
+  position: fixed;
+  inset: 0;
+  width: 100%;
 }
 
 html {
@@ -434,7 +453,9 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
    Sheet je v portálu mimo .app-shell, takže transform nevadí fixed
    pozici panelu; :has sleduje přítomnost backdropu. */
 .app-shell {
-  overflow: hidden;
+  /* clip, ne hidden — viz html/body výš: obal nesmí jít odscrollovat
+     ani programově, jinak iOS při fokusu pole odveze hlavičku. */
+  overflow: clip;
   transition:
     transform 0.45s var(--ease-ios),
     border-radius 0.45s var(--ease-ios);
