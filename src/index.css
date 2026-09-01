@@ -84,12 +84,12 @@
 }
 
 :root {
-  /* Viditelná výška a klávesnice — píše App.tsx podle visualViewport.
-     --vvh je výška obalu appky (bez klávesnice = celá obrazovka), --kb
-     výška klávesnice pro věci mimo obal (lišta „Zpět" v portálu). */
-  --vvh: 100dvh;
+  /* Viditelný obdélník obrazovky — píše App.tsx podle visualViewport.
+     Bez klávesnice je to celá plocha; s klávesnicí jen to nad ní.
+     --vv-bottom je pro věci v portálu mimo obal (lišta „Zpět"). */
   --vv-top: 0px;
-  --kb: 0px;
+  --vvh: 100dvh;
+  --vv-bottom: 0px;
   --dock-safe: env(safe-area-inset-bottom);
 }
 
@@ -453,6 +453,11 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
    Sheet je v portálu mimo .app-shell, takže transform nevadí fixed
    pozici panelu; :has sleduje přítomnost backdropu. */
 .app-shell {
+  /* Obal sedí přesně na viditelném obdélníku. Fixed proto, že se pozice
+     nesmí odvíjet od místa ve flow — s klávesnicí se celý obdélník
+     posouvá a mění výšku. */
+  top: var(--vv-top);
+  height: var(--vvh);
   /* clip, ne hidden — viz html/body výš: obal nesmí jít odscrollovat
      ani programově, jinak iOS při fokusu pole odveze hlavičku. */
   overflow: clip;

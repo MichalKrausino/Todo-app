@@ -7,8 +7,18 @@ import { VitePWA } from 'vite-plugin-pwa'
 // workflow nastavuje BASE_PATH=/Todo-app/. Lokální vývoj běží na kořeni.
 const base = process.env.BASE_PATH ?? '/'
 
+// Otisk buildu do nastavení. Bez něj se nedá poznat, jestli má telefon
+// poslední verzi, nebo mu servisní worker drží starou z cache.
+const build = [
+  new Date().toISOString().slice(0, 16).replace('T', ' '),
+  (process.env.GITHUB_SHA ?? '').slice(0, 7),
+]
+  .filter(Boolean)
+  .join(' · ')
+
 export default defineConfig({
   base,
+  define: { __BUILD__: JSON.stringify(build) },
   plugins: [
     react(),
     tailwindcss(),

@@ -164,6 +164,10 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
           </svg>
         </button>
         {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
+
+        {/* Verze buildu: když něco „pořád blbne", tohle jako první řekne,
+            jestli telefon vůbec kouká na novou appku. */}
+        <p className="pb-1 text-center text-[11px] text-ink-faint">verze {__BUILD__}</p>
         </>
       )}
     </Sheet>

@@ -101,49 +101,50 @@ export default function App() {
     return () => ro.disconnect()
   }, [])
   // Klávesnice na iOS nezmenšuje layout (100dvh zůstává), jen překryje
-  // spodek obrazovky. Jediné, co o ní ví, je visualViewport. Místo aby se
-  // před ní uhýbal jen dok, je celý obal appky vysoký přesně jako viditelná
-  // část — dok u jeho spodního okraje je tak nad klávesnicí sám od sebe
-  // a seznam scrolluje jen v tom, co je vidět.
+  // spodek obrazovky. Jediné, co o ní ví, je visualViewport — a ten říká
+  // rovnou, kde viditelná část začíná (offsetTop) a jak je vysoká.
+  // Obal appky se na ten obdélník posadí napevno (position: fixed), takže
+  // dok u jeho spodního okraje leží přesně na hraně klávesnice a seznam
+  // scrolluje jen v tom, co je vidět. Chová se to jako lišta v chatu:
+  // psaní stojí nad klávesnicí, obsah za ním jde listovat.
   //
-  // Proč ne jen posunout dok: iOS při fokusu pole „pomáhá" a odscrolluje
-  // nejbližší předky, aby pole odkryl — dřív tak odjel i obal appky
-  // (overflow: hidden jde programově scrollovat) a s ním hlavička. Obal má
-  // teď overflow: clip, což scrollovat nejde vůbec, a když viditelná část
-  // sedí přesně, nemá iOS ani co odkrývat.
-  // Klávesnice jako v chatu: pole je přilepené nad ní, seznam pod ním jde
-  // listovat — a když se listuje doopravdy (ne jen o kousek, aby člověk
-  // něco dohledal), klávesnice se uklidí a uvolní místo. Kotva je pozice
-  // seznamu ve chvíli, kdy klávesnice vyjela; rozepsaný text zůstává.
+  // Proč fixed a proč měřit z clientHeight: `window.innerHeight` v PWA na
+  // ploše občas o klávesnici neví, kdežto documentElement.clientHeight je
+  // výška layoutu, která se nemění. A relativní posun by se počítal od
+  // místa ve flow — fixed obdélník je jednoznačný.
   const kbRef = useRef(0)
   const kbAnchor = useRef(0)
   const KB_SCROLL_DISMISS = 120
 
   useEffect(() => {
     const vv = window.visualViewport
-    if (!vv) return
+    const root = document.documentElement
     const apply = () => {
-      const root = document.documentElement.style
-      const h = Math.round(vv.height)
-      root.setProperty('--vvh', `${h}px`)
-      // když iOS přece jen viditelnou část posune, jede obal s ní
-      root.setProperty('--vv-top', `${Math.round(vv.offsetTop)}px`)
-      const kb = Math.max(0, Math.round(window.innerHeight - vv.height))
-      if (kb > 0 && kbRef.current === 0) kbAnchor.current = mainRef.current?.scrollTop ?? 0
-      kbRef.current = kb
-      root.setProperty('--kb', `${kb}px`)
+      const layout = root.clientHeight || window.innerHeight
+      const top = vv ? Math.round(vv.offsetTop) : 0
+      const height = vv ? Math.round(vv.height) : layout
+      // kolik layoutu zbývá pod viditelnou částí = klávesnice
+      const below = Math.max(0, layout - (top + height))
+      if (below > 0 && kbRef.current === 0) kbAnchor.current = mainRef.current?.scrollTop ?? 0
+      kbRef.current = below
+      const st = root.style
+      st.setProperty('--vv-top', `${top}px`)
+      st.setProperty('--vvh', `${height}px`)
+      st.setProperty('--vv-bottom', `${below}px`)
       // nad klávesnicí není domovní lišta, safe-area by byla prázdný pruh
-      root.setProperty('--dock-safe', kb > 0 ? '0px' : 'env(safe-area-inset-bottom)')
+      st.setProperty('--dock-safe', below > 0 ? '0px' : 'env(safe-area-inset-bottom)')
       if (window.scrollY !== 0) window.scrollTo(0, 0)
     }
-    vv.addEventListener('resize', apply)
-    vv.addEventListener('scroll', apply)
+    vv?.addEventListener('resize', apply)
+    vv?.addEventListener('scroll', apply)
     window.addEventListener('resize', apply)
+    window.addEventListener('orientationchange', apply)
     apply()
     return () => {
-      vv.removeEventListener('resize', apply)
-      vv.removeEventListener('scroll', apply)
+      vv?.removeEventListener('resize', apply)
+      vv?.removeEventListener('scroll', apply)
       window.removeEventListener('resize', apply)
+      window.removeEventListener('orientationchange', apply)
     }
   }, [])
   useEffect(() => {
@@ -184,10 +185,7 @@ export default function App() {
   }, [])
 
   return (
-    <div
-      className="app-shell relative mx-auto flex max-w-lg flex-col bg-paper text-ink antialiased"
-      style={{ height: 'var(--vvh, 100dvh)', top: 'var(--vv-top, 0px)' }}
-    >
+    <div className="app-shell fixed inset-x-0 mx-auto flex max-w-lg flex-col bg-paper text-ink antialiased">
       {/* Horní lišta ve stylu iOS: v klidu průhledná (velký titulek si
           svítí sám), po odscrollování se zamlží a obsah pod ni podjede —
           jinak by ikony seděly přímo na textu úkolů. Průchozí na dotyk,

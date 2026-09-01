@@ -263,7 +263,7 @@ export function QuickAdd({
       {lastAdded && createPortal(
         <div
           className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-3"
-          style={{ bottom: 'calc(var(--dock-h, 9rem) + var(--kb, 0px) + 0.75rem)' }}
+          style={{ bottom: 'calc(var(--dock-h, 9rem) + var(--vv-bottom, 0px) + 0.75rem)' }}
         >
           <div className={`${toastLeaving ? 'toast-out' : 'pop'} pointer-events-auto flex items-center gap-2 rounded-full bg-ink/90 py-1.5 pl-4 pr-1.5 shadow-float backdrop-blur`}>
             <span className="max-w-48 truncate text-[13px] text-paper">
