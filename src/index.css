@@ -83,6 +83,13 @@
   --shadow-float: 0 2px 12px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.08);
 }
 
+:root {
+  /* Klávesnice: o kolik má spodní dok vyjet nahoru (píše App.tsx podle
+     visualViewport). Bez klávesnice nula a dok sedí nad domovní lištou. */
+  --kb: 0px;
+  --dock-safe: env(safe-area-inset-bottom);
+}
+
 html {
   -webkit-tap-highlight-color: transparent;
   /* Barvy systémových prvků (posuvníky, výběry) jdou za volbou appky,

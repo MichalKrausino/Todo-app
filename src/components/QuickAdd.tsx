@@ -263,7 +263,7 @@ export function QuickAdd({
       {lastAdded && createPortal(
         <div
           className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-3"
-          style={{ bottom: 'calc(var(--dock-h, 9rem) + 0.75rem)' }}
+          style={{ bottom: 'calc(var(--dock-h, 9rem) + var(--kb, 0px) + 0.75rem)' }}
         >
           <div className={`${toastLeaving ? 'toast-out' : 'pop'} pointer-events-auto flex items-center gap-2 rounded-full bg-ink/90 py-1.5 pl-4 pr-1.5 shadow-float backdrop-blur`}>
             <span className="max-w-48 truncate text-[13px] text-paper">
@@ -603,7 +603,7 @@ export function QuickAdd({
           onChange={(e) => setText(e.target.value)}
           placeholder="Např. „zítra poslat report @klient“"
           enterKeyHint="done"
-          className="min-w-0 flex-1 rounded-full border border-transparent bg-well px-4 py-2.5 text-[16px] text-ink outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus:bg-card"
+          className="min-w-0 flex-1 appearance-none rounded-full border border-transparent bg-well px-4 py-2.5 text-[16px] text-ink outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus:bg-card focus-visible:outline-none"
         />
         {/* key po přidání → pop; plus se při stisku pootočí (group-active) */}
         <button

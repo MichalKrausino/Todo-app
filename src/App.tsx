@@ -100,6 +100,33 @@ export default function App() {
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+  // Klávesnice na iOS nezmenšuje layout (100dvh zůstává), jen překryje
+  // spodek obrazovky — dok přibitý k bottom: 0 by pod ní zmizel. Jediné,
+  // co o klávesnici ví, je visualViewport: rozdíl mezi výškou okna a
+  // výškou viditelné části je přesně to, o kolik má dok vyjet nahoru.
+  //
+  // Druhá půlka problému: iOS při fokusu pole odscrolluje CELÉ okno, aby
+  // pole odkryl — a s ním odjede i hlavička. Appka ale scrolluje uvnitř
+  // <main>, okno má stát na nule; tady se to vrací zpátky.
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const apply = () => {
+      const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop))
+      const root = document.documentElement.style
+      root.setProperty('--kb', `${inset}px`)
+      // nad klávesnicí není domovní lišta, safe-area by byla prázdný pruh
+      root.setProperty('--dock-safe', inset > 0 ? '0px' : 'env(safe-area-inset-bottom)')
+      if (window.scrollY !== 0) window.scrollTo(0, 0)
+    }
+    vv.addEventListener('resize', apply)
+    vv.addEventListener('scroll', apply)
+    apply()
+    return () => {
+      vv.removeEventListener('resize', apply)
+      vv.removeEventListener('scroll', apply)
+    }
+  }, [])
   useEffect(() => {
     prevTab.current = tab
     // nová záložka začíná nahoře, ne uprostřed předchozího seznamu
@@ -177,7 +204,7 @@ export default function App() {
         className="flex-1 overflow-y-auto overflow-x-hidden px-4"
         style={{
           paddingTop: 'calc(1rem + env(safe-area-inset-top))',
-          paddingBottom: 'calc(var(--dock-h, 9rem) + 0.75rem)',
+          paddingBottom: 'calc(var(--dock-h, 9rem) + var(--kb, 0px) + 0.75rem)',
         }}
       >
         {/* key vynutí novou instanci pohledu → směrová nástupní animace */}
@@ -215,8 +242,11 @@ export default function App() {
           jen samotná deska — u okrajů tak jde dál scrollovat obsah. */}
       <footer
         ref={dockRef}
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-3"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.5rem)' }}
+        className="pointer-events-none absolute inset-x-0 z-30 px-3 transition-[bottom] duration-150 ease-out"
+        style={{
+          bottom: 'var(--kb, 0px)',
+          paddingBottom: 'calc(var(--dock-safe, env(safe-area-inset-bottom)) + 0.5rem)',
+        }}
       >
         <div
           className={`dock pointer-events-auto overflow-hidden transition-[border-radius] duration-300 ease-ios ${
