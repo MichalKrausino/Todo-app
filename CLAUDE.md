@@ -47,8 +47,8 @@ Nativní chování Apple aplikace, ale vlastní vzhled — inspirace Things 3
 (vzdušnost, typografie místo rámečků) a Linear (kázeň, jemné obrysy místo
 stínů). Systémový font (na iPhonu SF Pro — nic se nestahuje), seskupené
 karty (`divide-y divide-line` v `rounded-2xl bg-card`) na **teplém**
-podkladu `paper` (ne studená iOS šeď), hairline oddělovače, frosted-glass
-tab bar, velké titulky (`display`), hlavičky sekcí `section-label` —
+podkladu `paper` (ne studená iOS šeď), hairline oddělovače, plovoucí skleněný dok
+(kapsle bez obrysu, samé ikony, vybraná má pod sebou neutrální pilulku), velké titulky (`display`), hlavičky sekcí `section-label` —
 **tiché, ne verzálky**: velké písmeno dělá `::first-letter`, takže texty
 v kódu zůstávají psané malými.
 

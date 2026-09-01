@@ -273,18 +273,19 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
 }
 
 /* Sklo spodního doku. Samotný backdrop-blur dělá prosvítající obsah
-   plochý a šedivý — saturate mu vrátí barvu, jako to dělá iOS, a špetka
-   brightness nadzvedne sklo nad podklad, aby nevypadalo jako špinavá fólie. */
+   plochý a šedivý — saturate mu vrátí barvu, špetka brightness nadzvedne
+   sklo nad podklad. Krytí je schválně nízké: dok si má brát barvu toho,
+   co je pod ním, ne sedět jako šedý pruh navrchu. */
 .dock {
   position: relative; /* kotva pro světelný prstenec v ::before */
   /* Průhlednost řídíme tady, ne utilitou — ať jde doladit zvlášť pro
      oba režimy. Nezapsaný CSS přebíjí Tailwind utility (jsou ve vrstvě). */
-  background: color-mix(in oklab, var(--color-card) 62%, transparent);
+  background: color-mix(in oklab, var(--color-card) 50%, transparent);
   /* Prefix první, standard poslední: Lightning CSS deklarace slučuje a
      nechá tu poslední — obráceně by v buildu zbyl jen -webkit- tvar,
      který Chromium vůbec nezná, a sklo by se rozmazalo jen v Safari. */
-  -webkit-backdrop-filter: blur(40px) saturate(200%) brightness(1.06);
-  backdrop-filter: blur(40px) saturate(200%) brightness(1.06);
+  -webkit-backdrop-filter: blur(30px) saturate(260%) brightness(1.04);
+  backdrop-filter: blur(30px) saturate(260%) brightness(1.04);
   /* Dvě vnitřní hrany dávají sklu tloušťku: ostré světlo shora,
      slabší odlesk zdola (odražené světlo od podkladu).
      Stín je psaný ručně, ne přes --shadow-float: ten nese i rovnoměrný
@@ -344,16 +345,17 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
     rgb(255 255 255 / 0.07) 45%,
     rgb(255 255 255 / 0) 72%
   );
+
 }
 
 @media (prefers-color-scheme: dark) {
   .dock {
-    /* Na tmavém podkladu potřebuje sklo víc krytí, jinak text plave.
+    /* Na tmavém podkladu potřebuje sklo víc krytí, jinak ikony plavou.
        Brightness jde dolů — na tmavém se prosvítající obsah má utlumit,
        ne rozzářit, jinak sklo vypadá jako mléčná fólie. */
-    background: color-mix(in oklab, var(--color-card) 70%, transparent);
-    -webkit-backdrop-filter: blur(40px) saturate(190%) brightness(0.92);
-    backdrop-filter: blur(40px) saturate(190%) brightness(0.92);
+    background: color-mix(in oklab, var(--color-card) 60%, transparent);
+    -webkit-backdrop-filter: blur(30px) saturate(200%) brightness(0.92);
+    backdrop-filter: blur(30px) saturate(200%) brightness(0.92);
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 0.1),
       inset 0 -1px 0 rgb(255 255 255 / 0.04),
@@ -394,6 +396,19 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .dock {
     background: color-mix(in oklab, var(--color-card) 95%, transparent);
+  }
+}
+
+/* Vybraná záložka: pilulka o odstín hlubší než sklo kolem. Neutrální
+   (ne akcentní) schválně — musí sednout na jakoukoli barvu, kterou si
+   sklo zrovna vezme zezdola. */
+.tab-on {
+  background: color-mix(in oklab, var(--color-ink) 11%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  .tab-on {
+    background: color-mix(in oklab, var(--color-ink) 18%, transparent);
   }
 }
 

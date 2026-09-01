@@ -237,28 +237,29 @@ export default function App() {
             </div>
           </div>
 
-          <nav className="flex items-center gap-1 px-2 py-1.5">
+          {/* Samé ikony, bez popisků — název sekce drží horní lišta.
+              Který list je vybraný, říká pilulka pod ikonou. */}
+          <nav className="flex items-center gap-1 px-2.5 py-2">
             {TABS.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
+                aria-label={t.label}
                 aria-current={tab === t.id ? 'page' : undefined}
-                className={`flex flex-1 flex-col items-center gap-0.5 py-0.5 text-[11px] font-medium transition-colors duration-200 active:scale-95 ${
-                  tab === t.id ? 'text-accent' : 'text-ink-faint'
+                className={`flex flex-1 items-center justify-center transition-colors duration-200 active:scale-95 ${
+                  tab === t.id ? 'text-ink' : 'text-ink-soft'
                 }`}
               >
-                {/* vybraná záložka má pod ikonou měkkou pilulku;
-                    nový element při vybrání → ikona poskočí (tab-bounce) */}
+                {/* nový element při vybrání → ikona poskočí (tab-bounce) */}
                 <span
-                  className={`rounded-2xl px-4 py-0.5 transition-colors duration-200 ${
-                    tab === t.id ? 'bg-accent-wash' : ''
+                  className={`flex h-10 w-full max-w-[5.5rem] items-center justify-center rounded-[18px] transition-colors duration-200 ${
+                    tab === t.id ? 'tab-on' : ''
                   }`}
                 >
                   <span key={tab === t.id ? 'on' : 'off'} className={tab === t.id ? 'tab-bounce block' : 'block'}>
                     {t.icon}
                   </span>
                 </span>
-                {t.label}
               </button>
             ))}
             {/* Otevřené zadávání má vlastní modré kolečko pro odeslání.
@@ -269,13 +270,13 @@ export default function App() {
               aria-label={addOpen ? 'Zavřít zadávání' : 'Nový úkol'}
               aria-expanded={addOpen}
               onClick={() => setAddOpen((v) => !v)}
-              className={`ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-[background-color,transform] duration-150 active:scale-90 ${
+              className={`ml-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-[background-color,transform] duration-150 active:scale-90 ${
                 addOpen ? 'bg-well text-ink-soft' : 'bg-accent text-card shadow-float'
               }`}
             >
               <svg
                 viewBox="0 0 24 24"
-                className={`h-6 w-6 transition-transform duration-300 ease-spring ${addOpen ? 'rotate-45' : ''}`}
+                className={`h-[22px] w-[22px] transition-transform duration-300 ease-spring ${addOpen ? 'rotate-45' : ''}`}
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2.2"
