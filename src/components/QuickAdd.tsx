@@ -45,7 +45,7 @@ const pill = 'shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium transiti
 // py-1.5 drží slot na 32 px — hlavní ovládání zadávání se musí trefovat
 // palcem na první pokus.
 const slotBase =
-  'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium'
+  'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[12px] font-medium'
 
 // defaultToToday: na obrazovce Dnes jde úkol bez data na dnešek (scheduledFor)
 // — kdo píše na Dnes, myslí „udělám to dnes". Jinde bez data → inbox.
@@ -325,17 +325,17 @@ export function QuickAdd({
           zůstává na místě — dřív se s každým otevřeným výběrem posunulo
           a iOS nechal kurzor viset nad ním. */}
       {(mention || picker) && (
-        <div className="rise mb-2 overflow-hidden rounded-2xl bg-well/60">
+        <div className="rise mb-2 overflow-hidden">
           {/* Strop podle toho, co je vidět (nad klávesnicí), ne podle celé
               obrazovky — s otevřeným kalendářem jinak zadávání přerostlo
               volné místo a vylezlo nad horní okraj. */}
           <div
             data-panel
-            className="overflow-y-auto overscroll-contain p-2"
+            className="overflow-y-auto overscroll-contain"
             style={{ maxHeight: 'max(8rem, calc(var(--vvh, 100dvh) - 11rem))' }}
           >
       {mention && (
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {mention.items.map((item) => (
             <button
               key={item.id}
@@ -360,7 +360,7 @@ export function QuickAdd({
           {/* výběr dne nezavírá sekci — heatmapa i agenda se mění živě.
               Rychlé volby nesou i stav: vybraný den je plný, ne jen nabídka —
               jinak „Dnes" svítilo v doku dvakrát vedle sebe jako dvě různé věci. */}
-          <div className="rise -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-1.5" style={{ scrollbarWidth: 'none' }}>
+          <div className="rise flex items-center gap-1.5 overflow-x-auto pb-1.5" style={{ scrollbarWidth: 'none' }}>
             {QUICK_DAYS.map(({ label, day }) => {
               const iso = day(today)
               const on = (effDueDate ?? (impliedToday ? today : undefined)) === iso
@@ -406,7 +406,7 @@ export function QuickAdd({
               trefa mimo ně stejně vedla na vlastní zadání, tak ať je rovnou
               vidět jen ono a kalendář nad ním má víc místa. */}
           {(effDueDate || impliedToday) && (
-            <div className="rise mb-1.5 flex items-center gap-2 px-1">
+            <div className="rise mb-1.5 flex items-center gap-2">
               <span className="shrink-0 text-[13px] font-medium text-ink-soft">Čas</span>
               <input
                 type="time"
@@ -480,7 +480,7 @@ export function QuickAdd({
         </div>
       )}
       {picker === 'client' && (
-        <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
+        <div className="rise flex gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
           {clients.map((c) => (
             <button
               key={c.id}
@@ -504,7 +504,7 @@ export function QuickAdd({
         </div>
       )}
       {picker === 'project' && (
-        <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
+        <div className="rise flex gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
           {projectPool.map((p) => (
             <button
               key={p.id}
@@ -529,7 +529,7 @@ export function QuickAdd({
         </div>
       )}
       {picker === 'priority' && (
-        <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1" style={{ scrollbarWidth: 'none' }}>
+        <div className="rise flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {(Object.keys(PRIORITY_LABELS) as Priority[]).map((p) => (
             <button
               key={p}
@@ -550,7 +550,7 @@ export function QuickAdd({
       {/* Stav úkolu na jedné řádce: prázdný slot říká, co umí, vyplněný
           ukazuje hodnotu. Nikdy se nezalamuje (přeteče do strany), takže
           výška zadávání je pořád stejná a pole se nehýbe. */}
-      <div className="-mx-1 mb-2 flex gap-1.5 overflow-x-auto px-1" style={{ scrollbarWidth: 'none' }}>
+      <div className="mb-2 flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
         <SlotChip
           slot="date"
           label="Termín"

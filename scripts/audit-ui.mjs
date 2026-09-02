@@ -1,6 +1,6 @@
 // Audit UI: prochází obrazovky i panely a měří, co jde změřit —
-// odsazení zleva a zprava, okraje sekcí, kulatost ikon a velikost cílů
-// pro prst. Oko tyhle rozdíly přehlédne, měřítko ne.
+// odsazení zleva a zprava, hrany prvků nad sebou, okraje sekcí, kulatost
+// ikon a velikost cílů pro prst. Oko tyhle rozdíly přehlédne, měřítko ne.
 //
 //   node scripts/audit-ui.mjs   (nebo npm run audit:ui)
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path'; import { createRequire } from 'node:module'
@@ -101,6 +101,42 @@ async function zmer(kde, root = 'main') {
       }
     }
 
+    // G) Prvky nad sebou musí sdílet levou i pravou hranu. Tohle je ta
+    //    nesymetrie, kterou oko chytne jako první: panel odsazený jinak
+    //    než řádka pod ním. Měření vůči rodiči ji neodhalí, protože každý
+    //    prvek je ve svém rodiči vycentrovaný správně.
+    for (const rodic of oblast.querySelectorAll('*')) {
+      const rs2 = getComputedStyle(rodic)
+      if (rs2.display.includes('flex') || rs2.display.includes('grid')) continue
+      const p = rodic.getBoundingClientRect()
+      if (p.width < 120) continue
+      const deti = [...rodic.children].filter((c) => {
+        if (!videt(c)) return false
+        if (getComputedStyle(c).position === 'absolute') return false
+        const r = c.getBoundingClientRect()
+        return r.width > p.width * 0.5
+      })
+      if (deti.length < 2) continue
+      // Porovnávají se hrany rámečku. Výjimka: vodorovně scrollující řádky
+      // schválně přetékají k okraji zápornou marží, aby pilulky mohly dojet
+      // až ke kraji — u nich se bere hrana obsahu, jinak by hlásily rozdíl,
+      // který není vidět.
+      const hrany = new Map()
+      for (const c of deti) {
+        const r = c.getBoundingClientRect()
+        const cs = getComputedStyle(c)
+        const ml = parseFloat(cs.marginLeft), mr = parseFloat(cs.marginRight)
+        const vlevo = ml < 0 ? r.left + parseFloat(cs.paddingLeft) : r.left
+        const vpravo = mr < 0 ? r.right - parseFloat(cs.paddingRight) : r.right
+        const klic = Math.round(vlevo) + '/' + Math.round(vpravo)
+        hrany.set(klic, [...(hrany.get(klic) || []), popis(c)])
+      }
+      if (hrany.size > 1) {
+        const rozpis = [...hrany.entries()].map(([k, v]) => k + ' ' + v[0]).join('   |   ')
+        out.push({ typ: 'hrany nad sebou', popis: popis(rodic) + '  ->  ' + rozpis, vlevo: 0, vpravo: 0 })
+      }
+    }
+
     const okraje = new Map()
     const sekce = oblast.children[0] ? oblast.children[0].children : []
     for (const el of sekce) {
@@ -176,7 +212,7 @@ const podle = {}
 for (const n of nalezy) (podle[n.kde] ??= []).push(n)
 for (const [kde, list] of Object.entries(podle)) {
   console.log(`\n— ${kde}`)
-  for (const n of list) console.log('   ' + (n.typ === 'okraj sekce' ? 'okraje    ' : String(n.vlevo).padStart(3) + ' /' + String(n.vpravo).padStart(4) + '  ') + n.popis)
+  for (const n of list) console.log('   ' + (n.typ === 'okraj sekce' || n.typ === 'hrany nad sebou' ? n.typ.padEnd(10) : String(n.vlevo).padStart(3) + ' /' + String(n.vpravo).padStart(4) + '  ') + ' ' + n.popis)
 }
 await b.close(); server.close()
 
