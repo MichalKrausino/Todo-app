@@ -86,7 +86,7 @@ export function MonthPicker({
   return (
     // Bez vlastní karty — sedí rovnou v panelu zadávání. Dvě zaoblené
     // krabice v sobě dělaly z výběru termínu hlučnější věc, než je.
-    <div className="rise mb-1.5 px-1 py-0.5">
+    <div className="rise mb-1.5 py-0.5">
       <div className="mb-0.5 flex items-center justify-between">
         <button
           type="button"
@@ -99,7 +99,7 @@ export function MonthPicker({
             <path d="M15 6l-6 6 6 6" />
           </svg>
         </button>
-        <span key={month} className="pop-soft inline-block text-[14px] font-semibold first-letter:uppercase">
+        <span key={month} className="pop-soft inline-block text-[15px] font-semibold first-letter:uppercase">
           {monthFmt.format(firstDate)}
         </span>
         <button
@@ -117,11 +117,11 @@ export function MonthPicker({
 
       <div
         key={`g${month}`}
-        className="view-enter grid grid-cols-7 gap-y-1 text-center"
+        className="view-enter grid grid-cols-7 gap-y-1.5 text-center"
         style={{ '--vx': dir === 0 ? '0px' : dir > 0 ? '18px' : '-18px' } as React.CSSProperties}
       >
         {WEEKDAYS.map((w) => (
-          <span key={w} className="text-[10px] font-medium text-ink-faint">
+          <span key={w} className="pb-0.5 text-[11px] font-medium text-ink-faint">
             {w}
           </span>
         ))}
@@ -153,14 +153,14 @@ export function MonthPicker({
               className="flex flex-col items-center justify-center"
             >
               <span
-                className={`flex h-7 w-7 items-center justify-center rounded-full text-[12px] tabular-nums transition-colors duration-150 ${cls}`}
+                className={`flex h-9 w-9 items-center justify-center rounded-full text-[15px] tabular-nums transition-colors duration-150 ${cls}`}
               >
                 {i + 1}
               </span>
               {/* U vybraného dne tečku neukazujeme — co na něm je, stojí
                   rozepsané hned pod kalendářem. */}
               <span
-                className={`mt-[2px] h-1 w-1 rounded-full ${selected ? '' : loadDot(count)}`}
+                className={`mt-[3px] h-1.5 w-1.5 rounded-full ${selected ? '' : loadDot(count)}`}
               />
             </button>
           )

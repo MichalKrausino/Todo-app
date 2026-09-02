@@ -58,6 +58,18 @@ export function QuickAdd({
   autoFocus?: boolean
 }) {
   const [text, setText] = useState('')
+  // Výběr termínu potřebuje místo — kalendář zmáčknutý nad klávesnici je
+  // k nepřečtení. Otevření proto klávesnici schová (psaní stejně nikdo
+  // nepokračuje uprostřed vybírání dne) a panel se rozloží na celou výšku.
+  // Ostatní výběry jsou jednořádkové, tam klávesnice zůstává.
+  const openPicker = (kind: PickerKind) => {
+    const zaviram = picker === kind
+    setPicker(zaviram ? null : kind)
+    if (kind !== 'date') return
+    // Zavření termínu vrátí klávesnici, ať se dá rovnou psát dál.
+    if (zaviram) inputRef.current?.focus()
+    else inputRef.current?.blur()
+  }
   const [overrides, setOverrides] = useState<Overrides>({})
   const [picker, setPicker] = useState<PickerKind>(null)
   // Počítadlo přidaných úkolů — mění key tlačítka, takže po každém
@@ -547,7 +559,7 @@ export function QuickAdd({
           label="Termín"
           value={dateLabel}
           open={picker === 'date'}
-          onTap={() => setPicker(picker === 'date' ? null : 'date')}
+          onTap={() => openPicker('date')}
           icon={<path d="M4.5 6.5h15v13h-15zM4.5 10h15M8.5 4v4M15.5 4v4" />}
         />
         <SlotChip
@@ -556,7 +568,7 @@ export function QuickAdd({
           value={effClient?.name}
           dot={effClient?.color}
           open={picker === 'client'}
-          onTap={() => setPicker(picker === 'client' ? null : 'client')}
+          onTap={() => openPicker('client')}
           icon={<><circle cx="12" cy="8.5" r="3.5" /><path d="M5.5 19.5c.8-3.4 3.4-5.25 6.5-5.25s5.7 1.85 6.5 5.25" /></>}
         />
         <SlotChip
@@ -564,7 +576,7 @@ export function QuickAdd({
           label="Projekt"
           value={effProject?.name}
           open={picker === 'project'}
-          onTap={() => setPicker(picker === 'project' ? null : 'project')}
+          onTap={() => openPicker('project')}
           icon={<path d="M4 7.5a2 2 0 012-2h4l2 2.5h6a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2z" />}
         />
         <SlotChip
@@ -572,7 +584,7 @@ export function QuickAdd({
           label="Priorita"
           value={effPriority !== 'normal' ? PRIORITY_LABELS[effPriority] : undefined}
           open={picker === 'priority'}
-          onTap={() => setPicker(picker === 'priority' ? null : 'priority')}
+          onTap={() => openPicker('priority')}
           icon={<path d="M12 5v9M12 17.5v1" />}
         />
         {/* co vyčetl parser a nemá vlastní slot — jen na ukázání */}

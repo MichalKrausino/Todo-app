@@ -54,7 +54,10 @@ Projekt / Priorita — prázdný slot nabízí, vyplněný ukazuje hodnotu,
 otevřený je plný akcent) a **jeden panel nad ní**, do kterého se vejdou
 všechny výběry. V kalendáři je jediná plná výplň vybraný den, dnešek má
 kroužek a vytížení dne je tečka pod číslem — dřív mělo „něco tam je"
-i „tohle jsi zvolil" tutéž modrou a nešlo je rozeznat. Řádka se nikdy nezalamuje a panel má strop podle
+i „tohle jsi zvolil" tutéž modrou a nešlo je rozeznat. Otevření termínu
+schová klávesnici (a zavření ji vrátí): kalendář zmáčknutý do zbytku nad
+klávesnicí je k nepřečtení, takhle dostane celou výšku a den je dost
+velký na ťuknutí. Řádka se nikdy nezalamuje a panel má strop podle
 viditelné výšky (`--vvh`), takže se pole nikdy neposune — jinak iOS
 nechá kurzor viset mimo něj, velké titulky (`display`), hlavičky sekcí `section-label` —
 **tiché, ne verzálky**: velké písmeno dělá `::first-letter`, takže texty
