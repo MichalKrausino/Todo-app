@@ -3,25 +3,25 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { calendarEventsBetween, openTasks } from '../db/repo'
 import { addDays, fromISODate, toISODate, todayISO } from '../lib/dates'
 
-// Vlastní měsíční kalendářík s heatmapou vytížení dne — systémový
-// <input type="date"> obarvit nejde. Sytost podkladu = počet schůzek
-// (bez bloků z appky, ty jsou už spočítané jako úkoly) + úkolů
-// s termínem/plánem v ten den. Vybraný den plná modrá, dnešek rámeček.
+// Vlastní měsíční kalendářík — systémový <input type="date"> obarvit nejde.
+//
+// Jediná plná výplň v celém kalendáři je VYBRANÝ den. Vytížení dne
+// (schůzky bez bloků z appky + úkoly s termínem nebo plánem) se kreslí
+// jako tečka pod číslem, ne jako podbarvení: dřív mělo „něco tam je"
+// i „tohle jsi zvolil" tutéž modrou v jiné sytosti a nešlo je rozeznat.
+// Tečka + kroužek dneška je jazyk, který lidé znají z Kalendáře.
 
 const WEEKDAYS = ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne']
 const monthFmt = new Intl.DateTimeFormat('cs-CZ', { month: 'long', year: 'numeric' })
 
-// Semaforová škála — barva rovnou říká, jak moc je den plný:
-// modrá = pár věcí, oranžová = nabito, červená = plno. Wash odstíny
-// byly na displeji k nerozeznání od bílé (ověřeno pixelově), proto
-// průhledné varianty plných barev — viditelné v obou režimech.
-// Legenda pod kalendářem být nemusí: stoupající teplota barvy se čte
-// sama a přesné číslo řekne náhled vybraného dne pod kalendářem.
-function heatClass(count: number): string {
+// Semaforová tečka pod číslem: klidná = pár věcí, oranžová = nabito,
+// červená = plno. Přesný obsah dne řekne náhled pod kalendářem, tady
+// stačí, že je vidět rozdíl mezi prázdným a napěchovaným dnem.
+function loadDot(count: number): string {
   if (count <= 0) return ''
-  if (count <= 2) return 'bg-accent/30'
-  if (count <= 4) return 'bg-amber/40'
-  return 'bg-danger/40 font-medium'
+  if (count <= 2) return 'bg-accent/70'
+  if (count <= 4) return 'bg-amber'
+  return 'bg-danger'
 }
 
 export function MonthPicker({
@@ -84,7 +84,9 @@ export function MonthPicker({
   const keep = (e: React.PointerEvent) => e.preventDefault()
 
   return (
-    <div className="rise mb-1.5 rounded-2xl bg-card px-2 py-1.5 shadow-card">
+    // Bez vlastní karty — sedí rovnou v panelu zadávání. Dvě zaoblené
+    // krabice v sobě dělaly z výběru termínu hlučnější věc, než je.
+    <div className="rise mb-1.5 px-1 py-0.5">
       <div className="mb-0.5 flex items-center justify-between">
         <button
           type="button"
@@ -115,7 +117,7 @@ export function MonthPicker({
 
       <div
         key={`g${month}`}
-        className="view-enter grid grid-cols-7 gap-y-0 text-center"
+        className="view-enter grid grid-cols-7 gap-y-1 text-center"
         style={{ '--vx': dir === 0 ? '0px' : dir > 0 ? '18px' : '-18px' } as React.CSSProperties}
       >
         {WEEKDAYS.map((w) => (
@@ -132,15 +134,13 @@ export function MonthPicker({
           const selected = iso === value
           const isToday = iso === today
           const past = iso < today
-          const heat = heatClass(count)
           const cls = selected
             ? 'bg-accent font-semibold text-card'
-            : [
-                heat,
-                isToday ? 'border border-accent font-semibold' : '',
-                isToday && !heat ? 'text-accent' : '',
-                !heat && !isToday ? (past ? 'text-ink-faint' : 'text-ink') : '',
-              ].join(' ')
+            : isToday
+              ? 'ring-1 ring-accent font-semibold text-accent'
+              : past
+                ? 'text-ink-faint'
+                : 'text-ink'
           return (
             <button
               key={iso}
@@ -150,13 +150,18 @@ export function MonthPicker({
               onPointerDown={keep}
               onClick={() => onSelect(iso)}
               aria-label={`${iso}${count > 0 ? `, ${count} položek` : ', volno'}`}
-              className="flex items-center justify-center"
+              className="flex flex-col items-center justify-center"
             >
               <span
                 className={`flex h-7 w-7 items-center justify-center rounded-full text-[12px] tabular-nums transition-colors duration-150 ${cls}`}
               >
                 {i + 1}
               </span>
+              {/* U vybraného dne tečku neukazujeme — co na něm je, stojí
+                  rozepsané hned pod kalendářem. */}
+              <span
+                className={`mt-[2px] h-1 w-1 rounded-full ${selected ? '' : loadDot(count)}`}
+              />
             </button>
           )
         })}

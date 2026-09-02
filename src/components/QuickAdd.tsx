@@ -316,7 +316,7 @@ export function QuickAdd({
               volné místo a vylezlo nad horní okraj. */}
           <div
             className="overflow-y-auto overscroll-contain p-2"
-            style={{ maxHeight: 'max(8rem, calc(var(--vvh, 100dvh) - 15rem))' }}
+            style={{ maxHeight: 'max(8rem, calc(var(--vvh, 100dvh) - 12rem))' }}
           >
       {mention && (
         <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1" style={{ scrollbarWidth: 'none' }}>
@@ -352,17 +352,24 @@ export function QuickAdd({
                   onPointerDown={keepFocus}
                   onClick={() => setOverrides((o) => ({ ...o, dueDate: iso }))}
                   aria-pressed={on}
-                  className={`${pill} ${on ? 'bg-ink text-paper' : 'bg-accent-wash text-accent-deep'}`}
+                  className={`${pill} ${on ? 'bg-accent text-card' : 'bg-card text-ink'}`}
                 >
                   {label}
                 </button>
               )
             })}
-            {(effDueDate || impliedToday) && (
-              <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: null, dueTime: null })} className={`${pill} bg-well text-ink-soft`}>
-                ✕ Bez termínu
-              </button>
-            )}
+            {/* „Bez termínu" je tu vždycky a když termín není, je vybraná
+                ona — jinak nešlo poznat, jestli jsem den ještě nevybral,
+                nebo se jen výběr nikde neprojevil. */}
+            <button
+              type="button"
+              onPointerDown={keepFocus}
+              onClick={() => setOv({ dueDate: null, dueTime: null })}
+              aria-pressed={!effDueDate && !impliedToday}
+              className={`${pill} ${!effDueDate && !impliedToday ? 'bg-accent text-card' : 'bg-card text-ink-soft'}`}
+            >
+              Bez termínu
+            </button>
           </div>
 
           {/* vlastní kalendářík s heatmapou vytížení dnů.
@@ -392,7 +399,7 @@ export function QuickAdd({
                       dueDate: effDueDate ?? today,
                     }))
                   }
-                  className={`${pill} ${effDueTime === v ? 'bg-ink text-paper' : 'bg-well text-ink'}`}
+                  className={`${pill} ${effDueTime === v ? 'bg-accent text-card' : 'bg-card text-ink'}`}
                 >
                   {t}
                 </button>
@@ -409,10 +416,10 @@ export function QuickAdd({
                   dueDate: e.target.value ? (effDueDate ?? today) : effDueDate,
                 }))
               }
-              className="shrink-0 rounded-full border border-transparent bg-well px-3 py-1 text-[13px] font-medium text-ink outline-none focus:border-accent/50"
+              className="shrink-0 rounded-full border border-transparent bg-card px-3 py-1 text-[13px] font-medium text-ink outline-none focus:border-accent/50"
             />
             {effDueTime && (
-              <button type="button" onPointerDown={keepFocus} onClick={() => setOverrides((o) => ({ ...o, dueTime: null }))} className={`${pill} bg-well text-ink-soft`}>
+              <button type="button" onPointerDown={keepFocus} onClick={() => setOverrides((o) => ({ ...o, dueTime: null }))} aria-label="Zrušit čas" className={`${pill} bg-card text-ink-soft`}>
                 ✕
               </button>
             )}
@@ -471,15 +478,15 @@ export function QuickAdd({
               type="button"
               onPointerDown={keepFocus}
               onClick={() => setOv({ clientId: c.id, projectId: effProject && effProject.clientId !== c.id ? null : overrides.projectId })}
-              className={`${pill} inline-flex items-center gap-1.5 ${effClientId === c.id ? 'bg-ink text-paper' : 'bg-well text-ink'}`}
+              className={`${pill} inline-flex items-center gap-1.5 ${effClientId === c.id ? 'bg-accent text-card' : 'bg-card text-ink'}`}
             >
               <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />
               {c.name}
             </button>
           ))}
           {effClientId && (
-            <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ clientId: null, projectId: null })} className={`${pill} bg-well text-ink-soft`}>
-              ✕ Bez klienta
+            <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ clientId: null, projectId: null })} className={`${pill} bg-card text-ink-soft`}>
+              Bez klienta
             </button>
           )}
           {clients.length === 0 && (
@@ -495,14 +502,14 @@ export function QuickAdd({
               type="button"
               onPointerDown={keepFocus}
               onClick={() => setOv({ projectId: p.id, clientId: effClientId ?? p.clientId })}
-              className={`${pill} ${effProjectId === p.id ? 'bg-ink text-paper' : 'bg-well text-ink'}`}
+              className={`${pill} ${effProjectId === p.id ? 'bg-accent text-card' : 'bg-card text-ink'}`}
             >
               ▸ {p.name}
             </button>
           ))}
           {effProjectId && (
-            <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ projectId: null })} className={`${pill} bg-well text-ink-soft`}>
-              ✕ Bez projektu
+            <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ projectId: null })} className={`${pill} bg-card text-ink-soft`}>
+              Bez projektu
             </button>
           )}
           {projectPool.length === 0 && (
@@ -520,7 +527,7 @@ export function QuickAdd({
               type="button"
               onPointerDown={keepFocus}
               onClick={() => setOv({ priority: p === 'normal' ? null : p })}
-              className={`${pill} ${effPriority === p ? 'bg-ink text-paper' : 'bg-card text-ink'}`}
+              className={`${pill} ${effPriority === p ? 'bg-accent text-card' : 'bg-card text-ink'}`}
             >
               {PRIORITY_LABELS[p]}
             </button>

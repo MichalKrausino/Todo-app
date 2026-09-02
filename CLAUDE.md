@@ -52,7 +52,9 @@ podkladu `paper` (ne studená iOS šeď), hairline oddělovače, plovoucí sklen
 Zadávání úkolu v doku má **jednu stavovou řádku** (Termín / Klient /
 Projekt / Priorita — prázdný slot nabízí, vyplněný ukazuje hodnotu,
 otevřený je plný akcent) a **jeden panel nad ní**, do kterého se vejdou
-všechny výběry. Řádka se nikdy nezalamuje a panel má strop podle
+všechny výběry. V kalendáři je jediná plná výplň vybraný den, dnešek má
+kroužek a vytížení dne je tečka pod číslem — dřív mělo „něco tam je"
+i „tohle jsi zvolil" tutéž modrou a nešlo je rozeznat. Řádka se nikdy nezalamuje a panel má strop podle
 viditelné výšky (`--vvh`), takže se pole nikdy neposune — jinak iOS
 nechá kurzor viset mimo něj, velké titulky (`display`), hlavičky sekcí `section-label` —
 **tiché, ne verzálky**: velké písmeno dělá `::first-letter`, takže texty
