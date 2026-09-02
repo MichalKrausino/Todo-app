@@ -99,7 +99,7 @@ export function MonthPicker({
             <path d="M15 6l-6 6 6 6" />
           </svg>
         </button>
-        <span key={month} className="pop-soft inline-block text-[15px] font-semibold first-letter:uppercase">
+        <span key={month} className="pop-soft inline-block text-[16px] font-semibold first-letter:uppercase">
           {monthFmt.format(firstDate)}
         </span>
         <button
@@ -117,11 +117,11 @@ export function MonthPicker({
 
       <div
         key={`g${month}`}
-        className="view-enter grid grid-cols-7 gap-y-1.5 text-center"
+        className="view-enter grid grid-cols-7 gap-y-2 text-center"
         style={{ '--vx': dir === 0 ? '0px' : dir > 0 ? '18px' : '-18px' } as React.CSSProperties}
       >
         {WEEKDAYS.map((w) => (
-          <span key={w} className="pb-0.5 text-[11px] font-medium text-ink-faint">
+          <span key={w} className="pb-1 text-[12px] font-medium text-ink-faint">
             {w}
           </span>
         ))}
@@ -153,7 +153,7 @@ export function MonthPicker({
               className="flex flex-col items-center justify-center"
             >
               <span
-                className={`flex h-9 w-9 items-center justify-center rounded-full text-[15px] tabular-nums transition-colors duration-150 ${cls}`}
+                className={`flex h-10 w-10 items-center justify-center rounded-full text-[16px] tabular-nums transition-colors duration-150 ${cls}`}
               >
                 {i + 1}
               </span>

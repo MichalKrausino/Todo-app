@@ -58,18 +58,6 @@ export function QuickAdd({
   autoFocus?: boolean
 }) {
   const [text, setText] = useState('')
-  // Výběr termínu potřebuje místo — kalendář zmáčknutý nad klávesnici je
-  // k nepřečtení. Otevření proto klávesnici schová (psaní stejně nikdo
-  // nepokračuje uprostřed vybírání dne) a panel se rozloží na celou výšku.
-  // Ostatní výběry jsou jednořádkové, tam klávesnice zůstává.
-  const openPicker = (kind: PickerKind) => {
-    const zaviram = picker === kind
-    setPicker(zaviram ? null : kind)
-    if (kind !== 'date') return
-    // Zavření termínu vrátí klávesnici, ať se dá rovnou psát dál.
-    if (zaviram) inputRef.current?.focus()
-    else inputRef.current?.blur()
-  }
   const [overrides, setOverrides] = useState<Overrides>({})
   const [picker, setPicker] = useState<PickerKind>(null)
   // Počítadlo přidaných úkolů — mění key tlačítka, takže po každém
@@ -103,6 +91,19 @@ export function QuickAdd({
     window.addEventListener('todo:prefill', fill)
     return () => window.removeEventListener('todo:prefill', fill)
   }, [])
+
+  // Výběr termínu potřebuje místo — kalendář zmáčknutý nad klávesnici je
+  // k nepřečtení. Otevření proto klávesnici schová (psaní stejně nikdo
+  // nepokračuje uprostřed vybírání dne) a panel se rozloží na celou výšku.
+  // Ostatní výběry jsou jednořádkové, tam klávesnice zůstává.
+  const openPicker = (kind: PickerKind) => {
+    const zaviram = picker === kind
+    setPicker(zaviram ? null : kind)
+    if (kind !== 'date') return
+    // Zavření termínu vrátí klávesnici, ať se dá rovnou psát dál.
+    if (zaviram) inputRef.current?.focus()
+    else inputRef.current?.blur()
+  }
 
   const parsed = useMemo(
     () => (text.trim() ? parseQuickAdd(text, clients, new Date(), projects) : null),
@@ -327,8 +328,9 @@ export function QuickAdd({
               obrazovky — s otevřeným kalendářem jinak zadávání přerostlo
               volné místo a vylezlo nad horní okraj. */}
           <div
+            data-panel
             className="overflow-y-auto overscroll-contain p-2"
-            style={{ maxHeight: 'max(8rem, calc(var(--vvh, 100dvh) - 12rem))' }}
+            style={{ maxHeight: 'max(8rem, calc(var(--vvh, 100dvh) - 11rem))' }}
           >
       {mention && (
         <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1" style={{ scrollbarWidth: 'none' }}>
@@ -347,9 +349,12 @@ export function QuickAdd({
         </div>
       )}
 
-      {/* výběr po ťuknutí na tlačítko lišty nebo chip */}
+      {/* výběr po ťuknutí na slot stavové řádky.
+          Bez vlastního stropu a scrollu — o obojí se stará panel kolem.
+          Dva scrolly v sobě znamenaly, že se čas a náhled dne schovaly
+          pod okrajem vnitřního, i když panel měl místa dost. */}
       {picker === 'date' && (
-        <div className="max-h-[46vh] overflow-y-auto overflow-x-hidden overscroll-contain">
+        <div>
           {/* výběr dne nezavírá sekci — heatmapa i agenda se mění živě.
               Rychlé volby nesou i stav: vybraný den je plný, ne jen nabídka —
               jinak „Dnes" svítilo v doku dvakrát vedle sebe jako dvě různé věci. */}
@@ -394,48 +399,38 @@ export function QuickAdd({
 
           {/* čas termínu — volitelný, a jen když už je vybraný den:
               čas bez dne nic neznamená a řádek navíc jen roztahoval dok */}
+          {/* Čas termínu — volitelný, a jen když už je vybraný den: čas bez
+              dne nic neznamená. Předvolby (9:00 / 12:00 / …) jsou pryč —
+              trefa mimo ně stejně vedla na vlastní zadání, tak ať je rovnou
+              vidět jen ono a kalendář nad ním má víc místa. */}
           {(effDueDate || impliedToday) && (
-          <div className="rise -mx-1 mb-1.5 flex items-center gap-1.5 overflow-x-auto px-1" style={{ scrollbarWidth: 'none' }}>
-            <span className="shrink-0 pl-1 text-[12px] font-medium text-ink-faint">Čas</span>
-            {['9:00', '12:00', '14:00', '16:00'].map((t) => {
-              const v = t.padStart(5, '0')
-              return (
+            <div className="rise mb-1.5 flex items-center gap-2 px-1">
+              <span className="shrink-0 text-[13px] font-medium text-ink-soft">Čas</span>
+              <input
+                type="time"
+                aria-label="Čas termínu"
+                value={effDueTime ?? ''}
+                onChange={(e) =>
+                  setOverrides((o) => ({
+                    ...o,
+                    dueTime: e.target.value || null,
+                    dueDate: e.target.value ? (effDueDate ?? today) : effDueDate,
+                  }))
+                }
+                className="min-w-0 flex-1 rounded-full border border-transparent bg-card px-3 py-2 text-[15px] font-medium text-ink outline-none focus:border-accent/50"
+              />
+              {effDueTime && (
                 <button
-                  key={t}
                   type="button"
                   onPointerDown={keepFocus}
-                  onClick={() =>
-                    setOverrides((o) => ({
-                      ...o,
-                      dueTime: effDueTime === v ? null : v,
-                      dueDate: effDueDate ?? today,
-                    }))
-                  }
-                  className={`${pill} ${effDueTime === v ? 'bg-accent text-card' : 'bg-card text-ink'}`}
+                  onClick={() => setOverrides((o) => ({ ...o, dueTime: null }))}
+                  aria-label="Zrušit čas"
+                  className={`${pill} shrink-0 bg-card text-ink-soft`}
                 >
-                  {t}
+                  Bez času
                 </button>
-              )
-            })}
-            <input
-              type="time"
-              aria-label="Čas termínu"
-              value={effDueTime ?? ''}
-              onChange={(e) =>
-                setOverrides((o) => ({
-                  ...o,
-                  dueTime: e.target.value || null,
-                  dueDate: e.target.value ? (effDueDate ?? today) : effDueDate,
-                }))
-              }
-              className="shrink-0 rounded-full border border-transparent bg-card px-3 py-1 text-[13px] font-medium text-ink outline-none focus:border-accent/50"
-            />
-            {effDueTime && (
-              <button type="button" onPointerDown={keepFocus} onClick={() => setOverrides((o) => ({ ...o, dueTime: null }))} aria-label="Zrušit čas" className={`${pill} bg-card text-ink-soft`}>
-                ✕
-              </button>
-            )}
-          </div>
+              )}
+            </div>
           )}
 
           {/* Náhled vybraného dne. Držet krátce: v doku nad klávesnicí je
