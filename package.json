@@ -10,7 +10,8 @@
     "test": "TZ=Europe/Prague vitest run",
     "typecheck": "tsc",
     "overit:todoist": "node scripts/overit-todoist.mjs",
-    "nahled": "node scripts/nahled.mjs"
+    "nahled": "node scripts/nahled.mjs",
+    "audit:ui": "node scripts/audit-ui.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",

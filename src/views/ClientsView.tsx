@@ -218,7 +218,7 @@ function ProjectsOverview({
   if (active.length === 0 && !adding) {
     // Bez projektů jen nenápadná nabídka — blok si na nic nehraje.
     return (
-      <button onClick={() => setAdding(true)} className="text-sm font-medium text-accent">
+      <button onClick={() => setAdding(true)} className="-my-1.5 py-1.5 text-sm font-medium text-accent">
         + Nový projekt
       </button>
     )
@@ -230,7 +230,7 @@ function ProjectsOverview({
         <h2 className="section-label">rozjeté projekty · {active.length}</h2>
         <button
           onClick={() => setAdding((v) => !v)}
-          className="px-1 text-sm font-medium text-accent"
+          className="-my-1.5 px-1 py-1.5 text-sm font-medium text-accent"
         >
           {adding ? 'Zavřít' : '+ Nový'}
         </button>
@@ -576,7 +576,7 @@ function ClientDetail({
 
   return (
     <div className="space-y-4">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm font-medium text-accent">
+      <button onClick={onBack} className="-my-2 -ml-1 flex items-center gap-1 py-2 pl-1 pr-2 text-sm font-medium text-accent">
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M15 6l-6 6 6 6" />
         </svg>
@@ -852,12 +852,12 @@ function ClientDetail({
               <div className="flex shrink-0 gap-2.5">
                 {/* uzavření projektu — hotová věc nemá zabírat místo */}
                 <button
-                  className="text-xs text-ink-faint/70"
+                  className="-my-2 px-1.5 py-2 text-xs text-ink-faint/70"
                   onClick={() => void updateProject(p.id, { status: 'archived' })}
                 >
                   Uzavřít
                 </button>
-                <button className="text-xs text-ink-faint/70" onClick={() => void delProject(p.id, p.name)}>
+                <button className="-my-2 px-1.5 py-2 text-xs text-ink-faint/70" onClick={() => void delProject(p.id, p.name)}>
                   Smazat
                 </button>
               </div>
@@ -891,16 +891,16 @@ function ClientDetail({
           </button>
         </form>
       ) : (
-        <button onClick={() => setAddingProject(true)} className="text-sm font-medium text-accent">
+        <button onClick={() => setAddingProject(true)} className="-my-1.5 py-1.5 text-sm font-medium text-accent">
           + Nový projekt
         </button>
       )}
 
       <footer className="flex gap-4 border-t border-line pt-4">
-        <button onClick={archiveToggle} className="text-sm font-medium text-ink-soft">
+        <button onClick={archiveToggle} className="-my-2 py-2 text-sm font-medium text-ink-soft">
           {client.status === 'archived' ? 'Obnovit' : 'Archivovat'}
         </button>
-        <button onClick={() => void del()} className="text-sm font-medium text-danger">
+        <button onClick={() => void del()} className="-my-2 py-2 text-sm font-medium text-danger">
           Smazat klienta
         </button>
       </footer>

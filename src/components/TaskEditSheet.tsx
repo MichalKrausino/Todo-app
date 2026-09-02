@@ -34,7 +34,8 @@ import {
 
 const field = 'w-full rounded-lg border border-line bg-card px-3 py-2 text-[16px] outline-none focus:border-accent/60 disabled:bg-well disabled:text-ink-soft'
 const label = 'mb-1 block text-xs font-medium text-ink-soft'
-const dayChip = 'rounded-full px-2 py-0.5 text-[11px] font-medium transition-transform duration-150 active:scale-95'
+// py-1.5: pod třicet pixelů se pilulka na telefonu trefuje mizerně
+const dayChip = 'rounded-full px-3 py-2 text-[11px] font-medium transition-transform duration-150 active:scale-95'
 
 // Rychlé volby pod polem s datem. Dva důvody: nejčastější posun je stejně
 // „dnes / zítra", a hlavně — nativní <input type="date"> na iPhonu nemá
@@ -403,7 +404,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
                     type="button"
                     aria-label={`Smazat podúkol ${s.title}`}
                     onClick={() => persistSubtasks(subtasks.filter((x) => x.id !== s.id))}
-                    className="-m-1 shrink-0 p-1 text-ink-faint transition-transform duration-150 active:scale-90"
+                    className="-m-2 shrink-0 p-2 text-ink-faint transition-transform duration-150 active:scale-90"
                   >
                     <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                       <path d="M6 6l12 12M18 6L6 18" />

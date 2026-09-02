@@ -42,8 +42,10 @@ const QUICK_DAYS: { label: string; day: (today: string) => string }[] = [
 
 const pill = 'shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium transition-transform duration-150 active:scale-95'
 // Jeden tvar pro celou stavovou řádku — sloty i to, co vyčetl parser.
+// py-1.5 drží slot na 32 px — hlavní ovládání zadávání se musí trefovat
+// palcem na první pokus.
 const slotBase =
-  'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium'
+  'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium'
 
 // defaultToToday: na obrazovce Dnes jde úkol bez data na dnešek (scheduledFor)
 // — kdo píše na Dnes, myslí „udělám to dnes". Jinde bez data → inbox.

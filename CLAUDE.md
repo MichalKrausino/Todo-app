@@ -9,6 +9,9 @@ zdůvodnění rozhodnutí a roadmapa fází: **`docs/PLAN.md`** — před větš
 - `npm run build` — typecheck (`tsc`) + produkční build
 - `npm test` — vitest (hlavně parser rychlého zadávání)
 - `npm run typecheck` — jen typecheck
+- `npm run audit:ui` — proměří symetrii a velikost cílů pro prst na všech
+  obrazovkách i v panelech. **Odsazení a mezery posuzuj z něj, ne okem.**
+  Vědomé výjimky jsou v něm vyjmenované i s důvodem.
 - `npm run nahled` — obrázky appky do `.snimky/` (obě schémata, rozměr iPhonu).
   **Vzhled posuzuj z nich, ne odhadem.** Chromium bez GPU vykresluje
   `backdrop-filter` po dlaždicích — sklo doku by vyšlo rozmazané jen v pruhu

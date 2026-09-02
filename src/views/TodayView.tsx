@@ -597,7 +597,7 @@ export function TodayView({
                 <button
                   aria-label="Skrýt tip"
                   onClick={dismissTip}
-                  className="-m-1 shrink-0 p-1 text-accent-deep/70 transition-transform duration-150 active:scale-90"
+                  className="-m-2 shrink-0 p-2 text-accent-deep/70 transition-transform duration-150 active:scale-90"
                 >
                   <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                     <path d="M6 6l12 12M18 6L6 18" />
