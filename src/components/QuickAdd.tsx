@@ -602,6 +602,7 @@ export function QuickAdd({
           ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
+          aria-label="Nový úkol"
           placeholder="Napiš úkol…"
           enterKeyHint="done"
           className="min-w-0 flex-1 appearance-none rounded-full border border-transparent bg-well px-4 py-2.5 text-[16px] text-ink outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus:bg-card focus-visible:outline-none"

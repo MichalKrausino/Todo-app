@@ -19,22 +19,26 @@
   --color-well: #eeedea; /* zapuštěné plochy (inputy, pilulky) */
   --color-line: #e6e4df; /* hairline oddělovače */
   --color-ink: #16161a; /* hlavní text — měkčí než čerň */
-  --color-ink-soft: #6b6b70; /* sekundární text */
-  --color-ink-faint: #a3a2a6; /* terciární text, ikony v klidu */
+  /* Tiché tóny mají zůstat tiché, ale čitelné. Pod 4,5 : 1 je jedenácti-
+     pixelový popisek na slunci k nepřečtení, takže tichost dělá velikost
+     a váha písma, ne mdlá barva. Hodnoty jsou měřené (npm run audit:ui),
+     ne odhadnuté — proto je krok mezi soft a faint menší, než by se čekalo. */
+  --color-ink-soft: #5b5b62; /* sekundární text */
+  --color-ink-faint: #696970; /* terciární text, ikony v klidu */
 
   /* Jediný akcent: klidnější modrá než systémová iOS — méně křiklavá,
      na teplém podkladu sedí líp a nepůsobí jako výchozí nastavení. */
-  --color-accent: #3a6df0;
-  --color-accent-deep: #2b52c4;
+  --color-accent: #3a6df0; /* výplně, ikony, obrysy */
+  --color-accent-deep: #2b52c4; /* akcentní TEXT — accent má na papíře jen 4,2 : 1 */
   --color-accent-wash: #eaf0fe;
 
   /* sémantické tóny (iOS systémová paleta) */
-  --color-danger: #e5372c;
+  --color-danger: #cf2a1f;
   --color-danger-wash: #ffebe9;
   --color-note: #fff3e0; /* oranžový nádech pro tiché signály */
   --color-note-ink: #8f5600;
   --color-amber: #ff9500; /* plná iOS oranžová (heatmapa, akcenty varování) */
-  --color-moss: #248a3d; /* ok / synchronizováno */
+  --color-moss: #1e7a35; /* ok / synchronizováno */
 
   /* Hloubku dělá ostrý hairline, ne rozmazaný stín — kresba zůstane
      čistá i na malém displeji a karta nevypadá „nalepená". */
@@ -64,7 +68,7 @@
   --color-line: #2c2c33;
   --color-ink: #f2f2f4;
   --color-ink-soft: #9a9aa2;
-  --color-ink-faint: #66666e;
+  --color-ink-faint: #8a8a91;
 
   --color-accent: #7397ff;
   --color-accent-deep: #a3bcff;
@@ -764,7 +768,12 @@ body:has(.sheet-backdrop:not(.closing)) .app-shell {
     stroke-dashoffset: 0;
     transition: none;
   }
-  * {
+  /* Pojistka na všechno, co se sem zapomene dopsat. */
+  *,
+  *::before,
+  *::after {
     transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

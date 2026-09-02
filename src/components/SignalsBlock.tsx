@@ -93,7 +93,7 @@ export function SignalsBlock({
           </li>
         ))}
       </ul>
-      {hidden > 0 && <p className="mt-1.5 text-xs text-note-ink/70">…a {hidden} dalších</p>}
+      {hidden > 0 && <p className="mt-1.5 text-xs text-note-ink">…a {hidden} dalších</p>}
     </section>
   )
 }

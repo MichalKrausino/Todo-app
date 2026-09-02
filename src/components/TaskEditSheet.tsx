@@ -219,8 +219,8 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           </p>
         )}
         <div>
-          <label className={label}>Úkol</label>
-          <input className={field} value={title} onChange={(e) => setTitle(e.target.value)} />
+          <label className={label} htmlFor="pole-ukol">Úkol</label>
+          <input id="pole-ukol" className={field} value={title} onChange={(e) => setTitle(e.target.value)} />
           {/* Štítky z Todoistu jsou informace, ne pole k vyplnění —
               appka s nimi nic nedělá, ale schovávat je by bylo divné. */}
           {task.todoistLabels?.length ? (
@@ -236,8 +236,9 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={label}>Klient</label>
+            <label className={label} htmlFor="pole-klient">Klient</label>
             <select
+              id="pole-klient"
               className={field}
               value={clientId}
               disabled={fromTodoist}
@@ -255,8 +256,9 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
             </select>
           </div>
           <div>
-            <label className={label}>Projekt</label>
+            <label className={label} htmlFor="pole-projekt">Projekt</label>
             <select
+              id="pole-projekt"
               className={field}
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
@@ -274,8 +276,9 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={label}>Termín</label>
+            <label className={label} htmlFor="pole-termin">Termín</label>
             <input
+              id="pole-termin"
               type="date"
               className={field}
               value={dueDate}
@@ -284,8 +287,9 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
             <DenChipy value={dueDate} onChange={setDueDate} />
           </div>
           <div>
-            <label className={label}>Naplánováno</label>
+            <label className={label} htmlFor="pole-naplanovano">Naplánováno</label>
             <input
+              id="pole-naplanovano"
               type="date"
               className={field}
               value={scheduledFor}
@@ -324,8 +328,9 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={label}>Priorita</label>
+            <label className={label} htmlFor="pole-priorita">Priorita</label>
             <select
+              id="pole-priorita"
               className={field}
               value={priority}
               onChange={(e) => setPriority(e.target.value as Priority)}
@@ -338,8 +343,8 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
             </select>
           </div>
           <div>
-            <label className={label}>Opakování</label>
-            <select className={field} value={recurrence} onChange={(e) => setRecurrence(e.target.value)}>
+            <label className={label} htmlFor="pole-opakovani">Opakování</label>
+            <select id="pole-opakovani" className={field} value={recurrence} onChange={(e) => setRecurrence(e.target.value)}>
               <option value="none">Neopakuje se</option>
               {(Object.keys(PRESET_LABELS) as RecurrencePreset[]).map((p) => (
                 <option key={p} value={p}>
@@ -418,6 +423,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           <div className="flex gap-1.5">
             <input
               className={`${field} min-w-0 flex-1`}
+              aria-label="Přidat podúkol"
               placeholder="Přidat podúkol…"
               value={newSub}
               enterKeyHint="done"
@@ -444,8 +450,8 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
         </div>
 
         <div>
-          <label className={label}>Poznámky</label>
-          <textarea className={field} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <label className={label} htmlFor="pole-poznamky">Poznámky</label>
+          <textarea id="pole-poznamky" className={field} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
 
         {fromTodoist && (
@@ -453,7 +459,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
             href={`https://app.todoist.com/app/task/${task.todoistId}`}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1.5 text-[13px] font-medium text-accent"
+            className="flex items-center gap-1.5 text-[13px] font-medium text-accent-deep"
           >
             Otevřít v Todoistu
             <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -482,7 +488,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
               const err = await sendTaskToTodoist(task.id)
               setSendState(err ?? 'sent')
             }}
-            className="w-full rounded-lg border border-line px-3 py-2.5 text-left text-sm font-medium text-accent transition-transform duration-150 active:scale-[0.99] disabled:opacity-50"
+            className="w-full rounded-lg border border-line px-3 py-2.5 text-left text-sm font-medium text-accent-deep transition-transform duration-150 active:scale-[0.99] disabled:opacity-50"
           >
             {sendState === 'sending'
               ? 'Posílám…'
@@ -595,6 +601,7 @@ function TodoistTalk({ task }: { task: Task }) {
       <div className="flex gap-1.5">
         <input
           className={`${field} min-w-0 flex-1`}
+          aria-label="Odpověď na komentář"
           placeholder="Odpovědět…"
           value={text}
           enterKeyHint="send"

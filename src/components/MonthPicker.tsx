@@ -137,7 +137,7 @@ export function MonthPicker({
           const cls = selected
             ? 'bg-accent font-semibold text-card'
             : isToday
-              ? 'ring-1 ring-accent font-semibold text-accent'
+              ? 'ring-1 ring-accent font-semibold text-accent-deep'
               : past
                 ? 'text-ink-faint'
                 : 'text-ink'

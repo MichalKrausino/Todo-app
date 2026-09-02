@@ -23,7 +23,13 @@ import { spawn } from 'node:child_process'
 import { mkdir, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
-import { chromium } from 'playwright'
+import { createRequire } from 'node:module'
+
+// playwright-core, ne playwright: samotný balík `playwright` si při instalaci
+// stahuje prohlížeče, což v uzavřeném prostředí neprojde a skript pak spadne
+// na ERR_MODULE_NOT_FOUND. Core má stejné API a prohlížeč mu podstrčíme níž.
+const require = createRequire(import.meta.url)
+const { chromium } = require('playwright-core')
 
 const OUT = '.snimky'
 const PORT = 4319
@@ -62,6 +68,25 @@ const UKOLY = [
 ]
 
 const cekej = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// Softwarový renderer (viz ANGLE/SwiftShader níž) jede pomalu a pevná pauza
+// mu nestačí — snímek pak chytne panel v půlce výjezdu a na obrázku straší
+// druhá patička. Čeká se proto na doběhnutí animací, ne na stopky.
+// `.breathe` běží pořád dokola, ta by se nedočkala nikdy — vynechává se.
+async function klid(page) {
+  await page
+    .waitForFunction(
+      () =>
+        document
+          .getAnimations()
+          .filter((a) => a.playState === 'running')
+          .every((a) => a.effect?.getTiming().iterations === Infinity),
+      null,
+      { timeout: 5000 },
+    )
+    .catch(() => {})
+  await cekej(120)
+}
 
 async function spustPreview() {
   const p = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--host', '127.0.0.1'], {
@@ -149,8 +174,9 @@ try {
     if (!has('prazdne')) await zaloz(page)
 
     for (const s of obrazovky) {
-      await page.click(`button:has-text("${s.tab}")`)
+      await page.getByRole('button', { name: s.tab, exact: true }).click()
       await cekej(700)
+      await klid(page)
       const soubor = path.join(OUT, `${s.id}-${rezim}.png`)
       await page.screenshot({ path: soubor })
       console.log(soubor)
@@ -169,6 +195,7 @@ try {
           if (sc) sc.scrollTop = Math.round((sc.scrollHeight - sc.clientHeight) * 0.45)
         })
         await cekej(600)
+        await klid(page)
         const box = await (await page.$('.dock')).boundingBox()
         const detail = path.join(OUT, `dok-${rezim}.png`)
         await page.screenshot({
@@ -181,12 +208,13 @@ try {
     }
     // Sheety: půlka appky bydlí v nich, takže bez nich je audit slepý.
     if (!arg('jen') && !has('prazdne')) {
-      await page.click(`button:has-text("Dnes")`)
+      await page.getByRole('button', { name: 'Dnes', exact: true }).click()
       await cekej(600)
       const prvni = page.locator('main button').filter({ hasText: 'poslat report' }).first()
       if (await prvni.count()) {
         await prvni.click()
         await cekej(700)
+        await klid(page)
         await page.screenshot({ path: path.join(OUT, `sheet-detail-${rezim}.png`) })
         console.log(path.join(OUT, `sheet-detail-${rezim}.png`))
         pocet++
@@ -198,6 +226,7 @@ try {
         if (!(await b.count())) continue
         await b.click()
         await cekej(700)
+        await klid(page)
         await page.screenshot({ path: path.join(OUT, `sheet-${jmeno}-${rezim}.png`) })
         console.log(path.join(OUT, `sheet-${jmeno}-${rezim}.png`))
         pocet++

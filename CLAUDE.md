@@ -9,15 +9,30 @@ zdůvodnění rozhodnutí a roadmapa fází: **`docs/PLAN.md`** — před větš
 - `npm run build` — typecheck (`tsc`) + produkční build
 - `npm test` — vitest (hlavně parser rychlého zadávání)
 - `npm run typecheck` — jen typecheck
-- `npm run audit:ui` — proměří symetrii, hrany prvků nad sebou a velikost
-  cílů pro prst na všech obrazovkách i v panelech. **Odsazení a mezery
-  posuzuj z něj, ne okem.** Vodorovně scrollující řádky smí přetékat
-  k okraji zápornou marží; audit u nich porovnává hranu obsahu. Vědomé
+- `npm run audit:ui` — proměří symetrii, hrany prvků nad sebou, velikost
+  cílů pro prst, přístupné názvy polí a **kontrast textu** (WCAG AA) na
+  všech obrazovkách i v panelech, ve světlém i tmavém režimu.
+  **Odsazení, mezery i barvy posuzuj z něj, ne okem.** Šířku bere
+  `--sirka=320` (iPhone SE) / `390` / `430` — na úzkém displeji se rozsype
+  to, co na širokém projde, takže před commitem projeď aspoň 320 a 390.
+  Barvy se čtou z plátna, ne z řetězce: Tailwind zapisuje průhlednost přes
+  `color-mix()` a poloprůhledný text se měří podložený, tak jak ho oko vidí.
+  Vodorovně scrollující řádky smí přetékat k okraji zápornou marží; audit
+  u nich porovnává hranu obsahu. Řádkové (`display: inline`) boxy se
+  neměří — jsou široké jako text, ne jako místo, které dostaly. Vědomé
   výjimky jsou v něm vyjmenované i s důvodem.
+- `npm run audit:chovani` — co pravítkem nezměříš: klidový režim
+  (`prefers-reduced-motion`) musí zastavit **všechno**, běžný režim naopak
+  animovat, a appka musí přežít proklikání (založení úkolu, odškrtnutí,
+  přepnutí obrazovek, panely, uložení detailu, znovunačtení z IndexedDB).
+  Chce hotový `npm run build`.
 - `npm run nahled` — obrázky appky do `.snimky/` (obě schémata, rozměr iPhonu).
   **Vzhled posuzuj z nich, ne odhadem.** Chromium bez GPU vykresluje
   `backdrop-filter` po dlaždicích — sklo doku by vyšlo rozmazané jen v pruhu
-  uprostřed, proto skript vynucuje softwarový ANGLE/SwiftShader.
+  uprostřed, proto skript vynucuje softwarový ANGLE/SwiftShader. Ten je ale
+  pomalý, takže se před každým snímkem čeká na doběhnutí animací
+  (`document.getAnimations()`), ne na stopky — jinak snímek chytne panel
+  v půlce výjezdu a straší na něm druhá patička.
 
 ## Architektonická pravidla (neporušovat)
 
@@ -74,6 +89,13 @@ Tokeny v `src/index.css` (Tailwind v4 `@theme`) — **používat výhradně je**
 `ink`/`ink-soft`/`ink-faint`, jediný akcent `accent` (klidná modrá
 `#3a6df0`, ne systémová iOS) + `accent-deep`/`accent-wash`, sémantické
 `danger`, `note`/`note-ink` (signály), `amber`, `moss` (ok).
+
+**Akcent v textu je `accent-deep`, ne `accent`.** Samotný `accent` má na
+papíře 4,2 : 1 — na výplň a ikonu (práh 3 : 1) to stačí, na písmo ne.
+Ze stejného důvodu se **tichost nedělá průhledností**: `text-ink-faint/70`
+vypadá jako jemný odstín, ale změřeně je to 2,8 : 1. Tón dělá token,
+tichost velikost a váha písma. Prahy hlídá `npm run audit:ui` v obou
+režimech — když se přidává barva nebo se s ní píše text, projeď ho.
 
 **Plný tmavý režim**: řídí ho atribut `data-theme` na `<html>`, ne
 `prefers-color-scheme` — v `index.css` není jediný takový dotaz. Volbu

@@ -218,7 +218,7 @@ function ProjectsOverview({
   if (active.length === 0 && !adding) {
     // Bez projektů jen nenápadná nabídka — blok si na nic nehraje.
     return (
-      <button onClick={() => setAdding(true)} className="-my-1.5 py-1.5 text-sm font-medium text-accent">
+      <button onClick={() => setAdding(true)} className="-my-1.5 py-1.5 text-sm font-medium text-accent-deep">
         + Nový projekt
       </button>
     )
@@ -230,7 +230,7 @@ function ProjectsOverview({
         <h2 className="section-label">rozjeté projekty · {active.length}</h2>
         <button
           onClick={() => setAdding((v) => !v)}
-          className="-my-1.5 px-1 py-1.5 text-sm font-medium text-accent"
+          className="-my-1.5 px-1 py-1.5 text-sm font-medium text-accent-deep"
         >
           {adding ? 'Zavřít' : '+ Nový'}
         </button>
@@ -576,7 +576,7 @@ function ClientDetail({
 
   return (
     <div className="space-y-4">
-      <button onClick={onBack} className="-my-2 -ml-1 flex items-center gap-1 py-2 pl-1 pr-2 text-sm font-medium text-accent">
+      <button onClick={onBack} className="-my-2 -ml-1 flex items-center gap-1 py-2 pl-1 pr-2 text-sm font-medium text-accent-deep">
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M15 6l-6 6 6 6" />
         </svg>
@@ -673,6 +673,7 @@ function ClientDetail({
         <input
           value={taskText}
           onChange={(e) => setTaskText(e.target.value)}
+          aria-label="Nový úkol pro klienta"
           placeholder="Nový úkol (např. „zítra kontrola kampaní“)"
           className="min-w-0 flex-1 rounded-lg border border-line bg-card px-3 py-2 text-[15px] outline-none focus:border-accent/60"
         />
@@ -852,12 +853,12 @@ function ClientDetail({
               <div className="flex shrink-0 gap-2.5">
                 {/* uzavření projektu — hotová věc nemá zabírat místo */}
                 <button
-                  className="-my-2 px-1.5 py-2 text-xs text-ink-faint/70"
+                  className="-my-2 px-1.5 py-2 text-xs text-ink-faint"
                   onClick={() => void updateProject(p.id, { status: 'archived' })}
                 >
                   Uzavřít
                 </button>
-                <button className="-my-2 px-1.5 py-2 text-xs text-ink-faint/70" onClick={() => void delProject(p.id, p.name)}>
+                <button className="-my-2 px-1.5 py-2 text-xs text-ink-faint" onClick={() => void delProject(p.id, p.name)}>
                   Smazat
                 </button>
               </div>
@@ -891,7 +892,7 @@ function ClientDetail({
           </button>
         </form>
       ) : (
-        <button onClick={() => setAddingProject(true)} className="-my-1.5 py-1.5 text-sm font-medium text-accent">
+        <button onClick={() => setAddingProject(true)} className="-my-1.5 py-1.5 text-sm font-medium text-accent-deep">
           + Nový projekt
         </button>
       )}

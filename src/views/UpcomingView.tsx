@@ -149,7 +149,7 @@ export function UpcomingView({
             className="flex w-12 shrink-0 flex-col items-center gap-1 rounded-xl bg-well px-1 py-1.5 transition-transform duration-150 active:scale-95"
           >
             <span className="text-[10px] font-medium text-ink-faint">dnes</span>
-            <span className="text-[15px] font-semibold text-accent tabular-nums">
+            <span className="text-[15px] font-semibold text-accent-deep tabular-nums">
               {fromISODate(today).getDate()}
             </span>
             <span className={`h-1 w-6 rounded-full ${loadClass(todayCount)}`} />

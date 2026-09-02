@@ -308,7 +308,7 @@ export function TaskRow({
                 </span>
               )}
               {task.todoistUnread && (
-                <span className="inline-flex items-center gap-1 font-medium text-accent" title="Nový komentář">
+                <span className="inline-flex items-center gap-1 font-medium text-accent-deep" title="Nový komentář">
                   <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z" />
                   </svg>

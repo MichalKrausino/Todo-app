@@ -11,7 +11,8 @@
     "typecheck": "tsc",
     "overit:todoist": "node scripts/overit-todoist.mjs",
     "nahled": "node scripts/nahled.mjs",
-    "audit:ui": "node scripts/audit-ui.mjs"
+    "audit:ui": "node scripts/audit-ui.mjs",
+    "audit:chovani": "node scripts/audit-chovani.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",
@@ -28,7 +29,7 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "fake-indexeddb": "^6.2.5",
-    "playwright": "^1.56.0",
+    "playwright-core": "^1.56.0",
     "tailwindcss": "^4.1.11",
     "typescript": "^5.8.3",
     "vite": "^7.0.0",

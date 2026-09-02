@@ -253,13 +253,13 @@ function BackupSection() {
         </div>
         <button
           onClick={() => void download()}
-          className="block w-full px-3 py-2.5 text-left text-sm font-medium text-accent transition-colors duration-150 active:bg-line/40"
+          className="block w-full px-3 py-2.5 text-left text-sm font-medium text-accent-deep transition-colors duration-150 active:bg-line/40"
         >
           Stáhnout zálohu (JSON)
         </button>
         <button
           onClick={() => fileRef.current?.click()}
-          className="block w-full px-3 py-2.5 text-left text-sm font-medium text-accent transition-colors duration-150 active:bg-line/40"
+          className="block w-full px-3 py-2.5 text-left text-sm font-medium text-accent-deep transition-colors duration-150 active:bg-line/40"
         >
           Obnovit ze zálohy…
         </button>
@@ -349,7 +349,7 @@ function CalendarSection() {
         <div className="space-y-1 rounded-2xl bg-danger-wash px-3 py-2 text-xs text-danger">
           <div className="font-medium">{cal.lastError}</div>
           {calendarHint(cal.lastError) && (
-            <div className="text-danger/80">{calendarHint(cal.lastError)}</div>
+            <div className="text-danger">{calendarHint(cal.lastError)}</div>
           )}
         </div>
       )}
@@ -529,10 +529,10 @@ function SignInForm() {
 }
 
 const PHASE_COLORS: Record<SyncPhase, string> = {
-  unconfigured: 'text-ink-faint/70',
+  unconfigured: 'text-ink-faint',
   signedOut: 'text-ink-faint',
   idle: 'text-moss',
-  syncing: 'text-accent',
+  syncing: 'text-accent-deep',
   offline: 'text-note-ink',
   error: 'text-danger',
 }

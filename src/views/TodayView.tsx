@@ -430,7 +430,7 @@ export function TodayView({
                       {/* blok z appky je zástupce úkolu → ťuknutím se otevře */}
                       {task ? (
                         <button
-                          className="min-w-0 flex-1 truncate text-left text-[15px] transition-colors duration-150 active:text-accent"
+                          className="min-w-0 flex-1 truncate text-left text-[15px] transition-colors duration-150 active:text-accent-deep"
                           onClick={() => onOpenTask(task)}
                         >
                           <span className={task.status === 'done' ? 'text-ink-faint line-through' : ''}>
@@ -515,7 +515,7 @@ export function TodayView({
                 <li>
                   <button
                     onClick={() => setAllEvents(true)}
-                    className="w-full px-4 py-2 text-left text-[13px] font-medium text-accent transition-colors duration-150 active:bg-well/60"
+                    className="w-full px-4 py-2 text-left text-[13px] font-medium text-accent-deep transition-colors duration-150 active:bg-well/60"
                   >
                     …a další {hidden} {hidden === 1 ? 'schůzka' : hidden < 5 ? 'schůzky' : 'schůzek'}
                   </button>
@@ -647,7 +647,7 @@ export function TodayView({
 
               <button
                 onClick={() => setHelpOpen(true)}
-                className="mt-4 text-[13px] font-medium text-accent transition-transform duration-150 active:scale-95"
+                className="mt-4 text-[13px] font-medium text-accent-deep transition-transform duration-150 active:scale-95"
               >
                 Jak to funguje
               </button>

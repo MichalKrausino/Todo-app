@@ -10,8 +10,13 @@ const T={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'
 const server=http.createServer((q,r)=>{let p=decodeURIComponent(q.url.split('?')[0]).replace(/^\/Todo-app/,'');if(p===''||p==='/')p='/index.html';const f=path.join(ROOT,p);if(!fs.existsSync(f)||fs.statSync(f).isDirectory()){r.writeHead(200,{'Content-Type':'text/html'});return r.end(fs.readFileSync(path.join(ROOT,'index.html')))}r.writeHead(200,{'Content-Type':T[path.extname(f)]??'application/octet-stream'});r.end(fs.readFileSync(f))})
 await new Promise(r=>server.listen(4192,r))
 const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'})
-const page=await b.newPage({viewport:{width:390,height:844}})
-page.on('pageerror', e => console.log('PAGEERROR', e.message))
+// Šířka jde nastavit z příkazové řádky: --sirka=320 je iPhone SE, na němž
+// se rozsype to, co na 390 ještě projde. Bez ní se měří 390 (iPhone 15).
+const SIRKA = Number(process.argv.find((a) => a.startsWith('--sirka='))?.split('=')[1] ?? 390)
+const page=await b.newPage({viewport:{width:SIRKA,height:844}})
+const konzole = []
+page.on('pageerror', (e) => konzole.push('vyjimka: ' + e.message.split('\n')[0]))
+page.on('console', (m) => { if (m.type() === 'error') konzole.push('console.error: ' + m.text().slice(0, 120)) })
 await page.goto('http://localhost:4192/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(500)
 
 // --- data, ať je co měřit ---
@@ -45,15 +50,16 @@ await page.evaluate(async () => {
 })
 await page.reload({ waitUntil: 'networkidle' }); await page.waitForTimeout(700)
 
-const W = 390
 const nalezy = []
 
 // Tři měření, každé na jinou vadu:
 //  A) prvek, který má vyplnit rodiče, má vlevo i vpravo stejnou mezeru
 //  B) sekce na obrazovce mají všechny stejný okraj stránky
 //  C) nic nepřetéká do stran
-async function zmer(kde, root = 'main') {
-  const rows = await page.evaluate(({ root }) => {
+// V tmavém režimu se geometrie neměří znovu — je stejná. Projde se jen
+// kontrast, protože tmavá paleta má vlastní hodnoty a vlastní podklady.
+async function zmer(kde, root = 'main', jenKontrast = false) {
+  const rows = await page.evaluate(({ root, jenKontrast, sirka }) => {
     const out = []
     const oblast = document.querySelector(root)
     if (!oblast) return out
@@ -67,20 +73,24 @@ async function zmer(kde, root = 'main') {
       return s.display !== 'none' && s.visibility !== 'hidden' && el.getBoundingClientRect().height > 4
     }
 
-    for (const el of oblast.querySelectorAll('*')) {
+    for (const el of jenKontrast ? [] : oblast.querySelectorAll('*')) {
       if (!videt(el)) continue
       const rodic = el.parentElement
       if (!rodic || rodic === oblast) continue
       const rs = getComputedStyle(rodic)
       if (rs.display.includes('flex') || rs.display.includes('grid')) continue
-      if (getComputedStyle(el).position === 'absolute') continue
+      const es = getComputedStyle(el)
+      if (es.position === 'absolute') continue
+      // Řádkový box je široký jako jeho text, ne jako místo, které dostal —
+      // u kratší věty vyjde „mezera vpravo", která na obrazovce není vidět.
+      if (es.display === 'inline') continue
       const r = el.getBoundingClientRect(), p = rodic.getBoundingClientRect()
       if (p.width === 0 || r.width < p.width * 0.7) continue
       const vlevo = Math.round(r.left - p.left), vpravo = Math.round(p.right - r.right)
       if (Math.abs(vlevo - vpravo) > 1) out.push({ typ: 'v ramecku', popis: popis(el), vlevo, vpravo })
     }
 
-    for (const el of oblast.querySelectorAll('button, a')) {
+    for (const el of jenKontrast ? [] : oblast.querySelectorAll('button, a')) {
       if (!videt(el)) continue
       const s2 = getComputedStyle(el)
       const r = el.getBoundingClientRect()
@@ -105,14 +115,16 @@ async function zmer(kde, root = 'main') {
     //    nesymetrie, kterou oko chytne jako první: panel odsazený jinak
     //    než řádka pod ním. Měření vůči rodiči ji neodhalí, protože každý
     //    prvek je ve svém rodiči vycentrovaný správně.
-    for (const rodic of oblast.querySelectorAll('*')) {
+    for (const rodic of jenKontrast ? [] : oblast.querySelectorAll('*')) {
       const rs2 = getComputedStyle(rodic)
       if (rs2.display.includes('flex') || rs2.display.includes('grid')) continue
       const p = rodic.getBoundingClientRect()
       if (p.width < 120) continue
       const deti = [...rodic.children].filter((c) => {
         if (!videt(c)) return false
-        if (getComputedStyle(c).position === 'absolute') return false
+        const cs2 = getComputedStyle(c)
+        if (cs2.position === 'absolute') return false
+        if (cs2.display === 'inline') return false
         const r = c.getBoundingClientRect()
         return r.width > p.width * 0.5
       })
@@ -137,12 +149,74 @@ async function zmer(kde, root = 'main') {
       }
     }
 
+    // H) Ovládací prvek musí mít název, který přečte odečítač.
+    for (const el of jenKontrast ? [] : oblast.querySelectorAll('button, a, input, select, textarea')) {
+      if (!videt(el)) continue
+      const jmeno = (el.getAttribute('aria-label') || el.getAttribute('title') ||
+        (el.textContent || '').trim() ||
+        (el.labels && el.labels.length ? el.labels[0].textContent : '') || '').trim()
+      if (!jmeno) out.push({ typ: 'bez nazvu', popis: popis(el), vlevo: 0, vpravo: 0 })
+    }
+
+    // I) Kontrast textu vůči skutečnému podkladu (WCAG AA: 4.5, velké 3).
+    //    Barvy se nečtou z řetězce: Tailwind zapisuje průhlednost přes
+    //    color-mix() a prohlížeč ji vrací jako oklab(), z něhož by regulární
+    //    výraz vytáhl čísla v úplně jiném rozsahu. Plátno to vykreslí a
+    //    přečte se skutečný pixel — a rovnou i podložený, takže poloprů-
+    //    hledný text se změří tak, jak ho oko vidí.
+    const platno = document.createElement('canvas').getContext('2d', { willReadFrequently: true })
+    const naRGB = (css, pod) => {
+      platno.clearRect(0, 0, 1, 1)
+      if (pod) { platno.fillStyle = 'rgb(' + pod.join(',') + ')'; platno.fillRect(0, 0, 1, 1) }
+      platno.fillStyle = '#000'
+      platno.fillStyle = css
+      platno.fillRect(0, 0, 1, 1)
+      const d = platno.getImageData(0, 0, 1, 1).data
+      return [d[0], d[1], d[2], d[3] / 255]
+    }
+    const kanal = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
+    const jas = (c) => { const [r, g, b] = c; return 0.2126 * kanal(r) + 0.7152 * kanal(g) + 0.0722 * kanal(b) }
+    const podklad = (el) => {
+      const vrstvy = []
+      let n = el
+      while (n && n !== document.documentElement) {
+        const c = naRGB(getComputedStyle(n).backgroundColor)
+        if (c[3] > 0.99) {
+          // od nejspodnější neprůhledné plochy nahoru se poloprůhledné
+          // vrstvy nad ní postupně podloží
+          let v = [c[0], c[1], c[2]]
+          for (let i = vrstvy.length - 1; i >= 0; i--) v = naRGB(vrstvy[i], v)
+          return [v[0], v[1], v[2]]
+        }
+        if (c[3] > 0.01) vrstvy.push(getComputedStyle(n).backgroundColor)
+        n = n.parentElement
+      }
+      return [255, 255, 255]
+    }
+    for (const el of oblast.querySelectorAll('*')) {
+      if (!videt(el)) continue
+      if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue
+      const cs = getComputedStyle(el)
+      const pod = podklad(el)
+      const barva = naRGB(cs.color, pod)
+      if (barva[3] < 0.05) continue
+      const velikost = parseFloat(cs.fontSize)
+      const tucne = parseInt(cs.fontWeight, 10) >= 600
+      const velky = velikost >= 24 || (velikost >= 18.66 && tucne)
+      const l1 = jas(barva), l2 = jas(pod)
+      const pomer = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05)
+      const min = velky ? 3 : 4.5
+      if (pomer < min - 0.05) {
+        out.push({ typ: 'kontrast', popis: popis(el) + '  ' + pomer.toFixed(2) + ':1 (min ' + min + ', ' + Math.round(velikost) + 'px)', vlevo: 0, vpravo: 0 })
+      }
+    }
+
     const okraje = new Map()
-    const sekce = oblast.children[0] ? oblast.children[0].children : []
+    const sekce = jenKontrast || !oblast.children[0] ? [] : oblast.children[0].children
     for (const el of sekce) {
       if (!videt(el)) continue
       const r = el.getBoundingClientRect()
-      const klic = Math.round(r.left) + '/' + Math.round(390 - r.right)
+      const klic = Math.round(r.left) + '/' + Math.round(sirka - r.right)
       okraje.set(klic, [...(okraje.get(klic) || []), popis(el)])
     }
     if (okraje.size > 1) {
@@ -151,7 +225,7 @@ async function zmer(kde, root = 'main') {
       }
     }
     return out
-  }, { root })
+  }, { root, jenKontrast, sirka: SIRKA })
   for (const r of rows) nalezy.push({ kde, ...r })
 }
 
@@ -171,14 +245,7 @@ const obrazovky = [
   ['Klienti', async () => { await page.getByRole('button', { name: 'Klienti' }).click(); await page.waitForTimeout(500) }],
   ['Detail klienta', async () => { await page.getByText('V Bílém').first().click(); await page.waitForTimeout(500) }],
 ]
-for (const [kde, jdi] of obrazovky) {
-  await jdi()
-  await zmer(kde, 'main')
-  await sirka(kde)
-}
 
-// panely
-await page.getByRole('button', { name: 'Dnes' }).click(); await page.waitForTimeout(400)
 const otevriNastaveni = () => page.getByRole('button', { name: /synchronizace|sync|nastaven/i }).first().click()
 const panely = [
   ['Nastaveni', async () => { await otevriNastaveni() }, 1],
@@ -188,22 +255,43 @@ const panely = [
   ['Detail ukolu', async () => { await page.getByText('Zavolat Ondrovi').first().click() }, 1],
   ['Sablony', async () => { await page.getByRole('button', { name: 'Klienti' }).click(); await page.waitForTimeout(450); await page.getByRole('button', { name: /Šablony/ }).click() }, 1],
 ]
-for (const [kde, otevri, kolikZavrit] of panely) {
-  try {
-    await otevri(); await page.waitForTimeout(600)
-    await zmer(kde, '.sheet-panel')
-    for (let i = 0; i < kolikZavrit; i++) { await page.keyboard.press('Escape'); await page.waitForTimeout(400) }
-  } catch (e) { nalezy.push({ kde, typ: 'chyba', popis: 'neslo otevrit: ' + e.message.split('\n')[0], vlevo: 0, vpravo: 0 }) }
+// Celý průchod se pouští dvakrát: světlá paleta se měří celá, tmavá jen
+// na kontrast. Tmavý režim má vlastní hodnoty tokenů a vlastní podklady,
+// takže se v něm dá pokazit čitelnost, aniž by se ve světlém cokoli hnulo.
+async function projdi(znacka, jenKontrast) {
+  const jmeno = (kde) => (znacka ? znacka + ' ' + kde : kde)
   await page.getByRole('button', { name: 'Dnes' }).click(); await page.waitForTimeout(400)
+  for (const [kde, jdi] of obrazovky) {
+    await jdi()
+    await zmer(jmeno(kde), 'main', jenKontrast)
+    if (!jenKontrast) await sirka(jmeno(kde))
+  }
+  await page.getByRole('button', { name: 'Dnes' }).click(); await page.waitForTimeout(400)
+  for (const [kde, otevri, kolikZavrit] of panely) {
+    try {
+      await otevri(); await page.waitForTimeout(600)
+      await zmer(jmeno(kde), '.sheet-panel', jenKontrast)
+      for (let i = 0; i < kolikZavrit; i++) { await page.keyboard.press('Escape'); await page.waitForTimeout(400) }
+    } catch (e) { nalezy.push({ kde: jmeno(kde), typ: 'chyba', popis: 'neslo otevrit: ' + e.message.split('\n')[0], vlevo: 0, vpravo: 0 }) }
+    await page.getByRole('button', { name: 'Dnes' }).click(); await page.waitForTimeout(400)
+  }
+  await page.getByRole('button', { name: 'Nový úkol' }).click(); await page.waitForTimeout(400)
+  await zmer(jmeno('Dok'), 'footer', jenKontrast)
+  await page.keyboard.press('Escape'); await page.waitForTimeout(300)
 }
 
-// dok zvlášť
-await page.getByRole('button', { name: 'Nový úkol' }).click(); await page.waitForTimeout(400)
-await zmer('Dok', 'footer')
+await projdi('', false)
+await page.evaluate(() => {
+  localStorage.setItem('todo.theme', 'dark')
+  document.documentElement.dataset.theme = 'dark'
+})
+await page.waitForTimeout(400)
+await projdi('[tma]', true)
 
 // Vědomé výjimky: hlavička detailu klienta se uhýbá plovoucím ikonám
 // vpravo nahoře (header má pr-24), aby jméno neběželo pod lupu a obláček.
 const povoleno = (n) => n.kde === 'Detail klienta' && n.typ === 'v ramecku' && n.vpravo === 96
+for (const k of konzole) nalezy.push({ kde: 'Konzole', typ: 'konzole', popis: k, vlevo: 0, vpravo: 0 })
 const zbyva = nalezy.filter((n) => !povoleno(n))
 console.log(zbyva.length === 0 ? 'Vse symetricke a na prst dost velke.' : 'Nalezy (' + zbyva.length + '):')
 nalezy.length = 0
@@ -212,7 +300,10 @@ const podle = {}
 for (const n of nalezy) (podle[n.kde] ??= []).push(n)
 for (const [kde, list] of Object.entries(podle)) {
   console.log(`\n— ${kde}`)
-  for (const n of list) console.log('   ' + (n.typ === 'okraj sekce' || n.typ === 'hrany nad sebou' ? n.typ.padEnd(10) : String(n.vlevo).padStart(3) + ' /' + String(n.vpravo).padStart(4) + '  ') + ' ' + n.popis)
+  for (const n of list) {
+    const cislo = n.typ === 'maly cil' || n.typ === 'kulate' || n.typ === 'v ramecku' || n.typ === 'odsazeni'
+    console.log('   ' + (cislo ? String(n.vlevo).padStart(3) + ' /' + String(n.vpravo).padStart(4) + ' ' : n.typ.padEnd(16)) + ' ' + n.popis)
+  }
 }
 await b.close(); server.close()
 
