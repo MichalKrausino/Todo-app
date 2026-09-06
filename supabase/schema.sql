@@ -7,6 +7,12 @@
 --
 -- Konflikty řeší last-write-wins podle updated_at: trigger lww_guard tiše
 -- zahodí update se starším časem, takže klient může bezpečně upsertovat.
+--
+-- POZOR: sdílení (Fáze 9, supabase/shares.sql) tenhle soubor přebíjí —
+-- nahrazuje policy „vlastni radky" na clients/projects/tasks za širší
+-- „vlastni a sdilene" a doplňuje lww_guard o zámek vlastnictví. Když
+-- spustíš schema.sql znovu, pusť po něm i shares.sql, ať se sdílení
+-- nevrátí do stavu „nikdo nikam nevidí".
 
 create or replace function public.lww_guard()
 returns trigger

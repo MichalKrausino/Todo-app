@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { ClientSharing } from '../components/ClientSharing'
 import type { Client, ClientKind, Task } from '../db/types'
 import {
   activeClients,
@@ -923,6 +924,8 @@ function ClientDetail({
         </div>
       </section>
       </section>
+
+      <ClientSharing clientId={client.id} />
 
       <footer className="flex gap-4 border-t border-line pt-4">
         <button onClick={archiveToggle} className="text-sm font-medium text-ink-soft">
