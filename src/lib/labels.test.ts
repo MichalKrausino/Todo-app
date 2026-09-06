@@ -1,7 +1,7 @@
 // Barva klienta je štítek v seznamu úkolů — když se opakuje, přestane
 // rozlišovat. Proto se hlídá, že nový klient dostane volnou.
 import { describe, expect, it } from 'vitest'
-import { CLIENT_COLORS, firstFreeColor, plural } from './labels'
+import { CLIENT_COLORS, COLOR_NAMES, firstFreeColor, plural } from './labels'
 
 describe('firstFreeColor', () => {
   it('prvnímu klientovi dá klidnou modrou, ne červenou od poplachu', () => {
@@ -50,5 +50,12 @@ describe('plural', () => {
   it('nepodloží se zápornou hodnotou ani desetinným číslem', () => {
     expect(u(-1)).toBe('-1 úkol')
     expect(plural(2.4, 'a', 'b', 'c')).toBe('b')
+  })
+})
+
+describe('COLOR_NAMES', () => {
+  // Odečítač čte název, ne hex. Nová barva bez názvu by se ohlásila prázdnem.
+  it('každá barva palety má český název', () => {
+    for (const c of CLIENT_COLORS) expect(COLOR_NAMES[c]).toBeTruthy()
   })
 })

@@ -23,19 +23,24 @@ export const plural = (n: number, one: string, few: string, many: string): strin
   return many
 }
 
-// Systémová paleta iOS — barvy štítků klientů.
-export const CLIENT_COLORS = [
-  '#FF3B30', // červená
-  '#FF9500', // oranžová
-  '#FFCC00', // žlutá
-  '#34C759', // zelená
-  '#00C7BE', // mátová
-  '#30B0C7', // tyrkysová
-  '#007AFF', // modrá
-  '#5856D6', // indigo
-  '#AF52DE', // fialová
-  '#FF2D55', // růžová
-]
+// Systémová paleta iOS — barvy štítků klientů. Název je u barvy proto, že
+// odečítači je hex k ničemu: „Barva #FF3B30" mu neřekne nic, „červená" ano.
+// Drží se v jednom seznamu, aby nešlo přidat barvu a zapomenout na název.
+const PALETA = [
+  ['#FF3B30', 'červená'],
+  ['#FF9500', 'oranžová'],
+  ['#FFCC00', 'žlutá'],
+  ['#34C759', 'zelená'],
+  ['#00C7BE', 'mátová'],
+  ['#30B0C7', 'tyrkysová'],
+  ['#007AFF', 'modrá'],
+  ['#5856D6', 'indigo'],
+  ['#AF52DE', 'fialová'],
+  ['#FF2D55', 'růžová'],
+] as const
+
+export const CLIENT_COLORS: string[] = PALETA.map(([hex]) => hex)
+export const COLOR_NAMES: Record<string, string> = Object.fromEntries(PALETA)
 
 // Pořadí, v jakém se barvy samy rozdávají. Není to pořadí palety: červená
 // je v appce barva poplachu (propadlý termín), tak ji nedostane hned první

@@ -243,7 +243,21 @@ const obrazovky = [
   ['Dnes', async () => {}],
   ['Plán', async () => { await page.getByRole('button', { name: 'Plán' }).click(); await page.waitForTimeout(500) }],
   ['Klienti', async () => { await page.getByRole('button', { name: 'Klienti' }).click(); await page.waitForTimeout(500) }],
-  ['Detail klienta', async () => { await page.getByText('V Bílém').first().click(); await page.waitForTimeout(500) }],
+  // Zakládání klienta se dlouho neměřilo, a přitom je to formulář s nejvíc
+  // prvky. Paleta barev se schválně otevírá — schovaná by se nezměřila.
+  ['Novy klient', async () => {
+    await page.getByRole('button', { name: '+ Nový' }).first().click(); await page.waitForTimeout(450)
+    await page.getByRole('button', { name: /^Barva klienta:/ }).click(); await page.waitForTimeout(450)
+  }],
+  ['Detail klienta', async () => {
+    const zavrit = page.getByRole('button', { name: 'Zavřít' }).first()
+    if (await zavrit.count()) { await zavrit.click(); await page.waitForTimeout(400) }
+    await page.getByText('V Bílém').first().click(); await page.waitForTimeout(500)
+  }],
+  // Přejmenování klienta: druhé místo, kde se vybírá barva.
+  ['Prejmenovani', async () => {
+    await page.locator('header button').first().click(); await page.waitForTimeout(500)
+  }],
 ]
 
 const otevriNastaveni = () => page.getByRole('button', { name: /synchronizace|sync|nastaven/i }).first().click()
