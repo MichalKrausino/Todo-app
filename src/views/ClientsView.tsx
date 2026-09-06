@@ -865,7 +865,7 @@ function ClientDetail({
           </button>
         </form>
       ) : (
-        <button onClick={() => setAddingProject(true)} className="-my-1.5 py-1.5 text-sm font-medium text-accent-deep">
+        <button onClick={() => setAddingProject(true)} className="py-1.5 text-sm font-medium text-accent-deep">
           {projects.length === 0 ? '+ Rozdělit práci do projektu' : '+ Nový projekt'}
         </button>
       )}
