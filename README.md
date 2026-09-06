@@ -114,6 +114,27 @@ Sdílení může zrušit zakladatel klienta (odebere kohokoli), nebo přizvaný
 sám za sebe (**Odejít**). Komu se sdílení vezme, tomu se klientova data
 smažou z jeho zařízení — na serveru zůstávají nedotčená u zakladatele.
 
+V seznamu klientů je u sdílených „· sdíleno“, ať je od pohledu poznat,
+co je společná práce a co jen tvoje.
+
+### Offline
+
+Sdílení nic nemění na tom, že appka je offline-first. Kdo je bez signálu,
+píše dál do svého zařízení a odesílá se to, jakmile je síť — v metru,
+v letadle i s vybitou wifi.
+
+- **Odesílá se podle verzí, ne podle času.** Appka si vede evidenci, co už
+  na serveru je a v jaké verzi, a posílá všechno, co se od ní liší.
+  Rozcházející se hodiny dvou telefonů tak nemají jak změnu ztratit.
+- **Kdo upraví tentýž úkol,** vyhrává pozdější zápis (podle `updatedAt`).
+  U odškrtávání a psaní poznámek to je to, co člověk čeká.
+- **Záznam, který server odmítne,** nezastaví odesílání ostatních. Kolik
+  jich bylo, ukazuje panel synchronizace — odmítnutá změna se nemá tvářit
+  jako uložená.
+- **Jednou za den se uklidí,** co lokálně leží, ale server už to nezná
+  (typicky úkol, který majitel přesunul jinam). Nikdy se nezahazuje to,
+  co ještě čeká na odeslání.
+
 ## Todoist (Fáze 8) — jednorázové nastavení
 
 Sdílené projekty, do kterých mě klienti přidali, se dají natáhnout do appky

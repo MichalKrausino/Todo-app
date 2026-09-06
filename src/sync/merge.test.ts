@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyPull, maxUpdatedAt, pendingPush, type PulledRow, type Syncable } from './merge'
+import { applyPull, type PulledRow, type Syncable } from './merge'
 
 const rec = (id: string, updatedAt: string, deletedAt?: string): Syncable => ({
   id,
@@ -43,29 +43,3 @@ describe('applyPull (last-write-wins)', () => {
   })
 })
 
-describe('pendingPush', () => {
-  const a = rec('a', '2026-07-29T10:00:00.000Z')
-  const b = rec('b', '2026-07-29T11:00:00.000Z')
-  const c = rec('c', '2026-07-29T12:00:00.000Z')
-
-  it('bez kurzoru posílá vše, seřazené vzestupně', () => {
-    expect(pendingPush([c, a, b], '')).toEqual([a, b, c])
-  })
-
-  it('posílá jen záznamy za kurzorem', () => {
-    expect(pendingPush([a, b, c], '2026-07-29T10:30:00.000Z')).toEqual([b, c])
-  })
-
-  it('záznam přesně na kurzoru se znovu neposílá', () => {
-    expect(pendingPush([a, b], a.updatedAt)).toEqual([b])
-  })
-})
-
-describe('maxUpdatedAt', () => {
-  it('vrací nejnovější čas, jinak fallback', () => {
-    const a = rec('a', '2026-07-29T10:00:00.000Z')
-    const b = rec('b', '2026-07-29T12:00:00.000Z')
-    expect(maxUpdatedAt([a, b], '')).toBe(b.updatedAt)
-    expect(maxUpdatedAt([], 'x')).toBe('x')
-  })
-})

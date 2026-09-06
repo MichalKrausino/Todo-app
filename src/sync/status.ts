@@ -8,6 +8,11 @@ export interface SyncStatus {
   email?: string
   lastSyncAt?: string
   error?: string
+  // Kolik záznamů server odmítl přijmout (typicky úkol přesunutý pod
+  // klienta, ke kterému už nemám právo). Zbytek se odeslal — tohle je
+  // proto varování, ne chyba synchronizace. Bez něj by odmítnutá změna
+  // vypadala jako uložená.
+  refused?: number
 }
 
 let status: SyncStatus = { phase: 'unconfigured' }
