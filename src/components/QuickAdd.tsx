@@ -5,14 +5,12 @@ import type { CalendarEvent, Priority, Task } from '../db/types'
 import { activeClients, addTask, allProjects, calendarCacheCount, calendarEventsOn, openTasks, removeTask } from '../db/repo'
 import { addDays, formatDayLabel, formatEventRange, formatFullDate, fromISODate, nextMonday, toISODate, todayISO } from '../lib/dates'
 import { WORK_END, WORK_START, freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
-import { PRIORITY_LABELS } from '../lib/labels'
+import { PRIORITY_LABELS, plural } from '../lib/labels'
 import { foldToken, mentionToken, parseQuickAdd } from '../lib/quickAdd'
 import { humanizeRule } from '../lib/rrule'
 import { FETCH_WINDOW_DAYS } from '../sync/calendar'
 import { MonthPicker } from './MonthPicker'
 
-const plural = (n: number, one: string, few: string, many: string) =>
-  n === 1 ? one : n < 5 ? few : many
 
 
 // Rozepsaný @klient / #projekt na konci textu → našeptávač nad polem.

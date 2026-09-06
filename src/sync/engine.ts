@@ -22,6 +22,12 @@ import {
   type PulledRow,
   type Syncable,
 } from './merge'
+import {
+  clientsToForget,
+  parseFingerprint,
+  sharesFingerprint,
+  type MyShare,
+} from './shareState'
 import { setSyncStatus } from './status'
 
 const PAGE_SIZE = 500
@@ -107,6 +113,7 @@ export async function syncNow(): Promise<void> {
   setSyncStatus({ phase: 'syncing' })
   try {
     await ensureAccount(session.user.id)
+    await ensureShareScope()
     for (const name of LOCAL_TABLE_NAMES) await pullTable(name)
     for (const name of LOCAL_TABLE_NAMES) await pushTable(name)
     setSyncStatus({ phase: 'idle', lastSyncAt: new Date().toISOString(), error: undefined })
@@ -123,14 +130,76 @@ export async function syncNow(): Promise<void> {
   }
 }
 
-// Při přihlášení jiného účtu, než se kterým se synchronizovalo naposledy,
-// se kurzory vynulují — proběhne plný pull i push (appka je pro jednoho
-// uživatele, tohle jen brání tichému smíchání dat po překliknutí účtu).
+// Přihlásil se jiný účet, než se kterým se synchronizovalo naposledy.
+//
+// Kurzory se vynulují (proběhne plný pull) a lokální data se zahodí. Ten
+// výmaz je nutný, ne opatrnický: push posílá všechno za kurzorem, takže bez
+// něj by se data předchozího uživatele nahrála do účtu toho nového. Je to
+// tvrdý výmaz bez tombstonů — na serveru záznamy zůstávají původnímu majiteli.
+//
+// Výjimka je první přihlášení (žádný předchozí účet): tam lokální data
+// vznikla offline, patří přihlašujícímu se a mají se nahrát.
 async function ensureAccount(userId: string): Promise<void> {
   const meta = await db.syncState.get('meta')
   if (meta?.userId === userId) return
+  const previous = meta?.userId
   await db.syncState.clear()
+  if (previous && previous !== userId) {
+    for (const name of LOCAL_TABLE_NAMES) await localTable(name).clear()
+    await db.calendarEvents.clear()
+  }
   await db.syncState.put({ id: 'meta', userId })
+}
+
+// Sdílení (Fáze 9) mění rozsah dat, která server vydá. Pull jede podle
+// kurzoru `updated_at`, takže na změnu rozsahu sám nereaguje: nově
+// zpřístupněné řádky mají staré razítko a kurzor je přeskočí. Proto se při
+// každé změně otisku sdílení kurzory vynulují a stáhne se znovu všechno.
+//
+// Druhý směr — sdílení mi vzali — se musí uklidit lokálně, a to výhradně
+// tvrdým výmazem. Tombstone by se odsynchronizoval zpátky a smazal data
+// tomu, kdo mi je půjčil.
+async function ensureShareScope(): Promise<void> {
+  const shares = await fetchMyShares()
+  // Nevíme, jak na tom sdílení je — nechat všechno být. Kdyby se selhání
+  // bralo jako „nic nesdílím", vzal by výpadek sítě na pár vteřin za záminku
+  // smazat lokální kopii sdílených dat a stáhnout celý účet znovu.
+  if (!shares) return
+  const fingerprint = sharesFingerprint(shares)
+  const stored = (await db.syncState.get('shares'))?.cursor ?? ''
+  if (stored === fingerprint) return
+
+  for (const clientId of clientsToForget(parseFingerprint(stored), shares)) {
+    await forgetClientLocally(clientId)
+  }
+
+  // Kurzory pull, ať se rozšířený rozsah stáhne celý. Push kurzory zůstávají:
+  // co jsem odeslal, mám odeslané, a zapomenuté řádky se nesmí poslat znovu.
+  const pullCursors = await db.syncState
+    .filter((row) => row.id.startsWith('pull:'))
+    .toArray()
+  await db.syncState.bulkDelete(pullCursors.map((row) => row.id))
+  await db.syncState.put({ id: 'shares', cursor: fingerprint })
+}
+
+// null = nepodařilo se zjistit. Buď SQL ze supabase/shares.sql ještě
+// neproběhlo (funkce neexistuje, sdílení není zapnuté), nebo vypadla síť.
+// Obojí se řeší stejně — nesahat na nic a zkusit to při příštím synku.
+async function fetchMyShares(): Promise<MyShare[] | null> {
+  const { data, error } = await sb!.rpc('my_shares')
+  if (error) return null
+  return ((data ?? []) as Array<{ client_id: string; is_owner: boolean }>).map((r) => ({
+    clientId: r.client_id,
+    isOwner: r.is_owner,
+  }))
+}
+
+// Zahodí lokální kopii cizího klienta i všeho pod ním. Bez tombstonů a bez
+// emitRepoWrite — server o tomhle úklidu nesmí vědět.
+async function forgetClientLocally(clientId: string): Promise<void> {
+  await db.tasks.where('clientId').equals(clientId).delete()
+  await db.projects.where('clientId').equals(clientId).delete()
+  await db.clients.delete(clientId)
 }
 
 async function pullTable(name: LocalTableName): Promise<void> {

@@ -14,9 +14,8 @@ import { plannedMinutes } from '../lib/capacity'
 import { addDays, formatDayLabel, formatEventRange, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { minutesToLabel } from '../lib/freeSlot'
 import { TaskRow } from '../components/TaskRow'
+import { plural } from '../lib/labels'
 
-const plural = (n: number, one: string, few: string, many: string) =>
-  n === 1 ? one : n < 5 ? few : many
 
 const effectiveDate = (t: Task): string | undefined => {
   const dates = [t.scheduledFor, t.dueDate].filter((d): d is string => Boolean(d))

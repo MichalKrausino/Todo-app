@@ -91,6 +91,29 @@ Přihlásit se jde e-mailem a heslem (funguje hned) nebo přes Google — ten
 vyžaduje OAuth klienta v Google Cloud Console a přijde vhod až s Fází 3
 (kalendář), kdy bude stejně potřeba.
 
+## Sdílení klienta s kolegou (Fáze 9) — jednorázové nastavení
+
+Na jednom klientovi může dělat víc lidí. Sdílí se **klient jako celek** —
+jeho projekty i úkoly. Kdo je uvnitř, vidí je ve své appce jako svoje:
+přidá úkol a druhý ho má, odškrtne ho a druhý vidí hotovo.
+
+1. V **Supabase → SQL Editoru** spusť [`supabase/shares.sql`](supabase/shares.sql).
+2. Kolega se v appce zaregistruje e-mailem a heslem (obláček vpravo nahoře).
+   Účet musí existovat dřív, než ho půjde přidat.
+3. U klienta: **Klienti → klient → Sdílení** → vlož jeho e-mail → Sdílet.
+
+Co se sdílí a co ne:
+
+| | sdílí se |
+|---|---|
+| Klient, jeho projekty a úkoly | ano |
+| Úkoly bez klienta (inbox) | ne, zůstávají soukromé |
+| Šablony, ranní návrh dne, kalendář, Todoist | ne, každý má svoje |
+
+Sdílení může zrušit zakladatel klienta (odebere kohokoli), nebo přizvaný
+sám za sebe (**Odejít**). Komu se sdílení vezme, tomu se klientova data
+smažou z jeho zařízení — na serveru zůstávají nedotčená u zakladatele.
+
 ## Todoist (Fáze 8) — jednorázové nastavení
 
 Sdílené projekty, do kterých mě klienti přidali, se dají natáhnout do appky

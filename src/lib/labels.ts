@@ -13,6 +13,16 @@ export const KIND_LABELS: Record<ClientKind, string> = {
   personal: 'Osobní',
 }
 
+// Skloňování počtu v češtině: 1 → jednotné číslo, 2–4 → množné,
+// 0 a 5 a víc → druhý pád. Nula se do „2–4" pletla a v appce z toho
+// vycházelo „0 úkoly" — proto je pravidlo na jednom místě a otestované.
+export const plural = (n: number, one: string, few: string, many: string): string => {
+  const pocet = Math.abs(Math.round(n))
+  if (pocet === 1) return one
+  if (pocet >= 2 && pocet <= 4) return few
+  return many
+}
+
 // Systémová paleta iOS — barvy štítků klientů.
 export const CLIENT_COLORS = [
   '#FF3B30', // červená

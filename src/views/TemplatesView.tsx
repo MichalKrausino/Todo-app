@@ -13,7 +13,7 @@ import {
   updateTemplate,
 } from '../db/templates'
 import { addDays, formatDayLabel, fromISODate, toISODate, todayISO } from '../lib/dates'
-import { PRIORITY_LABELS } from '../lib/labels'
+import { PRIORITY_LABELS, plural } from '../lib/labels'
 import { parseTemplateItem } from '../lib/quickAdd'
 import { RULE_EPOCH, humanizeRule, occurrencesBetween } from '../lib/rrule'
 import { TEMPLATE_GALLERY } from '../lib/templateGallery'
@@ -118,7 +118,7 @@ export function TemplatesView({ onBack }: { onBack: () => void }) {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-medium">{t.name}</span>
                   <span className="text-xs text-ink-faint">
-                    {t.items.length} {t.items.length === 1 ? 'položka' : t.items.length < 5 ? 'položky' : 'položek'}
+                    {t.items.length} {plural(t.items.length, 'položka', 'položky', 'položek')}
                     {deployedCount(t.id) > 0 && ` · u ${deployedCount(t.id)} klientů`}
                   </span>
                 </span>
@@ -170,8 +170,25 @@ function TemplateDetail({
   onOpenTemplate: (id: string) => void
 }) {
   const [editingItem, setEditingItem] = useState<TemplateItem | null>(null)
+  // Nová položka přes formulář s výběrem frekvence a dne. Dřív se k němu
+  // dalo dostat jen ťuknutím na už existující položku, takže kdo neuhodl
+  // českou formulaci („každé pondělí…"), položku nezaložil vůbec.
+  const [addingItem, setAddingItem] = useState(false)
+  const [formTitle, setFormTitle] = useState('')
   const [quickText, setQuickText] = useState('')
   const today = todayISO()
+
+  const otevriFormular = () => {
+    setFormTitle(quickText.trim())
+    setQuickText('')
+    setEditingItem(null)
+    setAddingItem(true)
+  }
+  const zavriFormular = () => {
+    setEditingItem(null)
+    setAddingItem(false)
+    setFormTitle('')
+  }
 
   // Přirozené zadávání položky — stejný jazyk jako rychlé zadávání.
   const quickParsed = useMemo(
@@ -184,7 +201,7 @@ function TemplateDetail({
       ? template.items.map((i) => (i.id === item.id ? item : i))
       : [...template.items, item]
     await updateTemplate(template.id, { items })
-    setEditingItem(null)
+    zavriFormular()
   }
 
   const addQuick = async (e: React.FormEvent) => {
@@ -257,7 +274,10 @@ function TemplateDetail({
         </p>
       </header>
 
-      {/* přirozené přidání položky — chipy ukážou, jak tomu appka rozumí */}
+      {/* Přirozené přidání položky — chipy ukážou, jak tomu appka rozumí.
+          S otevřeným formulářem se schová: dvě pole na název vedle sebe
+          nedávají poznat, do kterého se má psát. */}
+      {!addingItem && !editingItem && (
       <form onSubmit={addQuick} className="rise space-y-2">
         {quickParsed && (
           <div className="flex flex-wrap gap-1.5 px-1 text-[11px]">
@@ -266,9 +286,16 @@ function TemplateDetail({
                 ↻ {humanizeRule(quickParsed.recurrenceRule)}
               </span>
             ) : (
-              <span className={`${chip} inline-block bg-note text-note-ink`}>
-                chybí opakování — napiš třeba „každé pondělí…“
-              </span>
+              // Slepá ulička: „Přidat" je bez opakování zamčené. Ťuknutí
+              // otevře formulář s vypsaným názvem, kde se frekvence i den
+              // vyberou z nabídky.
+              <button
+                type="button"
+                onClick={otevriFormular}
+                className={`${chip} inline-block bg-note text-note-ink`}
+              >
+                chybí opakování — vyber ho ťuknutím
+              </button>
             )}
             {quickParsed.priority !== 'normal' && (
               <span className={`${chip} pop-soft inline-block bg-well text-ink-soft`}>
@@ -297,7 +324,15 @@ function TemplateDetail({
             Přidat
           </button>
         </div>
+        <button
+          type="button"
+          onClick={otevriFormular}
+          className="px-1 text-[13px] font-medium text-accent"
+        >
+          + Vybrat frekvenci a den z nabídky
+        </button>
       </form>
+      )}
 
       {template.items.length > 0 && (
         <ul className="rise divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
@@ -329,8 +364,13 @@ function TemplateDetail({
         </ul>
       )}
 
-      {editingItem && (
-        <ItemForm initial={editingItem} onSave={saveItem} onCancel={() => setEditingItem(null)} />
+      {(editingItem || addingItem) && (
+        <ItemForm
+          initial={editingItem}
+          initialTitle={formTitle}
+          onSave={saveItem}
+          onCancel={zavriFormular}
+        />
       )}
 
       {clients.length > 0 && (
@@ -390,14 +430,17 @@ function TemplateDetail({
 
 function ItemForm({
   initial,
+  initialTitle,
   onSave,
   onCancel,
 }: {
   initial: TemplateItem | null
+  /** Rozepsaný název z rychlého pole — u nové položky se přenese sem. */
+  initialTitle?: string
   onSave: (item: TemplateItem) => void
   onCancel: () => void
 }) {
-  const [title, setTitle] = useState(initial?.title ?? '')
+  const [title, setTitle] = useState(initial?.title ?? initialTitle ?? '')
   const [rule, setRule] = useState(initial?.recurrenceRule ?? buildRule('weekly', 'MO', 1, 1))
   const [priority, setPriority] = useState<Priority>(initial?.priority ?? 'normal')
   const [projectName, setProjectName] = useState(initial?.defaultProjectName ?? '')

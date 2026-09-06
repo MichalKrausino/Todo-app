@@ -1,15 +1,24 @@
 import { useState } from 'react'
 import { PRESET_LABELS, type RecurrencePreset } from '../lib/rrule'
 
+// Pořadí je zároveň kanonické pořadí v pravidle: „MO,TH", ne „TH,MO".
 const WEEKDAYS: Array<[string, string]> = [
-  ['MO', 'pondělí'],
-  ['TU', 'úterý'],
-  ['WE', 'středa'],
-  ['TH', 'čtvrtek'],
-  ['FR', 'pátek'],
-  ['SA', 'sobota'],
-  ['SU', 'neděle'],
+  ['MO', 'po'],
+  ['TU', 'út'],
+  ['WE', 'st'],
+  ['TH', 'čt'],
+  ['FR', 'pá'],
+  ['SA', 'so'],
+  ['SU', 'ne'],
 ]
+
+/** Dny z pravidla („MO,TH") na množinu kódů. */
+export const bydayToSet = (byday: string): Set<string> =>
+  new Set(byday.split(',').map((d) => d.trim()).filter(Boolean))
+
+/** Zpátky do pravidla, vždy v pořadí týdne. */
+export const setToByday = (dny: Set<string>): string =>
+  WEEKDAYS.map(([kod]) => kod).filter((kod) => dny.has(kod)).join(',')
 
 const MONTHS = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec']
 
@@ -83,20 +92,37 @@ export function RecurrencePicker({
       </select>
 
       {(preset === 'weekly' || preset === 'biweekly') && (
-        <select
-          className={field}
-          value={byday}
-          onChange={(e) => {
-            setByday(e.target.value)
-            emit(preset, e.target.value, dom, month)
-          }}
-        >
-          {WEEKDAYS.map(([code, label]) => (
-            <option key={code} value={code}>
-              {label}
-            </option>
-          ))}
-        </select>
+        // Přepínače, ne rozbalovátko: pravidlo umí víc dnů naráz („po, čt")
+        // a select uměl ukázat jen jeden — u šablony z galerie tak svítilo
+        // „pondělí" u pravidla na pondělí a čtvrtek a první dotyk ten
+        // čtvrtek zahodil. Navíc se den vybere jedním ťuknutím.
+        <div className="flex w-full items-center gap-1" role="group" aria-label="Dny v týdnu">
+          {WEEKDAYS.map(([code, label]) => {
+            const vybrany = bydayToSet(byday).has(code)
+            return (
+              <button
+                key={code}
+                type="button"
+                aria-pressed={vybrany}
+                onClick={() => {
+                  const dny = bydayToSet(byday)
+                  if (dny.has(code)) dny.delete(code)
+                  else dny.add(code)
+                  // Aspoň jeden den musí zůstat — bez něj pravidlo nedává smysl.
+                  if (dny.size === 0) return
+                  const dalsi = setToByday(dny)
+                  setByday(dalsi)
+                  emit(preset, dalsi, dom, month)
+                }}
+                className={`h-10 flex-1 rounded-lg text-[13px] font-medium transition-transform duration-150 active:scale-95 ${
+                  vybrany ? 'bg-accent text-card' : 'bg-well text-ink-soft'
+                }`}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
       )}
 
       {(preset === 'monthly' || preset === 'quarterly' || preset === 'yearly') && (
