@@ -431,7 +431,7 @@ export function TodayView({
                       {/* blok z appky je zástupce úkolu → ťuknutím se otevře */}
                       {task ? (
                         <button
-                          className="min-w-0 flex-1 truncate text-left text-[15px] transition-colors duration-150 active:text-accent"
+                          className="min-w-0 flex-1 truncate text-left text-[15px] transition-colors duration-150 active:text-accent-deep"
                           onClick={() => onOpenTask(task)}
                         >
                           <span className={task.status === 'done' ? 'text-ink-faint line-through' : ''}>
@@ -516,7 +516,7 @@ export function TodayView({
                 <li>
                   <button
                     onClick={() => setAllEvents(true)}
-                    className="w-full px-4 py-2 text-left text-[13px] font-medium text-accent transition-colors duration-150 active:bg-well/60"
+                    className="w-full px-4 py-2 text-left text-[13px] font-medium text-accent-deep transition-colors duration-150 active:bg-well/60"
                   >
                     …a další {hidden} {plural(hidden, 'schůzka', 'schůzky', 'schůzek')}
                   </button>
@@ -598,7 +598,7 @@ export function TodayView({
                 <button
                   aria-label="Skrýt tip"
                   onClick={dismissTip}
-                  className="-m-1 shrink-0 p-1 text-accent-deep/70 transition-transform duration-150 active:scale-90"
+                  className="-m-2 shrink-0 p-2 text-accent-deep/70 transition-transform duration-150 active:scale-90"
                 >
                   <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                     <path d="M6 6l12 12M18 6L6 18" />
@@ -648,7 +648,7 @@ export function TodayView({
 
               <button
                 onClick={() => setHelpOpen(true)}
-                className="mt-4 text-[13px] font-medium text-accent transition-transform duration-150 active:scale-95"
+                className="mt-4 text-[13px] font-medium text-accent-deep transition-transform duration-150 active:scale-95"
               >
                 Jak to funguje
               </button>

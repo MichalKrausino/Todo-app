@@ -163,7 +163,7 @@ export function TodoistSheet({ onClose }: { onClose: () => void }) {
               <button
                 onClick={() => void link()}
                 disabled={busy || !token.trim()}
-                className="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-white transition-transform duration-150 active:scale-[0.98] disabled:opacity-40"
+                className="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-card transition-transform duration-150 active:scale-[0.98] disabled:opacity-40"
               >
                 {busy ? 'Ověřuji…' : 'Propojit'}
               </button>
@@ -270,7 +270,7 @@ export function TodoistSheet({ onClose }: { onClose: () => void }) {
                 <button
                   onClick={() => void refreshTodoist(true)}
                   disabled={busy}
-                  className="flex-1 rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-white transition-transform duration-150 active:scale-[0.98] disabled:opacity-40"
+                  className="flex-1 rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-card transition-transform duration-150 active:scale-[0.98] disabled:opacity-40"
                 >
                   Stáhnout teď
                 </button>

@@ -19,6 +19,12 @@ import {
   syncNow,
 } from '../sync/engine'
 import { getSyncStatus, subscribeSyncStatus, type SyncPhase } from '../sync/status'
+import {
+  getThemeChoice,
+  setThemeChoice,
+  subscribeTheme,
+  type ThemeChoice,
+} from '../lib/theme'
 import { getTodoistStatus, subscribeTodoistStatus } from '../sync/todoist'
 import { HelpSheet } from './HelpSheet'
 import { Sheet } from './Sheet'
@@ -119,6 +125,8 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
           </>
         )}
 
+        <ThemeSection />
+
         <BackupSection />
 
         {/* Todoist (Fáze 8) — sdílené projekty klientů do appky. */}
@@ -156,9 +164,44 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
           </svg>
         </button>
         {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
+
+        {/* Verze buildu: když něco „pořád blbne", tohle jako první řekne,
+            jestli telefon vůbec kouká na novou appku. */}
+        <p className="pb-1 text-center text-[11px] text-ink-faint">verze {__BUILD__}</p>
         </>
       )}
     </Sheet>
+  )
+}
+
+const THEMES: Array<{ id: ThemeChoice; label: string }> = [
+  { id: 'system', label: 'Podle systému' },
+  { id: 'light', label: 'Světlý' },
+  { id: 'dark', label: 'Tmavý' },
+]
+
+// Vzhled. Volba je lokální — na MacBooku můžu chtít světlý režim
+// a na telefonu tmavý, tak se nesynchronizuje.
+function ThemeSection() {
+  const choice = useSyncExternalStore(subscribeTheme, getThemeChoice)
+  return (
+    <section className="space-y-2">
+      <h3 className="section-label">vzhled</h3>
+      <div className="flex gap-1 rounded-2xl bg-well p-1">
+        {THEMES.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setThemeChoice(t.id)}
+            aria-pressed={choice === t.id}
+            className={`flex-1 rounded-xl px-2 py-2 text-[13px] font-medium transition-colors duration-200 ${
+              choice === t.id ? 'bg-card text-ink shadow-card' : 'text-ink-soft'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -210,13 +253,13 @@ function BackupSection() {
         </div>
         <button
           onClick={() => void download()}
-          className="block w-full px-3 py-2.5 text-left text-sm font-medium text-accent transition-colors duration-150 active:bg-line/40"
+          className="block w-full px-3 py-2.5 text-left text-sm font-medium text-accent-deep transition-colors duration-150 active:bg-line/40"
         >
           Stáhnout zálohu (JSON)
         </button>
         <button
           onClick={() => fileRef.current?.click()}
-          className="block w-full px-3 py-2.5 text-left text-sm font-medium text-accent transition-colors duration-150 active:bg-line/40"
+          className="block w-full px-3 py-2.5 text-left text-sm font-medium text-accent-deep transition-colors duration-150 active:bg-line/40"
         >
           Obnovit ze zálohy…
         </button>
@@ -306,9 +349,19 @@ function CalendarSection() {
         <div className="space-y-1 rounded-2xl bg-danger-wash px-3 py-2 text-xs text-danger">
           <div className="font-medium">{cal.lastError}</div>
           {calendarHint(cal.lastError) && (
-            <div className="text-danger/80">{calendarHint(cal.lastError)}</div>
+            <div className="text-danger">{calendarHint(cal.lastError)}</div>
           )}
         </div>
+      )}
+      {/* Odpojený Google potřebuje jedinou věc: znovu se přihlásit.
+          Rada „odhlas se a přihlas" je návod; tohle je to tlačítko. */}
+      {cal.needsReauth && !busy && (
+        <button
+          onClick={() => void signInWithGoogle()}
+          className="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-card transition-transform duration-150 active:scale-[0.98]"
+        >
+          Propojit Google znovu
+        </button>
       )}
       {tokenErr && (
         <p className="rounded-2xl bg-danger-wash px-3 py-2 text-xs text-danger">
@@ -476,10 +529,10 @@ function SignInForm() {
 }
 
 const PHASE_COLORS: Record<SyncPhase, string> = {
-  unconfigured: 'text-ink-faint/70',
+  unconfigured: 'text-ink-faint',
   signedOut: 'text-ink-faint',
   idle: 'text-moss',
-  syncing: 'text-accent',
+  syncing: 'text-accent-deep',
   offline: 'text-note-ink',
   error: 'text-danger',
 }

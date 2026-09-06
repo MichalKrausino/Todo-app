@@ -33,11 +33,17 @@ type PickerKind = 'date' | 'client' | 'project' | 'priority' | null
 const QUICK_DAYS: { label: string; day: (today: string) => string }[] = [
   { label: 'Dnes', day: (t) => t },
   { label: 'Zítra', day: (t) => toISODate(addDays(fromISODate(t), 1)) },
-  { label: 'Příští týden', day: (t) => toISODate(nextMonday(fromISODate(t))) },
+  // „Pondělí" místo „Příští týden": kratší, a přesně to dělá — jinak se
+  // řádka rychlých dnů ořezávala uprostřed slova „Bez termínu".
+  { label: 'Pondělí', day: (t) => toISODate(nextMonday(fromISODate(t))) },
 ]
 
 const pill = 'shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium transition-transform duration-150 active:scale-95'
-const chip = 'rounded-full px-2.5 py-0.5 font-medium'
+// Jeden tvar pro celou stavovou řádku — sloty i to, co vyčetl parser.
+// py-1.5 drží slot na 32 px — hlavní ovládání zadávání se musí trefovat
+// palcem na první pokus.
+const slotBase =
+  'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[12px] font-medium'
 
 // defaultToToday: na obrazovce Dnes jde úkol bez data na dnešek (scheduledFor)
 // — kdo píše na Dnes, myslí „udělám to dnes". Jinde bez data → inbox.
@@ -85,6 +91,19 @@ export function QuickAdd({
     window.addEventListener('todo:prefill', fill)
     return () => window.removeEventListener('todo:prefill', fill)
   }, [])
+
+  // Výběr termínu potřebuje místo — kalendář zmáčknutý nad klávesnici je
+  // k nepřečtení. Otevření proto klávesnici schová (psaní stejně nikdo
+  // nepokračuje uprostřed vybírání dne) a panel se rozloží na celou výšku.
+  // Ostatní výběry jsou jednořádkové, tam klávesnice zůstává.
+  const openPicker = (kind: PickerKind) => {
+    const zaviram = picker === kind
+    setPicker(zaviram ? null : kind)
+    if (kind !== 'date') return
+    // Zavření termínu vrátí klávesnici, ať se dá rovnou psát dál.
+    if (zaviram) inputRef.current?.focus()
+    else inputRef.current?.blur()
+  }
 
   const parsed = useMemo(
     () => (text.trim() ? parseQuickAdd(text, clients, new Date(), projects) : null),
@@ -252,16 +271,22 @@ export function QuickAdd({
 
   const today = todayISO()
   const keepFocus = (e: React.PointerEvent) => e.preventDefault()
-  const hasChips =
-    effDueDate || impliedToday || effClient || effProject || effPriority !== 'normal' ||
-    parsed?.recurrenceRule || parsed?.notes
+  // Popisky slotů: prázdný slot ukazuje, co umí; vyplněný rovnou hodnotu.
+  // Jedna řádka místo dvou (náhled + lišta) — dřív totéž svítilo dvakrát
+  // pod sebou a s každou volbou přibyl řádek, což posouvalo pole.
+  const dateLabel = (effDueDate || impliedToday)
+    ? formatDayLabel(effDueDate ?? today) + (effDueTime ? ` ${effDueTime}` : '')
+    : undefined
 
   return (
-    <div className="relative px-3 pt-2.5">
+    // pb: iOS kolem zaostřeného pole kreslí vlastní modrý prstenec kus za
+    // jeho okrajem. Zadávání se kvůli skládací animaci ořezává, takže bez
+    // téhle rezervy byl prstenec dole seříznutý.
+    <div className="relative px-3 pt-2.5 pb-1.5">
       {lastAdded && createPortal(
         <div
           className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-3"
-          style={{ bottom: 'calc(var(--dock-h, 9rem) + 0.75rem)' }}
+          style={{ bottom: 'calc(var(--dock-h, 9rem) + var(--vv-bottom, 0px) + 0.75rem)' }}
         >
           <div className={`${toastLeaving ? 'toast-out' : 'pop'} pointer-events-auto flex items-center gap-2 rounded-full bg-ink/90 py-1.5 pl-4 pr-1.5 shadow-float backdrop-blur`}>
             <span className="max-w-48 truncate text-[13px] text-paper">
@@ -294,15 +319,28 @@ export function QuickAdd({
         document.body,
       )}
 
+      {/* Jediné místo, kde se cokoli rozbaluje. Roste nahoru, pole pod ním
+          zůstává na místě — dřív se s každým otevřeným výběrem posunulo
+          a iOS nechal kurzor viset nad ním. */}
+      {(mention || picker) && (
+        <div className="rise mb-2 overflow-hidden">
+          {/* Strop podle toho, co je vidět (nad klávesnicí), ne podle celé
+              obrazovky — s otevřeným kalendářem jinak zadávání přerostlo
+              volné místo a vylezlo nad horní okraj. */}
+          <div
+            data-panel
+            className="overflow-y-auto overscroll-contain"
+            style={{ maxHeight: 'max(8rem, calc(var(--vvh, 100dvh) - 11rem))' }}
+          >
       {mention && (
-        <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {mention.items.map((item) => (
             <button
               key={item.id}
               type="button"
               onPointerDown={keepFocus}
               onClick={() => pickMention(item.name)}
-              className={`${pill} inline-flex items-center gap-1.5 bg-well text-ink`}
+              className={`${pill} inline-flex items-center gap-1.5 bg-card text-ink`}
             >
               {item.color && <span className="h-2 w-2 rounded-full" style={{ background: item.color }} />}
               {item.name}
@@ -311,75 +349,16 @@ export function QuickAdd({
         </div>
       )}
 
-      {/* náhled — chipy jsou klikací, ťuknutí otevře příslušný výběr */}
-      {hasChips && (
-        <div className="flex flex-wrap gap-1.5 px-1 pb-2 text-[11px]">
-          {(effDueDate || impliedToday) && picker !== 'date' && (
-            <button
-              type="button"
-              onPointerDown={keepFocus}
-              onClick={() => setPicker('date')}
-              key={`d:${effDueDate ?? 'dnes'}:${effDueTime ?? ''}`}
-              className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}
-            >
-              {formatDayLabel(effDueDate ?? today)}
-              {effDueTime ? ` · ${effDueTime}` : ''}
-            </button>
-          )}
-          {parsed?.recurrenceRule && (
-            <span key={`r:${parsed.recurrenceRule}`} className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}>
-              ↻ {humanizeRule(parsed.recurrenceRule)}
-            </span>
-          )}
-          {effClient && mention?.marker !== '@' && (
-            <button
-              type="button"
-              onPointerDown={keepFocus}
-              onClick={() => setPicker(picker === 'client' ? null : 'client')}
-              key={`c:${effClient.id}`}
-              className={`${chip} pop-soft inline-flex items-center gap-1.5 bg-accent-wash text-accent-deep`}
-            >
-              <span className="h-2 w-2 rounded-full" style={{ background: effClient.color }} />
-              {effClient.name}
-            </button>
-          )}
-          {effProject && mention?.marker !== '#' && (
-            <button
-              type="button"
-              onPointerDown={keepFocus}
-              onClick={() => setPicker(picker === 'project' ? null : 'project')}
-              key={`j:${effProject.id}`}
-              className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}
-            >
-              ▸ {effProject.name}
-            </button>
-          )}
-          {effPriority !== 'normal' && (
-            <button
-              type="button"
-              onPointerDown={keepFocus}
-              onClick={() => setPicker(picker === 'priority' ? null : 'priority')}
-              key={`p:${effPriority}`}
-              className={`${chip} pop-soft inline-block bg-accent-wash text-accent-deep`}
-            >
-              {PRIORITY_LABELS[effPriority]}
-            </button>
-          )}
-          {parsed?.notes && (
-            <span key="n" className={`${chip} pop-soft inline-block max-w-40 truncate bg-accent-wash text-accent-deep`}>
-              ✎ {parsed.notes}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* výběr po ťuknutí na tlačítko lišty nebo chip */}
+      {/* výběr po ťuknutí na slot stavové řádky.
+          Bez vlastního stropu a scrollu — o obojí se stará panel kolem.
+          Dva scrolly v sobě znamenaly, že se čas a náhled dne schovaly
+          pod okrajem vnitřního, i když panel měl místa dost. */}
       {picker === 'date' && (
-        <div className="max-h-[46vh] overflow-y-auto overflow-x-hidden overscroll-contain">
+        <div>
           {/* výběr dne nezavírá sekci — heatmapa i agenda se mění živě.
               Rychlé volby nesou i stav: vybraný den je plný, ne jen nabídka —
               jinak „Dnes" svítilo v doku dvakrát vedle sebe jako dvě různé věci. */}
-          <div className="rise -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-1.5" style={{ scrollbarWidth: 'none' }}>
+          <div className="rise flex items-center gap-1.5 overflow-x-auto pb-1.5" style={{ scrollbarWidth: 'none' }}>
             {QUICK_DAYS.map(({ label, day }) => {
               const iso = day(today)
               const on = (effDueDate ?? (impliedToday ? today : undefined)) === iso
@@ -390,17 +369,24 @@ export function QuickAdd({
                   onPointerDown={keepFocus}
                   onClick={() => setOverrides((o) => ({ ...o, dueDate: iso }))}
                   aria-pressed={on}
-                  className={`${pill} ${on ? 'bg-ink text-paper' : 'bg-accent-wash text-accent-deep'}`}
+                  className={`${pill} ${on ? 'bg-accent text-card' : 'bg-card text-ink'}`}
                 >
                   {label}
                 </button>
               )
             })}
-            {(effDueDate || impliedToday) && (
-              <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ dueDate: null, dueTime: null })} className={`${pill} bg-well text-ink-soft`}>
-                ✕ Bez termínu
-              </button>
-            )}
+            {/* „Bez termínu" je tu vždycky a když termín není, je vybraná
+                ona — jinak nešlo poznat, jestli jsem den ještě nevybral,
+                nebo se jen výběr nikde neprojevil. */}
+            <button
+              type="button"
+              onPointerDown={keepFocus}
+              onClick={() => setOv({ dueDate: null, dueTime: null })}
+              aria-pressed={!effDueDate && !impliedToday}
+              className={`${pill} ${!effDueDate && !impliedToday ? 'bg-accent text-card' : 'bg-card text-ink-soft'}`}
+            >
+              Bez termínu
+            </button>
           </div>
 
           {/* vlastní kalendářík s heatmapou vytížení dnů.
@@ -413,48 +399,38 @@ export function QuickAdd({
 
           {/* čas termínu — volitelný, a jen když už je vybraný den:
               čas bez dne nic neznamená a řádek navíc jen roztahoval dok */}
+          {/* Čas termínu — volitelný, a jen když už je vybraný den: čas bez
+              dne nic neznamená. Předvolby (9:00 / 12:00 / …) jsou pryč —
+              trefa mimo ně stejně vedla na vlastní zadání, tak ať je rovnou
+              vidět jen ono a kalendář nad ním má víc místa. */}
           {(effDueDate || impliedToday) && (
-          <div className="rise -mx-1 mb-1.5 flex items-center gap-1.5 overflow-x-auto px-1" style={{ scrollbarWidth: 'none' }}>
-            <span className="shrink-0 pl-1 text-[12px] font-medium text-ink-faint">Čas</span>
-            {['9:00', '12:00', '14:00', '16:00'].map((t) => {
-              const v = t.padStart(5, '0')
-              return (
+            <div className="rise mb-1.5 flex items-center gap-2">
+              <span className="shrink-0 text-[13px] font-medium text-ink-soft">Čas</span>
+              <input
+                type="time"
+                aria-label="Čas termínu"
+                value={effDueTime ?? ''}
+                onChange={(e) =>
+                  setOverrides((o) => ({
+                    ...o,
+                    dueTime: e.target.value || null,
+                    dueDate: e.target.value ? (effDueDate ?? today) : effDueDate,
+                  }))
+                }
+                className="min-w-0 flex-1 rounded-full border border-transparent bg-card px-3 py-2 text-[15px] font-medium text-ink outline-none focus:border-accent/50"
+              />
+              {effDueTime && (
                 <button
-                  key={t}
                   type="button"
                   onPointerDown={keepFocus}
-                  onClick={() =>
-                    setOverrides((o) => ({
-                      ...o,
-                      dueTime: effDueTime === v ? null : v,
-                      dueDate: effDueDate ?? today,
-                    }))
-                  }
-                  className={`${pill} ${effDueTime === v ? 'bg-ink text-paper' : 'bg-well text-ink'}`}
+                  onClick={() => setOverrides((o) => ({ ...o, dueTime: null }))}
+                  aria-label="Zrušit čas"
+                  className={`${pill} shrink-0 bg-card text-ink-soft`}
                 >
-                  {t}
+                  Bez času
                 </button>
-              )
-            })}
-            <input
-              type="time"
-              aria-label="Čas termínu"
-              value={effDueTime ?? ''}
-              onChange={(e) =>
-                setOverrides((o) => ({
-                  ...o,
-                  dueTime: e.target.value || null,
-                  dueDate: e.target.value ? (effDueDate ?? today) : effDueDate,
-                }))
-              }
-              className="shrink-0 rounded-full border border-transparent bg-well px-3 py-1 text-[13px] font-medium text-ink outline-none focus:border-accent/50"
-            />
-            {effDueTime && (
-              <button type="button" onPointerDown={keepFocus} onClick={() => setOverrides((o) => ({ ...o, dueTime: null }))} className={`${pill} bg-well text-ink-soft`}>
-                ✕
-              </button>
-            )}
-          </div>
+              )}
+            </div>
           )}
 
           {/* Náhled vybraného dne. Držet krátce: v doku nad klávesnicí je
@@ -502,22 +478,22 @@ export function QuickAdd({
         </div>
       )}
       {picker === 'client' && (
-        <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
+        <div className="rise flex gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
           {clients.map((c) => (
             <button
               key={c.id}
               type="button"
               onPointerDown={keepFocus}
               onClick={() => setOv({ clientId: c.id, projectId: effProject && effProject.clientId !== c.id ? null : overrides.projectId })}
-              className={`${pill} inline-flex items-center gap-1.5 ${effClientId === c.id ? 'bg-ink text-paper' : 'bg-well text-ink'}`}
+              className={`${pill} inline-flex items-center gap-1.5 ${effClientId === c.id ? 'bg-accent text-card' : 'bg-card text-ink'}`}
             >
               <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />
               {c.name}
             </button>
           ))}
           {effClientId && (
-            <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ clientId: null, projectId: null })} className={`${pill} bg-well text-ink-soft`}>
-              ✕ Bez klienta
+            <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ clientId: null, projectId: null })} className={`${pill} bg-card text-ink-soft`}>
+              Bez klienta
             </button>
           )}
           {clients.length === 0 && (
@@ -526,21 +502,21 @@ export function QuickAdd({
         </div>
       )}
       {picker === 'project' && (
-        <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
+        <div className="rise flex gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
           {projectPool.map((p) => (
             <button
               key={p.id}
               type="button"
               onPointerDown={keepFocus}
               onClick={() => setOv({ projectId: p.id, clientId: effClientId ?? p.clientId })}
-              className={`${pill} ${effProjectId === p.id ? 'bg-ink text-paper' : 'bg-well text-ink'}`}
+              className={`${pill} ${effProjectId === p.id ? 'bg-accent text-card' : 'bg-card text-ink'}`}
             >
               ▸ {p.name}
             </button>
           ))}
           {effProjectId && (
-            <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ projectId: null })} className={`${pill} bg-well text-ink-soft`}>
-              ✕ Bez projektu
+            <button type="button" onPointerDown={keepFocus} onClick={() => setOv({ projectId: null })} className={`${pill} bg-card text-ink-soft`}>
+              Bez projektu
             </button>
           )}
           {projectPool.length === 0 && (
@@ -551,47 +527,72 @@ export function QuickAdd({
         </div>
       )}
       {picker === 'priority' && (
-        <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
+        <div className="rise flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {(Object.keys(PRIORITY_LABELS) as Priority[]).map((p) => (
             <button
               key={p}
               type="button"
               onPointerDown={keepFocus}
               onClick={() => setOv({ priority: p === 'normal' ? null : p })}
-              className={`${pill} ${effPriority === p ? 'bg-ink text-paper' : 'bg-well text-ink'}`}
+              className={`${pill} ${effPriority === p ? 'bg-accent text-card' : 'bg-card text-ink'}`}
             >
               {PRIORITY_LABELS[p]}
             </button>
           ))}
         </div>
       )}
+          </div>
+        </div>
+      )}
 
-      {/* lišta rychlých voleb — vše na jedno ťuknutí, bez znalosti syntaxe */}
-      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-2" style={{ scrollbarWidth: 'none' }}>
-        <ToolbarButton
+      {/* Stav úkolu na jedné řádce: prázdný slot říká, co umí, vyplněný
+          ukazuje hodnotu. Nikdy se nezalamuje (přeteče do strany), takže
+          výška zadávání je pořád stejná a pole se nehýbe. */}
+      <div className="mb-2 flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        <SlotChip
+          slot="date"
           label="Termín"
-          active={picker === 'date' || Boolean(effDueDate)}
-          onTap={() => setPicker(picker === 'date' ? null : 'date')}
+          value={dateLabel}
+          open={picker === 'date'}
+          onTap={() => openPicker('date')}
           icon={<path d="M4.5 6.5h15v13h-15zM4.5 10h15M8.5 4v4M15.5 4v4" />}
         />
-        <ToolbarButton
+        <SlotChip
+          slot="client"
           label="Klient"
-          active={picker === 'client' || Boolean(effClientId)}
-          onTap={() => setPicker(picker === 'client' ? null : 'client')}
+          value={effClient?.name}
+          dot={effClient?.color}
+          open={picker === 'client'}
+          onTap={() => openPicker('client')}
           icon={<><circle cx="12" cy="8.5" r="3.5" /><path d="M5.5 19.5c.8-3.4 3.4-5.25 6.5-5.25s5.7 1.85 6.5 5.25" /></>}
         />
-        <ToolbarButton
+        <SlotChip
+          slot="project"
           label="Projekt"
-          active={picker === 'project' || Boolean(effProjectId)}
-          onTap={() => setPicker(picker === 'project' ? null : 'project')}
+          value={effProject?.name}
+          open={picker === 'project'}
+          onTap={() => openPicker('project')}
           icon={<path d="M4 7.5a2 2 0 012-2h4l2 2.5h6a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2z" />}
         />
-        <ToolbarButton
+        <SlotChip
+          slot="priority"
           label="Priorita"
-          active={picker === 'priority' || effPriority !== 'normal'}
-          onTap={() => setPicker(picker === 'priority' ? null : 'priority')}
+          value={effPriority !== 'normal' ? PRIORITY_LABELS[effPriority] : undefined}
+          open={picker === 'priority'}
+          onTap={() => openPicker('priority')}
           icon={<path d="M12 5v9M12 17.5v1" />}
         />
+        {/* co vyčetl parser a nemá vlastní slot — jen na ukázání */}
+        {parsed?.recurrenceRule && (
+          <span key={`r:${parsed.recurrenceRule}`} className={`${slotBase} pop-soft bg-accent-wash text-accent-deep`}>
+            ↻ {humanizeRule(parsed.recurrenceRule)}
+          </span>
+        )}
+        {parsed?.notes && (
+          <span key="n" className={`${slotBase} pop-soft max-w-40 truncate bg-accent-wash text-accent-deep`}>
+            ✎ {parsed.notes}
+          </span>
+        )}
       </div>
 
       <form onSubmit={submit} className="flex items-center gap-2">
@@ -599,9 +600,10 @@ export function QuickAdd({
           ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Např. „zítra poslat report @klient“"
+          aria-label="Nový úkol"
+          placeholder="Napiš úkol…"
           enterKeyHint="done"
-          className="min-w-0 flex-1 rounded-full border border-transparent bg-well px-4 py-2.5 text-[16px] text-ink outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus:bg-card"
+          className="min-w-0 flex-1 appearance-none rounded-full border border-transparent bg-well px-4 py-2.5 text-[16px] text-ink outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus:bg-card focus-visible:outline-none"
         />
         {/* key po přidání → pop; plus se při stisku pootočí (group-active) */}
         <button
@@ -622,30 +624,49 @@ export function QuickAdd({
   )
 }
 
-function ToolbarButton({
+// Slot stavu úkolu. Tři stavy, aby bylo na první pohled jasné, co platí:
+// prázdný (tichý, jen nabízí), vyplněný (akcentní, ukazuje hodnotu)
+// a otevřený (plný akcent — patří k němu panel nad polem).
+function SlotChip({
+  slot,
   label,
-  active,
+  value,
+  dot,
+  open,
   onTap,
   icon,
 }: {
+  slot: string
   label: string
-  active: boolean
+  value?: string
+  dot?: string
+  open: boolean
   onTap: () => void
   icon: React.ReactNode
 }) {
+  const tone = open
+    ? 'bg-accent text-card'
+    : value
+      ? 'bg-accent-wash text-accent-deep'
+      : 'bg-well/60 text-ink-soft'
   return (
     <button
       type="button"
+      data-slot={slot}
       onPointerDown={(e) => e.preventDefault()}
       onClick={onTap}
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium transition-[background-color,color,transform] duration-150 active:scale-95 ${
-        active ? 'bg-accent-wash text-accent-deep' : 'bg-well/50 text-ink-soft'
-      }`}
+      aria-label={value ? `${label}: ${value}` : label}
+      aria-pressed={open}
+      className={`${slotBase} ${tone} transition-[background-color,color,transform] duration-150 active:scale-95`}
     >
-      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        {icon}
-      </svg>
-      {label}
+      {dot ? (
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: dot }} />
+      ) : (
+        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          {icon}
+        </svg>
+      )}
+      <span className="max-w-32 truncate">{value ?? label}</span>
     </button>
   )
 }

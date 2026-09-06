@@ -100,6 +100,53 @@ export default function App() {
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+  // Klávesnice na iOS nezmenšuje layout (100dvh zůstává), jen překryje
+  // spodek obrazovky. Jediné, co o ní ví, je visualViewport — a ten říká
+  // rovnou, kde viditelná část začíná (offsetTop) a jak je vysoká.
+  // Obal appky se na ten obdélník posadí napevno (position: fixed), takže
+  // dok u jeho spodního okraje leží přesně na hraně klávesnice a seznam
+  // scrolluje jen v tom, co je vidět. Chová se to jako lišta v chatu:
+  // psaní stojí nad klávesnicí, obsah za ním jde listovat.
+  //
+  // Proč fixed a proč měřit z clientHeight: `window.innerHeight` v PWA na
+  // ploše občas o klávesnici neví, kdežto documentElement.clientHeight je
+  // výška layoutu, která se nemění. A relativní posun by se počítal od
+  // místa ve flow — fixed obdélník je jednoznačný.
+  const kbRef = useRef(0)
+  const kbAnchor = useRef(0)
+  const KB_SCROLL_DISMISS = 120
+
+  useEffect(() => {
+    const vv = window.visualViewport
+    const root = document.documentElement
+    const apply = () => {
+      const layout = root.clientHeight || window.innerHeight
+      const top = vv ? Math.round(vv.offsetTop) : 0
+      const height = vv ? Math.round(vv.height) : layout
+      // kolik layoutu zbývá pod viditelnou částí = klávesnice
+      const below = Math.max(0, layout - (top + height))
+      if (below > 0 && kbRef.current === 0) kbAnchor.current = mainRef.current?.scrollTop ?? 0
+      kbRef.current = below
+      const st = root.style
+      st.setProperty('--vv-top', `${top}px`)
+      st.setProperty('--vvh', `${height}px`)
+      st.setProperty('--vv-bottom', `${below}px`)
+      // nad klávesnicí není domovní lišta, safe-area by byla prázdný pruh
+      st.setProperty('--dock-safe', below > 0 ? '0px' : 'env(safe-area-inset-bottom)')
+      if (window.scrollY !== 0) window.scrollTo(0, 0)
+    }
+    vv?.addEventListener('resize', apply)
+    vv?.addEventListener('scroll', apply)
+    window.addEventListener('resize', apply)
+    window.addEventListener('orientationchange', apply)
+    apply()
+    return () => {
+      vv?.removeEventListener('resize', apply)
+      vv?.removeEventListener('scroll', apply)
+      window.removeEventListener('resize', apply)
+      window.removeEventListener('orientationchange', apply)
+    }
+  }, [])
   useEffect(() => {
     prevTab.current = tab
     // nová záložka začíná nahoře, ne uprostřed předchozího seznamu
@@ -138,7 +185,7 @@ export default function App() {
   }, [])
 
   return (
-    <div className="app-shell relative mx-auto flex h-dvh max-w-lg flex-col bg-paper text-ink antialiased">
+    <div className="app-shell fixed inset-x-0 mx-auto flex max-w-lg flex-col bg-paper text-ink antialiased">
       {/* Horní lišta ve stylu iOS: v klidu průhledná (velký titulek si
           svítí sám), po odscrollování se zamlží a obsah pod ni podjede —
           jinak by ikony seděly přímo na textu úkolů. Průchozí na dotyk,
@@ -173,7 +220,15 @@ export default function App() {
 
       <main
         ref={mainRef}
-        onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 24)}
+        onScroll={(e) => {
+          const top = e.currentTarget.scrollTop
+          setScrolled(top > 24)
+          // listování s otevřenou klávesnicí: po delším kusu ji uklidit
+          if (kbRef.current > 0 && Math.abs(top - kbAnchor.current) > KB_SCROLL_DISMISS) {
+            const active = document.activeElement
+            if (active instanceof HTMLElement && dockRef.current?.contains(active)) active.blur()
+          }
+        }}
         className="flex-1 overflow-y-auto overflow-x-hidden px-4"
         style={{
           paddingTop: 'calc(1rem + env(safe-area-inset-top))',
@@ -216,7 +271,7 @@ export default function App() {
       <footer
         ref={dockRef}
         className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-3"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.5rem)' }}
+        style={{ paddingBottom: 'calc(var(--dock-safe, env(safe-area-inset-bottom)) + 0.5rem)' }}
       >
         <div
           className={`dock pointer-events-auto overflow-hidden transition-[border-radius] duration-300 ease-ios ${
@@ -237,28 +292,29 @@ export default function App() {
             </div>
           </div>
 
-          <nav className="flex items-center gap-1 px-2 py-1.5">
+          {/* Samé ikony, bez popisků — název sekce drží horní lišta.
+              Který list je vybraný, říká pilulka pod ikonou. */}
+          <nav className="flex items-center gap-1 px-2.5 py-2">
             {TABS.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
+                aria-label={t.label}
                 aria-current={tab === t.id ? 'page' : undefined}
-                className={`flex flex-1 flex-col items-center gap-0.5 py-0.5 text-[11px] font-medium transition-colors duration-200 active:scale-95 ${
-                  tab === t.id ? 'text-accent' : 'text-ink-faint'
+                className={`flex flex-1 items-center justify-center transition-colors duration-200 active:scale-95 ${
+                  tab === t.id ? 'text-ink' : 'text-ink-soft'
                 }`}
               >
-                {/* vybraná záložka má pod ikonou měkkou pilulku;
-                    nový element při vybrání → ikona poskočí (tab-bounce) */}
+                {/* nový element při vybrání → ikona poskočí (tab-bounce) */}
                 <span
-                  className={`rounded-2xl px-4 py-0.5 transition-colors duration-200 ${
-                    tab === t.id ? 'bg-accent-wash' : ''
+                  className={`flex h-10 w-full max-w-[5.5rem] items-center justify-center rounded-[18px] transition-colors duration-200 ${
+                    tab === t.id ? 'tab-on' : ''
                   }`}
                 >
                   <span key={tab === t.id ? 'on' : 'off'} className={tab === t.id ? 'tab-bounce block' : 'block'}>
                     {t.icon}
                   </span>
                 </span>
-                {t.label}
               </button>
             ))}
             {/* Otevřené zadávání má vlastní modré kolečko pro odeslání.
@@ -269,13 +325,13 @@ export default function App() {
               aria-label={addOpen ? 'Zavřít zadávání' : 'Nový úkol'}
               aria-expanded={addOpen}
               onClick={() => setAddOpen((v) => !v)}
-              className={`ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-[background-color,transform] duration-150 active:scale-90 ${
+              className={`ml-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-[background-color,transform] duration-150 active:scale-90 ${
                 addOpen ? 'bg-well text-ink-soft' : 'bg-accent text-card shadow-float'
               }`}
             >
               <svg
                 viewBox="0 0 24 24"
-                className={`h-6 w-6 transition-transform duration-300 ease-spring ${addOpen ? 'rotate-45' : ''}`}
+                className={`h-[22px] w-[22px] transition-transform duration-300 ease-spring ${addOpen ? 'rotate-45' : ''}`}
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2.2"

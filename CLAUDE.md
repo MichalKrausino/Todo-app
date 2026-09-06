@@ -9,10 +9,30 @@ zdůvodnění rozhodnutí a roadmapa fází: **`docs/PLAN.md`** — před větš
 - `npm run build` — typecheck (`tsc`) + produkční build
 - `npm test` — vitest (hlavně parser rychlého zadávání)
 - `npm run typecheck` — jen typecheck
+- `npm run audit:ui` — proměří symetrii, hrany prvků nad sebou, velikost
+  cílů pro prst, přístupné názvy polí a **kontrast textu** (WCAG AA) na
+  všech obrazovkách i v panelech, ve světlém i tmavém režimu.
+  **Odsazení, mezery i barvy posuzuj z něj, ne okem.** Šířku bere
+  `--sirka=320` (iPhone SE) / `390` / `430` — na úzkém displeji se rozsype
+  to, co na širokém projde, takže před commitem projeď aspoň 320 a 390.
+  Barvy se čtou z plátna, ne z řetězce: Tailwind zapisuje průhlednost přes
+  `color-mix()` a poloprůhledný text se měří podložený, tak jak ho oko vidí.
+  Vodorovně scrollující řádky smí přetékat k okraji zápornou marží; audit
+  u nich porovnává hranu obsahu. Řádkové (`display: inline`) boxy se
+  neměří — jsou široké jako text, ne jako místo, které dostaly. Vědomé
+  výjimky jsou v něm vyjmenované i s důvodem.
+- `npm run audit:chovani` — co pravítkem nezměříš: klidový režim
+  (`prefers-reduced-motion`) musí zastavit **všechno**, běžný režim naopak
+  animovat, a appka musí přežít proklikání (založení úkolu, odškrtnutí,
+  přepnutí obrazovek, panely, uložení detailu, znovunačtení z IndexedDB).
+  Chce hotový `npm run build`.
 - `npm run nahled` — obrázky appky do `.snimky/` (obě schémata, rozměr iPhonu).
   **Vzhled posuzuj z nich, ne odhadem.** Chromium bez GPU vykresluje
   `backdrop-filter` po dlaždicích — sklo doku by vyšlo rozmazané jen v pruhu
-  uprostřed, proto skript vynucuje softwarový ANGLE/SwiftShader.
+  uprostřed, proto skript vynucuje softwarový ANGLE/SwiftShader. Ten je ale
+  pomalý, takže se před každým snímkem čeká na doběhnutí animací
+  (`document.getAnimations()`), ne na stopky — jinak snímek chytne panel
+  v půlce výjezdu a straší na něm druhá patička.
 
 ## Architektonická pravidla (neporušovat)
 
@@ -47,8 +67,19 @@ Nativní chování Apple aplikace, ale vlastní vzhled — inspirace Things 3
 (vzdušnost, typografie místo rámečků) a Linear (kázeň, jemné obrysy místo
 stínů). Systémový font (na iPhonu SF Pro — nic se nestahuje), seskupené
 karty (`divide-y divide-line` v `rounded-2xl bg-card`) na **teplém**
-podkladu `paper` (ne studená iOS šeď), hairline oddělovače, frosted-glass
-tab bar, velké titulky (`display`), hlavičky sekcí `section-label` —
+podkladu `paper` (ne studená iOS šeď), hairline oddělovače, plovoucí skleněný dok
+(kapsle bez obrysu, samé ikony, vybraná má pod sebou neutrální pilulku).
+Zadávání úkolu v doku má **jednu stavovou řádku** (Termín / Klient /
+Projekt / Priorita — prázdný slot nabízí, vyplněný ukazuje hodnotu,
+otevřený je plný akcent) a **jeden panel nad ní**, do kterého se vejdou
+všechny výběry. V kalendáři je jediná plná výplň vybraný den, dnešek má
+kroužek a vytížení dne je tečka pod číslem — dřív mělo „něco tam je"
+i „tohle jsi zvolil" tutéž modrou a nešlo je rozeznat. Otevření termínu
+schová klávesnici (a zavření ji vrátí): kalendář zmáčknutý do zbytku nad
+klávesnicí je k nepřečtení, takhle dostane celou výšku a den je dost
+velký na ťuknutí. Řádka se nikdy nezalamuje a panel má strop podle
+viditelné výšky (`--vvh`), takže se pole nikdy neposune — jinak iOS
+nechá kurzor viset mimo něj, velké titulky (`display`), hlavičky sekcí `section-label` —
 **tiché, ne verzálky**: velké písmeno dělá `::first-letter`, takže texty
 v kódu zůstávají psané malými.
 
@@ -59,10 +90,21 @@ Tokeny v `src/index.css` (Tailwind v4 `@theme`) — **používat výhradně je**
 `#3a6df0`, ne systémová iOS) + `accent-deep`/`accent-wash`, sémantické
 `danger`, `note`/`note-ink` (signály), `amber`, `moss` (ok).
 
-**Plný tmavý režim**: tokeny se přepisují v `@media (prefers-color-scheme:
-dark)` — nová barva se VŽDY přidává v obou režimech; podklad je teplá
-téměř-čerň (`#0e0e11`), ne plná čerň. Theme-color metas v `index.html`
-jsou dvě (light/dark) a musí sedět s `paper`. Barvy klientů zůstávají
+**Akcent v textu je `accent-deep`, ne `accent`.** Samotný `accent` má na
+papíře 4,2 : 1 — na výplň a ikonu (práh 3 : 1) to stačí, na písmo ne.
+Ze stejného důvodu se **tichost nedělá průhledností**: `text-ink-faint/70`
+vypadá jako jemný odstín, ale změřeně je to 2,8 : 1. Tón dělá token,
+tichost velikost a váha písma. Prahy hlídá `npm run audit:ui` v obou
+režimech — když se přidává barva nebo se s ní píše text, projeď ho.
+
+**Plný tmavý režim**: řídí ho atribut `data-theme` na `<html>`, ne
+`prefers-color-scheme` — v `index.css` není jediný takový dotaz. Volbu
+(systém / světlý / tmavý) překládá `src/lib/theme.ts` a předběhne ji
+skript v `index.html`, aby tmavá appka neproblikla bíle; volba je lokální
+(localStorage), nesynchronizuje se. Tmavá paleta je díky tomu na jednom
+místě — nová barva se přidává jen jednou. Podklad je teplá téměř-čerň
+(`#0e0e11`), ne plná čerň. Jediná `theme-color` meta v `index.html` se
+přepisuje z JS a musí sedět s `paper`. Barvy klientů zůstávají
 systémová paleta iOS (`CLIENT_COLORS`) — jsou to štítky, ne brand.
 Animace `rise`/`pop`/`sheet-*` respektují `prefers-reduced-motion`.
 Ikony PWA jsou v akcentní modré — **při změně akcentu přegenerovat**
@@ -94,5 +136,5 @@ Pravidelná připomínka kontroly klienta = opakující se úkol s markerem
   se neberou a když úkol přiřazení ztratí, zmizí. Výjimky: úkol odeslaný
   z appky (Todoist ho přes API zakládá bez přiřazení — značka
   `Task.todoistFromApp`, jinak by si ho appka sama smazala) a podúkoly
-  mého úkolu (jsou to položky checklistu). Bez `myUid` se neuklízí nic. Komentáře u úkolu se stahují až při otevření a bydlí v `Task.todoistComments` (offline i na druhém zařízení), odpovídat jde z detailu. Podrobně v **`docs/TODOIST.md`** — zbývá spustit SQL a nasadit edge funkci
+  mého úkolu (jsou to položky checklistu). Bez `myUid` se neuklízí nic. Komentáře u úkolu bydlí v `Task.todoistComments` (offline i na druhém zařízení) a odpovídat jde z detailu; nové hlídá přírůstek přes `/sync` s uloženým `sync_token` (jedno volání za stažení) a cizí komentář rozsvítí `todoistUnread` na řádku úkolu. Podrobně v **`docs/TODOIST.md`** — zbývá spustit SQL a nasadit edge funkci
 - [x] Fáze 9 — sdílení klienta s dalším uživatelem (`supabase/shares.sql`). Jednotka sdílení je **klient**: co pod ním visí (projekty, úkoly), je sdílené taky; úkoly bez klienta zůstávají soukromé, stejně jako šablony a denní plány. Nestaví se druhý synchronizační kanál — jen se **rozšíří RLS** (policy `vlastni a sdilene` porovnává `data->>'clientId'` proti `shared_client_ids()`), takže sdílené řádky natečou stávající cestou pull → Dexie → UI a odškrtnutí se vrací zpátky přes LWW úplně stejně jako mezi dvěma zařízeními jednoho člověka. Správa přes security-definer RPC (`share_client`/`unshare_client`/`list_client_shares`/`my_shares`), klient na tabulku `shares` přímo nedosáhne. Dvě věci, které se dají snadno rozbít: (1) kurzorový pull na změnu rozsahu sám nereaguje — nově zpřístupněné řádky mají staré `updated_at`, takže se při změně otisku sdílení nulují pull kurzory (`ensureShareScope`, čistá logika v `src/sync/shareState.ts`); (2) úklid po odebraném sdílení musí být **tvrdý lokální výmaz, nikdy tombstone** — ten by se odsynchronizoval zpátky a smazal data majiteli. Zjišťování sdílení, které selže, se bere jako „nevím" (ne jako „nic nesdílím"), jinak by výpadek sítě spustil mazání. Vlastnictví řádku hlídá `lww_guard`, který při každé úpravě vrátí původní `user_id`. Přepnutí účtu na jednom zařízení teď lokální data maže — bez toho by je plný push nahrál do cizího účtu.

@@ -64,6 +64,7 @@ export function SearchSheet({
       {(close) => (
         <>
           <input
+          aria-label="Hledat v úkolech, klientech a projektech"
             autoFocus
             value={q}
             onChange={(e) => setQ(e.target.value)}

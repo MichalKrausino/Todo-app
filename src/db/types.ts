@@ -101,6 +101,7 @@ export interface Task extends BaseRecord {
   todoistFromApp?: boolean
   todoistLabels?: string[] // štítky z Todoistu — jen na ukázání, appka s nimi nepracuje
   todoistComments?: TodoistComment[] // stažené komentáře (dotahují se při otevření úkolu)
+  todoistUnread?: boolean // někdo přidal komentář, který jsem ještě neviděl
   order: number
 }
 

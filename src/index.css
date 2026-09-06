@@ -19,22 +19,26 @@
   --color-well: #eeedea; /* zapuštěné plochy (inputy, pilulky) */
   --color-line: #e6e4df; /* hairline oddělovače */
   --color-ink: #16161a; /* hlavní text — měkčí než čerň */
-  --color-ink-soft: #6b6b70; /* sekundární text */
-  --color-ink-faint: #a3a2a6; /* terciární text, ikony v klidu */
+  /* Tiché tóny mají zůstat tiché, ale čitelné. Pod 4,5 : 1 je jedenácti-
+     pixelový popisek na slunci k nepřečtení, takže tichost dělá velikost
+     a váha písma, ne mdlá barva. Hodnoty jsou měřené (npm run audit:ui),
+     ne odhadnuté — proto je krok mezi soft a faint menší, než by se čekalo. */
+  --color-ink-soft: #5b5b62; /* sekundární text */
+  --color-ink-faint: #696970; /* terciární text, ikony v klidu */
 
   /* Jediný akcent: klidnější modrá než systémová iOS — méně křiklavá,
      na teplém podkladu sedí líp a nepůsobí jako výchozí nastavení. */
-  --color-accent: #3a6df0;
-  --color-accent-deep: #2b52c4;
+  --color-accent: #3a6df0; /* výplně, ikony, obrysy */
+  --color-accent-deep: #2b52c4; /* akcentní TEXT — accent má na papíře jen 4,2 : 1 */
   --color-accent-wash: #eaf0fe;
 
   /* sémantické tóny (iOS systémová paleta) */
-  --color-danger: #e5372c;
+  --color-danger: #cf2a1f;
   --color-danger-wash: #ffebe9;
   --color-note: #fff3e0; /* oranžový nádech pro tiché signály */
   --color-note-ink: #8f5600;
   --color-amber: #ff9500; /* plná iOS oranžová (heatmapa, akcenty varování) */
-  --color-moss: #248a3d; /* ok / synchronizováno */
+  --color-moss: #1e7a35; /* ok / synchronizováno */
 
   /* Hloubku dělá ostrý hairline, ne rozmazaný stín — kresba zůstane
      čistá i na malém displeji a karta nevypadá „nalepená". */
@@ -48,45 +52,82 @@
   --ease-glide: cubic-bezier(0.25, 1, 0.5, 1); /* rychlý start, měkké dosednutí */
 }
 
-/* tmavý režim podle systému — přepis tokenů, komponenty se přebarví samy */
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Ne úplná čerň: obsahová appka na ní tvrdne. Tmavý podklad má
-       stejný teplý nádech jako světlý režim. */
-    --color-paper: #0e0e11;
-    --color-card: #17171b;
-    --color-well: #212127;
-    --color-line: #2c2c33;
-    --color-ink: #f2f2f4;
-    --color-ink-soft: #9a9aa2;
-    --color-ink-faint: #66666e;
+/* Tmavý režim — přepis tokenů, komponenty se přebarví samy.
+   Řídí ho atribut data-theme na <html>, ne media dotaz: režim jde
+   v nastavení přepnout napevno a „podle systému" je jen jedna z voleb,
+   kterou na atribut překládá src/lib/theme.ts (a skript v index.html,
+   aby tmavá appka neproblikla bíle). Díky tomu je tmavá paleta na
+   jednom místě — kdyby se psala i do media dotazu, každá nová barva
+   by se musela přidávat dvakrát. */
+:root[data-theme='dark'] {
+  /* Ne úplná čerň: obsahová appka na ní tvrdne. Tmavý podklad má
+     stejný teplý nádech jako světlý režim. */
+  --color-paper: #0e0e11;
+  --color-card: #17171b;
+  --color-well: #212127;
+  --color-line: #2c2c33;
+  --color-ink: #f2f2f4;
+  --color-ink-soft: #9a9aa2;
+  --color-ink-faint: #8a8a91;
 
-    --color-accent: #7397ff;
-    --color-accent-deep: #a3bcff;
-    --color-accent-wash: #182140;
+  --color-accent: #7397ff;
+  --color-accent-deep: #a3bcff;
+  --color-accent-wash: #182140;
 
-    --color-danger: #ff453a;
-    --color-danger-wash: #3a1512;
-    --color-note: #2e2410;
-    --color-note-ink: #ffb340;
-    --color-amber: #ff9f0a;
-    --color-moss: #30d158;
+  --color-danger: #ff453a;
+  --color-danger-wash: #3a1512;
+  --color-note: #2e2410;
+  --color-note-ink: #ffb340;
+  --color-amber: #ff9f0a;
+  --color-moss: #30d158;
 
-    /* v tmavém režimu dělá hloubku jemný světlý prstenec místo stínu */
-    --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.07), 0 6px 18px -12px rgb(0 0 0 / 0.8);
-    --shadow-sheet: 0 -8px 40px -8px rgb(0 0 0 / 0.7);
-    --shadow-float: 0 2px 12px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.08);
-  }
+  /* v tmavém režimu dělá hloubku jemný světlý prstenec místo stínu */
+  --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.07), 0 6px 18px -12px rgb(0 0 0 / 0.8);
+  --shadow-sheet: 0 -8px 40px -8px rgb(0 0 0 / 0.7);
+  --shadow-float: 0 2px 12px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.08);
+}
+
+:root {
+  /* Viditelný obdélník obrazovky — píše App.tsx podle visualViewport.
+     Bez klávesnice je to celá plocha; s klávesnicí jen to nad ní.
+     --vv-bottom je pro věci v portálu mimo obal (lišta „Zpět"). */
+  --vv-top: 0px;
+  --vvh: 100dvh;
+  --vv-bottom: 0px;
+  --dock-safe: env(safe-area-inset-bottom);
+}
+
+html,
+body {
+  /* Dokument se nikdy nescrolluje — scrolluje jen <main> uvnitř obalu.
+     clip (ne hidden): hidden jde programově odscrollovat, a přesně to
+     dělá iOS při fokusu pole, aby ho „odkryl". */
+  height: 100%;
+  overflow: clip;
+}
+
+body {
+  /* iOS jinak pod klávesnicí nechá okno popojíždět; přibité tělo ne. */
+  position: fixed;
+  inset: 0;
+  width: 100%;
 }
 
 html {
   -webkit-tap-highlight-color: transparent;
-  color-scheme: light dark;
+  /* Barvy systémových prvků (posuvníky, výběry) jdou za volbou appky,
+     ne za systémem — jinak by ve vynuceném světlém režimu zůstaly
+     posuvníky tmavé. */
+  color-scheme: light;
   /* stabilní fullscreen: žádný horizontální posun ani gumování do stran,
      žádné přeškálování textu při otočení, dvojťuk nezoomuje */
   overflow-x: clip;
   -webkit-text-size-adjust: 100%;
   touch-action: manipulation;
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
 }
 
 body {
@@ -273,18 +314,19 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
 }
 
 /* Sklo spodního doku. Samotný backdrop-blur dělá prosvítající obsah
-   plochý a šedivý — saturate mu vrátí barvu, jako to dělá iOS, a špetka
-   brightness nadzvedne sklo nad podklad, aby nevypadalo jako špinavá fólie. */
+   plochý a šedivý — saturate mu vrátí barvu, špetka brightness nadzvedne
+   sklo nad podklad. Krytí je schválně nízké: dok si má brát barvu toho,
+   co je pod ním, ne sedět jako šedý pruh navrchu. */
 .dock {
   position: relative; /* kotva pro světelný prstenec v ::before */
   /* Průhlednost řídíme tady, ne utilitou — ať jde doladit zvlášť pro
      oba režimy. Nezapsaný CSS přebíjí Tailwind utility (jsou ve vrstvě). */
-  background: color-mix(in oklab, var(--color-card) 62%, transparent);
+  background: color-mix(in oklab, var(--color-card) 50%, transparent);
   /* Prefix první, standard poslední: Lightning CSS deklarace slučuje a
      nechá tu poslední — obráceně by v buildu zbyl jen -webkit- tvar,
      který Chromium vůbec nezná, a sklo by se rozmazalo jen v Safari. */
-  -webkit-backdrop-filter: blur(40px) saturate(200%) brightness(1.06);
-  backdrop-filter: blur(40px) saturate(200%) brightness(1.06);
+  -webkit-backdrop-filter: blur(30px) saturate(260%) brightness(1.04);
+  backdrop-filter: blur(30px) saturate(260%) brightness(1.04);
   /* Dvě vnitřní hrany dávají sklu tloušťku: ostré světlo shora,
      slabší odlesk zdola (odražené světlo od podkladu).
      Stín je psaný ručně, ne přes --shadow-float: ten nese i rovnoměrný
@@ -344,16 +386,19 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
     rgb(255 255 255 / 0.07) 45%,
     rgb(255 255 255 / 0) 72%
   );
+
 }
 
-@media (prefers-color-scheme: dark) {
+/* Sklo v tmavém režimu. Vnořené pravidlo drží všechny tři vrstvy
+   (výplň, prstenec, prosvětlení) pohromadě pod jedním přepínačem. */
+:root[data-theme='dark'] {
   .dock {
-    /* Na tmavém podkladu potřebuje sklo víc krytí, jinak text plave.
+    /* Na tmavém podkladu potřebuje sklo víc krytí, jinak ikony plavou.
        Brightness jde dolů — na tmavém se prosvítající obsah má utlumit,
        ne rozzářit, jinak sklo vypadá jako mléčná fólie. */
-    background: color-mix(in oklab, var(--color-card) 70%, transparent);
-    -webkit-backdrop-filter: blur(40px) saturate(190%) brightness(0.92);
-    backdrop-filter: blur(40px) saturate(190%) brightness(0.92);
+    background: color-mix(in oklab, var(--color-card) 60%, transparent);
+    -webkit-backdrop-filter: blur(30px) saturate(200%) brightness(0.92);
+    backdrop-filter: blur(30px) saturate(200%) brightness(0.92);
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 0.1),
       inset 0 -1px 0 rgb(255 255 255 / 0.04),
@@ -397,11 +442,29 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
   }
 }
 
+/* Vybraná záložka: pilulka o odstín hlubší než sklo kolem. Neutrální
+   (ne akcentní) schválně — musí sednout na jakoukoli barvu, kterou si
+   sklo zrovna vezme zezdola. */
+.tab-on {
+  background: color-mix(in oklab, var(--color-ink) 11%, transparent);
+}
+
+:root[data-theme='dark'] .tab-on {
+  background: color-mix(in oklab, var(--color-ink) 18%, transparent);
+}
+
 /* iOS push-back: obsah pod otevřeným sheetem couvne do hloubky.
    Sheet je v portálu mimo .app-shell, takže transform nevadí fixed
    pozici panelu; :has sleduje přítomnost backdropu. */
 .app-shell {
-  overflow: hidden;
+  /* Obal sedí přesně na viditelném obdélníku. Fixed proto, že se pozice
+     nesmí odvíjet od místa ve flow — s klávesnicí se celý obdélník
+     posouvá a mění výšku. */
+  top: var(--vv-top);
+  height: var(--vvh);
+  /* clip, ne hidden — viz html/body výš: obal nesmí jít odscrollovat
+     ani programově, jinak iOS při fokusu pole odveze hlavičku. */
+  overflow: clip;
   transition:
     transform 0.45s var(--ease-ios),
     border-radius 0.45s var(--ease-ios);
@@ -705,7 +768,12 @@ body:has(.sheet-backdrop:not(.closing)) .app-shell {
     stroke-dashoffset: 0;
     transition: none;
   }
-  * {
+  /* Pojistka na všechno, co se sem zapomene dopsat. */
+  *,
+  *::before,
+  *::after {
     transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

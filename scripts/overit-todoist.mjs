@@ -55,12 +55,16 @@ const TASKS = [
     due: { date: '2026-09-02', datetime: null, string: '2. září', is_recurring: false },
     deadline: { date: '2026-09-04', lang: 'cs' }, duration: { amount: 90, unit: 'minute' } },
   { id: '7002', project_id: '220', section_id: null, parent_id: null, content: 'Zavolat na fakturaci',
-    description: '', priority: 1, labels: [], responsible_uid: null, checked: false, is_deleted: false,
+    description: '', priority: 1, labels: [], responsible_uid: '49020', checked: false, is_deleted: false,
     updated_at: '2026-08-30T10:00:00Z',
     due: { date: '2026-09-01', datetime: '2026-09-01T14:00:00', string: 'zítra 14:00', is_recurring: false },
     deadline: null, duration: null },
   { id: '7003', project_id: '220', section_id: null, parent_id: null, content: 'Grafika bannerů',
     description: '', priority: 1, labels: [], responsible_uid: 'nekdo-jiny', checked: false,
+    is_deleted: false, updated_at: '2026-08-30T10:00:00Z', due: null, deadline: null, duration: null },
+  // nepřiřazený úkol — od změny „jen to, na čem jsem označený" se nebere
+  { id: '7006', project_id: '220', section_id: null, parent_id: null, content: 'Nezadaný nápad',
+    description: '', priority: 1, labels: [], responsible_uid: null, checked: false,
     is_deleted: false, updated_at: '2026-08-30T10:00:00Z', due: null, deadline: null, duration: null },
   { id: '7004', project_id: '220', section_id: '55', parent_id: '7001', content: 'Stáhnout data z Skliku',
     description: '', priority: 1, labels: [], responsible_uid: '49020', checked: false, is_deleted: false,
@@ -69,6 +73,13 @@ const TASKS = [
 
 const CREATED = []
 const UPDATES = []
+const DELETED = []
+const SYNC_CALLS = []
+// Komentář, který v Todoistu přibyl od minule — přijde přírůstkem přes /sync.
+const NEW_NOTES = [
+  { id: 'n42', item_id: '7001', content: 'Ještě jedna věc k tomu reportu.',
+    posted_at: '2026-08-30T15:00:00Z', posted_uid: 'nekdo-jiny', file_attachment: null, is_deleted: false },
+]
 const COMMENTS = [
   { id: 'c1', item_id: '7001', content: 'Můžeme to posunout na pátek?', posted_at: '2026-08-29T10:00:00Z',
     posted_uid: 'nekdo-jiny', file_attachment: { file_name: 'brief.pdf' }, is_deleted: false },
@@ -115,6 +126,21 @@ function startFakeTodoist() {
         { id: '8001', project_id: '224', content: 'Zkontrolovat feed', responsible_uid: '49020',
           priority: 1, labels: [], checked: false, is_deleted: false, due: null, deadline: null, duration: null },
       ], next_cursor: null })
+    }
+    if (p === '/api/v1/sync' && req.method === 'POST') {
+      let raw = ''
+      req.on('data', (c) => { raw += c })
+      return req.on('end', () => {
+        const b = JSON.parse(raw || '{}')
+        SYNC_CALLS.push(b)
+        // poprvé se ptá jen na uživatele (kvůli kurzoru), podruhé na notes
+        const first = b.sync_token === '*'
+        send({ sync_token: first ? 'kurzor-1' : 'kurzor-2', notes: first ? [] : NEW_NOTES })
+      })
+    }
+    if (/^\/api\/v1\/tasks\/\d+$/.test(p) && req.method === 'DELETE') {
+      DELETED.push(p.split('/').pop())
+      res.writeHead(204); return res.end()
     }
     if (p === '/api/v1/comments' && req.method === 'POST') {
       let raw = ''
@@ -201,8 +227,12 @@ async function buildEdgeHandler() {
   let src = fs.readFileSync(`${ROOT}supabase/functions/todoist/index.ts`, 'utf8')
   src = src.replace(
     "import { createClient } from 'npm:@supabase/supabase-js@2'",
-    `const createClient = () => ({
-      from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { api_token: 'TAJNY-TOKEN' } }) }) }) }),
+    `const ulozeno = { api_token: 'TAJNY-TOKEN', sync_token: null }
+    const createClient = () => ({
+      from: () => ({
+        select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { ...ulozeno } }) }) }),
+        update: (patch) => ({ eq: async () => { Object.assign(ulozeno, patch); return { error: null } } }),
+      }),
       auth: { getUser: async () => ({ data: { user: { id: 'uzivatel-1' } }, error: null }) },
     })`,
   )
@@ -233,7 +263,7 @@ export { db } from '${ROOT}src/db/db'
 export { addClient, updateClient, addTask } from '${ROOT}src/db/repo'
 export { refreshTodoist, fetchTodoistProjects, getTodoistStatus, sendTaskToTodoist,
          pushTodoistEdits, addTodoistSubtask, setTodoistSubtaskDone,
-         loadTodoistComments, postTodoistComment } from '${ROOT}src/sync/todoist'
+         loadTodoistComments, postTodoistComment, deleteTodoistTask } from '${ROOT}src/sync/todoist'
 `)
   const out = '/tmp/klient-bundle.mjs'
   await esbuild.build({
@@ -273,7 +303,8 @@ globalThis.fetch = async (input, init) => {
 
 const { db, addClient, updateClient, addTask, refreshTodoist, fetchTodoistProjects,
         getTodoistStatus, sendTaskToTodoist, pushTodoistEdits, addTodoistSubtask,
-        setTodoistSubtaskDone, loadTodoistComments, postTodoistComment } = await buildClient()
+        setTodoistSubtaskDone, loadTodoistComments, postTodoistComment,
+        deleteTodoistTask } = await buildClient()
 
 console.log('\n— párovací obrazovka —')
 const { projects, user, assigned } = await fetchTodoistProjects()
@@ -306,8 +337,9 @@ const tasks = (await db.tasks.toArray()).filter((x) => !x.deletedAt)
 const byTitle = Object.fromEntries(tasks.map((x) => [x.title, x]))
 console.log('  úkoly v databázi:', tasks.map((x) => x.title).join(' | ') || '(žádné)')
 
-ok('stáhly se moje a nepřiřazené úkoly', tasks.length === 2, `${tasks.length}`)
+ok('stáhly se jen úkoly, na kterých jsem označený', tasks.length === 3, `${tasks.length}`)
 ok('cizí přiřazený úkol se netáhl', !byTitle['Grafika bannerů'])
+ok('nepřiřazený úkol se netáhl', !byTitle['Nezadaný nápad'])
 
 const report = byTitle['Připravit report kampaní']
 ok('úkol visí pod klientem', report?.clientId === created.id)
@@ -320,7 +352,7 @@ ok('podúkoly → checklist včetně hotového', report?.subtasks?.length === 2,
    report?.subtasks?.map((s) => `${s.title}${s.done ? ' ✓' : ''}`).join(', '))
 
 const call = byTitle['Zavolat na fakturaci']
-ok('nepřiřazený úkol se bere taky', Boolean(call))
+ok('druhý můj úkol dorazil taky', Boolean(call))
 ok('čas z due datetime', call?.dueTime === '14:00', call?.dueTime)
 ok('den z due datetime', call?.dueDate === '2026-09-01', call?.dueDate)
 
@@ -330,10 +362,16 @@ ok('sekce se stala projektem pod klientem', projs.length === 1 && projs[0].name 
 ok('úkol ze sekce spadl do toho projektu', report?.projectId === projs[0]?.id)
 
 console.log('\n— opakování a zpětný zápis —')
-const before = (await db.tasks.toArray()).map((x) => `${x.id}:${x.updatedAt}`).sort().join()
+// Porovnávají se vlastní pole úkolu, ne updatedAt: to se legitimně
+// změní, když stejným stažením dorazí nový komentář.
+const otisk = async () =>
+  (await db.tasks.toArray())
+    .map((x) => `${x.id}|${x.title}|${x.dueDate ?? ''}|${x.status}|${x.priority}`)
+    .sort()
+    .join()
+const before = await otisk()
 await refreshTodoist(true)
-const after = (await db.tasks.toArray()).map((x) => `${x.id}:${x.updatedAt}`).sort().join()
-ok('druhé stažení nic nepřepisuje ani nezdvojuje', before === after)
+ok('druhé stažení nic nepřepisuje ani nezdvojuje', before === (await otisk()))
 
 calls.length = 0
 await db.tasks.update(report.id, { status: 'done', completedAt: new Date().toISOString() })
@@ -402,6 +440,27 @@ ok('odpověď se hned objevila v konverzaci', after2?.todoistComments?.length ==
 
 ok('štítky z Todoistu jsou u úkolu', after2?.todoistLabels?.includes('klient'),
    (after2?.todoistLabels ?? []).join(', '))
+
+console.log('\n— nové komentáře na pozadí —')
+await refreshTodoist(true) // stažení, ve kterém přijde přírůstek komentářů
+ok('poprvé si server jen vyzvedl kurzor (netáhne celou historii)',
+   SYNC_CALLS[0]?.sync_token === '*' && SYNC_CALLS[0]?.resource_types?.includes('user'),
+   JSON.stringify(SYNC_CALLS[0]))
+const dalsiSync = SYNC_CALLS.find((c) => c.sync_token !== '*')
+ok('podruhé se ptá na přírůstek komentářů', dalsiSync?.resource_types?.includes('notes'),
+   JSON.stringify(dalsiSync))
+const sKomentarem = await db.tasks.get(report.id)
+ok('komentář od klienta dorazil bez otevření úkolu',
+   sKomentarem?.todoistComments?.some((c) => c.text.startsWith('Ještě jedna věc')),
+   (sKomentarem?.todoistComments ?? []).map((c) => c.text).join(' | '))
+ok('a rozsvítil značku „nový komentář"', sKomentarem?.todoistUnread === true)
+await loadTodoistComments(report.id)
+ok('otevření úkolu značku zhasne', !(await db.tasks.get(report.id))?.todoistUnread)
+
+console.log('\n— smazání i v Todoistu —')
+const delErr = await deleteTodoistTask(report.id)
+ok('smazání proběhlo', !delErr, delErr ?? 'ok')
+ok('Todoist dostal DELETE na správný úkol', DELETED.includes('7001'), DELETED.join(', ') || 'nic')
 
 console.log('\n— ztracený přístup k jednomu projektu —')
 await updateClient(created.id, { todoistProjectIds: ['220', '223'] })

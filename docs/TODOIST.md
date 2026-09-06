@@ -223,10 +223,22 @@ Top 3, odhad času, kalendářní blok, podklady pro ranní návrh.
 
 ### Konverzace
 
-Komentáře se netahají při každém stažení — jen když úkol otevřu. Uloží se
-do jeho záznamu (`Task.todoistComments`), takže je vidím i offline a
-dorazí i na druhé zařízení běžným syncem appky. Odpovídat jde přímo
-z detailu úkolu. Přílohy se ukazují názvem; soubor zůstává v Todoistu.
+Komentáře se u úkolu dotahují při jeho otevření (`GET /comments`, i se
+jmény autorů) a ukládají se do jeho záznamu (`Task.todoistComments`),
+takže jsou vidět i offline a dorazí i na druhé zařízení běžným syncem.
+Odpovídat jde přímo z detailu. Přílohy se ukazují názvem; soubor zůstává
+v Todoistu.
+
+**Nové komentáře se ale hlídají i bez otevírání.** Ptát se u každého
+úkolu zvlášť by znamenalo desítky volání při každém stažení, takže se
+bere přírůstek přes `POST /sync` s uloženým `sync_token`: jedno volání
+vrátí jen to, co od minule přibylo. Poprvé se kurzor jen vyzvedne
+(`resource_types: ["user"]`, malá odpověď) — stahovat celou historii
+komentářů účtu by nemělo smysl. Cizí komentář zvedne `Task.todoistUnread`
+a řádek úkolu to řekne nahlas; otevření úkolu značku zhasne.
+
+Celé je to navíc k dobru: když Todoist ten dotaz odmítne, komentáře se
+pořád dotáhnou při otevření úkolu.
 
 ### Štítky
 
@@ -301,6 +313,12 @@ vidělo týdenní ohlédnutí) a živý řádek se vrátí do hry s novým term�
   napíšu od té chvíle. Kontroly klienta a instance šablon zůstávají doma vždy.
 - **Odpojení projektu úkoly nemaže.** Jen z nich sundá todoistí značky, takže
   se z nich stanou normální lokální úkoly.
+- **Smazání se do Todoistu posílá jen na výslovné potvrzení.** Ve sdíleném
+  projektu tím úkol mizí i klientovi, takže se appka ptá zvlášť; bez potvrzení
+  zmizí jen odsud.
+- **Sekce, která v Todoistu zmizela**, nechávala v appce prázdný projekt
+  navěky. Nemaže se (úkoly na něj můžou být navázané), ale uklidí se do
+  archivu — a když se sekce vrátí, projekt zase ožije.
 - **Ztráta přístupu k jednomu projektu nesmí zmrazit zbytek.** Edge funkce
   stahuje projekt po projektu a chyby sbírá stranou; nedostupný projekt se
   ohlásí v nastavení a jeho úkoly se neuklidí jako smazané.

@@ -25,6 +25,10 @@ export interface CalendarStatus {
   lastSuccessAt?: string
   eventCount?: number
   lastError?: string
+  // Google přestal uznávat uložený přístup. Dokud se člověk nepřihlásí
+  // znovu, nemá smysl to zkoušet každých pět minut — jen by to plnilo
+  // log pětistovkami a hlásilo pořád totéž.
+  needsReauth?: boolean
 }
 
 let calStatus: CalendarStatus = {}
@@ -45,6 +49,7 @@ export function subscribeCalendarStatus(fn: () => void): () => void {
 // (úspěch i doslovná chyba) skončí v getCalendarStatus.
 export async function testCalendar(): Promise<void> {
   lastFetchAt = 0
+  setCalStatus({ needsReauth: false })
   await refreshCalendar()
 }
 
@@ -81,12 +86,19 @@ async function callFn(action: string, payload: Record<string, unknown>): Promise
     body: JSON.stringify({ action, ...payload }),
   })
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>
-  if (!res.ok) throw new Error(String(json.error ?? res.statusText))
+  if (!res.ok) {
+    const err = new Error(String(json.error ?? res.statusText)) as Error & { reauth?: boolean }
+    err.reauth = json.reauth === true
+    throw err
+  }
   return json
 }
 
 export async function refreshCalendar(): Promise<void> {
   if (refreshing || !navigator.onLine || !getSupabase()) return
+  // Odpojený Google se sám nespraví — čeká se na nové přihlášení.
+  // Ruční „Otestovat" (testCalendar) příznak shodí a zkusí to znovu.
+  if (calStatus.needsReauth) return
   refreshing = true
   lastFetchAt = Date.now()
   try {
@@ -102,11 +114,19 @@ export async function refreshCalendar(): Promise<void> {
       const pouzitelne = events.filter((e) => e.allDay || (jePlatnyCas(e.start) && jePlatnyCas(e.end)))
       await db.calendarEvents.bulkAdd(pouzitelne.map((e) => ({ ...e, fetchedAt })))
     })
-    setCalStatus({ lastSuccessAt: fetchedAt, eventCount: events.length, lastError: undefined })
+    setCalStatus({
+      lastSuccessAt: fetchedAt,
+      eventCount: events.length,
+      lastError: undefined,
+      needsReauth: false,
+    })
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
     console.warn('kalendář:', message)
-    setCalStatus({ lastError: message })
+    setCalStatus({
+      lastError: message,
+      needsReauth: (e as { reauth?: boolean }).reauth === true,
+    })
   } finally {
     refreshing = false
   }

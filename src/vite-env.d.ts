@@ -9,3 +9,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+// Otisk buildu — doplňuje vite.config.ts přes define.
+declare const __BUILD__: string
