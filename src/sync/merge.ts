@@ -1,6 +1,9 @@
-// Čistá logika synchronizace (bez Dexie a Supabase) — pokrytá testy.
+// Čistá logika stahování (bez Dexie a Supabase) — pokrytá testy.
 // Konflikty řeší last-write-wins podle updatedAt; mazání jsou tombstony,
 // takže se přenášejí jako obyčejné záznamy s deletedAt.
+//
+// Odesílání sem nepatří: rozhoduje se podle evidence odeslaných verzí,
+// ne podle času, a bydlí v src/sync/outbox.ts.
 
 export interface Syncable {
   id: string
@@ -38,16 +41,4 @@ export function applyPull(
     if (!local || local.updatedAt < row.data.updatedAt) puts.push(row.data)
   })
   return puts
-}
-
-// Které lokální záznamy odeslat: vše s updatedAt za push kurzorem, seřazené
-// vzestupně, aby kurzor šel posouvat průběžně.
-export function pendingPush<T extends Syncable>(records: T[], cursor: string): T[] {
-  return records
-    .filter((r) => r.updatedAt > cursor)
-    .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
-}
-
-export function maxUpdatedAt(records: Syncable[], fallback: string): string {
-  return records.reduce((max, r) => (r.updatedAt > max ? r.updatedAt : max), fallback)
 }

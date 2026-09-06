@@ -19,6 +19,7 @@ import {
   syncNow,
 } from '../sync/engine'
 import { getSyncStatus, subscribeSyncStatus, type SyncPhase } from '../sync/status'
+import { plural } from '../lib/labels'
 import {
   getThemeChoice,
   setThemeChoice,
@@ -104,6 +105,14 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
             {status.phase === 'offline' && (
               <p className="rounded-2xl bg-note px-3 py-2 text-xs text-note-ink">
                 Bez připojení. Změny se odešlou, jakmile bude síť.
+              </p>
+            )}
+            {/* Odmítnutý záznam není chyba synchronizace — zbytek prošel.
+                Bez téhle řádky by ale vypadal jako uložený. */}
+            {status.refused !== undefined && (
+              <p className="rounded-2xl bg-note px-3 py-2 text-xs text-note-ink">
+                {`Server nepřijal ${status.refused} ${plural(status.refused, 'změnu', 'změny', 'změn')}`}
+                {' — nejspíš u úkolu, ke kterému už nemáš právo. Ostatní se uložilo.'}
               </p>
             )}
 

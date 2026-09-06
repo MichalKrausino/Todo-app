@@ -16,12 +16,11 @@ import {
   LOCAL_TABLE_NAMES,
   REMOTE_TABLES,
   applyPull,
-  maxUpdatedAt,
-  pendingPush,
   type LocalTableName,
   type PulledRow,
   type Syncable,
 } from './merge'
+import { dirtyRecords, sendWithFallback, vanishedIds, type PushedVersions } from './outbox'
 import {
   clientsToForget,
   parseFingerprint,
@@ -111,12 +110,25 @@ export async function syncNow(): Promise<void> {
 
   syncing = true
   setSyncStatus({ phase: 'syncing' })
+  refusedCount = 0
   try {
     await ensureAccount(session.user.id)
-    await ensureShareScope()
+    const scopeChanged = await ensureShareScope()
     for (const name of LOCAL_TABLE_NAMES) await pullTable(name)
     for (const name of LOCAL_TABLE_NAMES) await pushTable(name)
-    setSyncStatus({ phase: 'idle', lastSyncAt: new Date().toISOString(), error: undefined })
+    // Úklid zmizelých běží po odeslání (aby se neodeslaná práce počítala
+    // jako neodeslaná, ne jako zmizelá) a jen když se rozsah mohl zúžit,
+    // nebo jednou za den jako pojistka.
+    if (scopeChanged || (await sweepDue())) {
+      await sweepVanished()
+      await db.syncState.put({ id: 'sweep', cursor: new Date().toISOString() })
+    }
+    setSyncStatus({
+      phase: 'idle',
+      lastSyncAt: new Date().toISOString(),
+      error: undefined,
+      refused: refusedCount || undefined,
+    })
     // Pull mohl přinést změny šablon z druhého zařízení — dogenerovat instance.
     await reconcileTemplates()
   } catch (e) {
@@ -147,6 +159,7 @@ async function ensureAccount(userId: string): Promise<void> {
   if (previous && previous !== userId) {
     for (const name of LOCAL_TABLE_NAMES) await localTable(name).clear()
     await db.calendarEvents.clear()
+    await db.pushState.clear()
   }
   await db.syncState.put({ id: 'meta', userId })
 }
@@ -159,27 +172,44 @@ async function ensureAccount(userId: string): Promise<void> {
 // Druhý směr — sdílení mi vzali — se musí uklidit lokálně, a to výhradně
 // tvrdým výmazem. Tombstone by se odsynchronizoval zpátky a smazal data
 // tomu, kdo mi je půjčil.
-async function ensureShareScope(): Promise<void> {
+async function ensureShareScope(): Promise<boolean> {
   const shares = await fetchMyShares()
   // Nevíme, jak na tom sdílení je — nechat všechno být. Kdyby se selhání
   // bralo jako „nic nesdílím", vzal by výpadek sítě na pár vteřin za záminku
   // smazat lokální kopii sdílených dat a stáhnout celý účet znovu.
-  if (!shares) return
+  if (!shares) return false
   const fingerprint = sharesFingerprint(shares)
   const stored = (await db.syncState.get('shares'))?.cursor ?? ''
-  if (stored === fingerprint) return
+  if (stored === fingerprint) return false
 
-  for (const clientId of clientsToForget(parseFingerprint(stored), shares)) {
-    await forgetClientLocally(clientId)
+  const zapomenout = clientsToForget(parseFingerprint(stored), shares)
+  if (zapomenout.length > 0) {
+    // Napřed odeslat, co čeká. Kdo byl offline a stihl si u sdíleného
+    // klienta založit vlastní úkoly, o ně jinak přijde: úklid je smaže
+    // dřív, než se vůbec dostanou na server. Vlastní záznamy projdou i
+    // po odebrání sdílení — patří jemu, ne sdílení.
+    for (const name of LOCAL_TABLE_NAMES) await pushTable(name)
+    for (const clientId of zapomenout) await forgetClientLocally(clientId)
   }
 
-  // Kurzory pull, ať se rozšířený rozsah stáhne celý. Push kurzory zůstávají:
-  // co jsem odeslal, mám odeslané, a zapomenuté řádky se nesmí poslat znovu.
+  // Kurzory pull, ať se rozšířený rozsah stáhne celý. Evidence odeslaného
+  // zůstává: co je na serveru, tam je, a zapomenuté řádky se nesmí poslat
+  // znovu — ostatně už nejsou ani v Dexie.
   const pullCursors = await db.syncState
     .filter((row) => row.id.startsWith('pull:'))
     .toArray()
   await db.syncState.bulkDelete(pullCursors.map((row) => row.id))
   await db.syncState.put({ id: 'shares', cursor: fingerprint })
+  return true
+}
+
+// Pojistka pro případy, které otisk sdílení nezachytí — třeba úkol, který
+// majitel přesunul ze sdíleného klienta jinam. Nemá cenu ji hnát každou
+// minutu, stačí jednou za den.
+async function sweepDue(): Promise<boolean> {
+  const last = (await db.syncState.get('sweep'))?.cursor
+  if (!last) return true
+  return Date.now() - new Date(last).getTime() > 24 * 3600_000
 }
 
 // null = nepodařilo se zjistit. Buď SQL ze supabase/shares.sql ještě
@@ -197,9 +227,16 @@ async function fetchMyShares(): Promise<MyShare[] | null> {
 // Zahodí lokální kopii cizího klienta i všeho pod ním. Bez tombstonů a bez
 // emitRepoWrite — server o tomhle úklidu nesmí vědět.
 async function forgetClientLocally(clientId: string): Promise<void> {
-  await db.tasks.where('clientId').equals(clientId).delete()
-  await db.projects.where('clientId').equals(clientId).delete()
+  const ukoly = await db.tasks.where('clientId').equals(clientId).primaryKeys()
+  const projekty = await db.projects.where('clientId').equals(clientId).primaryKeys()
+  await db.tasks.bulkDelete(ukoly)
+  await db.projects.bulkDelete(projekty)
   await db.clients.delete(clientId)
+  await db.pushState.bulkDelete([
+    ...ukoly.map((id) => pushKey('tasks', id)),
+    ...projekty.map((id) => pushKey('projects', id)),
+    pushKey('clients', clientId),
+  ])
 }
 
 async function pullTable(name: LocalTableName): Promise<void> {
@@ -230,26 +267,110 @@ async function pullTable(name: LocalTableName): Promise<void> {
   }
 }
 
-async function pushTable(name: LocalTableName): Promise<void> {
-  const table = localTable(name)
-  const stateId = `push:${name}`
-  const cursor = (await db.syncState.get(stateId))?.cursor ?? ''
+const pushKey = (name: LocalTableName, id: string): string => `${name}:${id}`
 
-  const all = await table.toArray()
-  const rows = pendingPush(all, cursor)
-  if (rows.length === 0) return
+// Verze, ve kterých už záznamy odešly. Podle nich (ne podle času) se pozná,
+// co je potřeba odeslat — viz src/sync/outbox.ts.
+async function pushedVersions(name: LocalTableName, records: Syncable[]): Promise<PushedVersions> {
+  const states = await db.pushState.bulkGet(records.map((r) => pushKey(name, r.id)))
+  const pushed: PushedVersions = new Map()
+  records.forEach((r, i) => {
+    const state = states[i]
+    if (state) pushed.set(r.id, state.updatedAt)
+  })
+  return pushed
+}
 
-  for (let i = 0; i < rows.length; i += PAGE_SIZE) {
-    const batch = rows.slice(i, i + PAGE_SIZE)
-    const payload = batch.map((r) => ({
+// Zapíše se právě ta verze, která odešla — ne ta, co je zrovna v Dexie.
+// Když se záznam během odesílání změnil, evidence se s ním rozejde a
+// příští běh ho pošle znovu. Tím se nemůže ztratit změna udělaná v půlce
+// synchronizace.
+async function markPushed(name: LocalTableName, sent: Syncable[]): Promise<void> {
+  await db.pushState.bulkPut(sent.map((r) => ({ id: pushKey(name, r.id), updatedAt: r.updatedAt })))
+}
+
+async function upsertRows(name: LocalTableName, rows: Syncable[]): Promise<string | null> {
+  const { error } = await sb!.from(REMOTE_TABLES[name]).upsert(
+    rows.map((r) => ({
       id: r.id,
       data: r,
       updated_at: r.updatedAt,
       deleted_at: r.deletedAt ?? null,
-    }))
-    const { error } = await sb!.from(REMOTE_TABLES[name]).upsert(payload)
-    if (error) throw new Error(`${name}: ${error.message}`)
-    await db.syncState.put({ id: stateId, cursor: maxUpdatedAt(batch, cursor) })
+    })),
+  )
+  return error ? error.message : null
+}
+
+// Kolik záznamů server odmítl. Nula neznamená „nic se neposlalo", ale
+// „nic neuvázlo" — UI to ukazuje, aby odmítnutá změna nevypadala jako klid.
+let refusedCount = 0
+
+async function pushTable(name: LocalTableName): Promise<void> {
+  const table = localTable(name)
+  const all = await table.toArray()
+  const rows = dirtyRecords(all, await pushedVersions(name, all))
+  if (rows.length === 0) return
+
+  for (let i = 0; i < rows.length; i += PAGE_SIZE) {
+    const batch = rows.slice(i, i + PAGE_SIZE)
+    const { sent, refused } = await sendWithFallback(batch, (r) => upsertRows(name, r))
+    if (sent.length > 0) await markPushed(name, sent)
+    refusedCount += refused
+  }
+}
+
+// Úklid záznamů, které lokálně leží, ale server je nezná.
+//
+// Kurzorový pull stahuje jen to, co přibylo — o tom, že něco ubylo z
+// dosahu, se nedozví. Sdílení přitom rozsah zužuje běžně: majitel přesune
+// úkol ze sdíleného klienta jinam, odebere sdílení. Bez tohohle úklidu by
+// tu cizí kopie ležela napořád.
+//
+// Bezpečnostní pojistky, bez kterých by to bylo mazání dat:
+//   1. Neodeslaná práce se nikdy nezahazuje (offline změny čekající na síť
+//      server taky „nezná").
+//   2. Když seznam ze serveru nedojde celý, tabulka se přeskočí. Půlka
+//      seznamu vypadá jako „zbytek zmizel".
+//   3. Maže se tvrdě, bez tombstonů — je to lokální kopie cizích dat.
+async function sweepVanished(): Promise<void> {
+  for (const name of LOCAL_TABLE_NAMES) {
+    const serverIds = new Set<string>()
+    let cursor = ''
+    let complete = true
+
+    for (;;) {
+      let query = sb!
+        .from(REMOTE_TABLES[name])
+        .select('id')
+        .order('id', { ascending: true })
+        .limit(PAGE_SIZE)
+      if (cursor) query = query.gt('id', cursor)
+
+      const { data, error } = await query
+      if (error) {
+        complete = false
+        break
+      }
+      const rows = (data ?? []) as Array<{ id: string }>
+      if (rows.length === 0) break
+      for (const row of rows) serverIds.add(row.id)
+      cursor = rows[rows.length - 1].id
+      if (rows.length < PAGE_SIZE) break
+    }
+    if (!complete) continue
+
+    const table = localTable(name)
+    const all = await table.toArray()
+    const pushed = await pushedVersions(name, all)
+    const dirty = new Set(dirtyRecords(all, pushed).map((r) => r.id))
+    const gone = vanishedIds(
+      all.map((r) => r.id),
+      serverIds,
+      dirty,
+    )
+    if (gone.length === 0) continue
+    await table.bulkDelete(gone)
+    await db.pushState.bulkDelete(gone.map((id) => pushKey(name, id)))
   }
 }
 

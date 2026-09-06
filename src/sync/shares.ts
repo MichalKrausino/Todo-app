@@ -4,7 +4,20 @@
 // Vlastní přenos sdílených dat tenhle modul neřeší: o ten se stará běžný
 // pull/push v engine.ts, kterému se rozšířením RLS jen zvětšil rozsah.
 
+import { db } from '../db/db'
 import { getSupabase } from './engine'
+import { parseFingerprint } from './shareState'
+
+// Kteří klienti jsou sdílení — čte se z otisku, který si engine ukládá při
+// každé synchronizaci. Tedy bez dotazu na síť: funguje to i offline a
+// v letadle ukazuje poslední známý stav místo prázdna.
+//
+// Skrz Dexie schválně: `useLiveQuery` se na ten dotaz naváže, takže se
+// označení v seznamu samo přerovná, jakmile sdílení přibude nebo ubude.
+export async function sharedClientIds(): Promise<Set<string>> {
+  const row = await db.syncState.get('shares')
+  return new Set(parseFingerprint(row?.cursor ?? '').map((s) => s.clientId))
+}
 
 export interface ClientShare {
   email: string

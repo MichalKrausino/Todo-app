@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { ClientSharing } from '../components/ClientSharing'
+import { sharedClientIds } from '../sync/shares'
 import type { Client, ClientKind, Task } from '../db/types'
 import {
   activeClients,
@@ -78,6 +79,9 @@ function ClientList({
   const clients = useLiveQuery(activeClients, []) ?? []
   const archived = useLiveQuery(archivedClients, []) ?? []
   const open = useLiveQuery(openTasks, []) ?? []
+  // Které klienty vidí i někdo další. Bez toho se od pohledu nepozná, co je
+  // společná práce a co jen moje — a to je u sdílení ta nejdůležitější věc.
+  const sdilene = useLiveQuery(sharedClientIds, [], new Set<string>())
   const [adding, setAdding] = useState(false)
 
   const counts = new Map<string, number>()
@@ -104,9 +108,14 @@ function ClientList({
     // U oblastí („Interní", „Osobní") se druh hlásí — u klienta je zbytečný.
     const druh = c.kind === 'client' ? '' : `${KIND_LABELS[c.kind]} · `
     const pocet = counts.get(c.id) ?? 0
-    if (pocet === 0) return `${druh}žádné úkoly`
+    // „sdíleno" jde až na konec: den je to, kvůli čemu se na seznam kouká,
+    // a na úzkém displeji se ořízne spíš přívlastek než hlavní údaj.
+    const spolu = sdilene.has(c.id) ? ' · sdíleno' : ''
+    if (pocet === 0) return `${druh}žádné úkoly${spolu}`
     const den = nextDay.get(c.id)
-    return den ? `${druh}${formatDayLabel(den).toLowerCase()}` : `${druh}nic naplánováno`
+    return den
+      ? `${druh}${formatDayLabel(den).toLowerCase()}${spolu}`
+      : `${druh}nic naplánováno${spolu}`
   }
 
   const item = (c: Client) => (
