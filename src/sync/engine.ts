@@ -204,12 +204,21 @@ async function ensureShareScope(): Promise<boolean> {
 }
 
 // Pojistka pro případy, které otisk sdílení nezachytí — třeba úkol, který
-// majitel přesunul ze sdíleného klienta jinam. Nemá cenu ji hnát každou
-// minutu, stačí jednou za den.
+// majitel přesunul ze sdíleného klienta jinam, nebo který u sebe schoval
+// před konkrétním člověkem (`hiddenFrom`).
+//
+// Kdo o řádek přijde, se to nemá jak dozvědět: kurzorový pull stahuje jen
+// to, co přibylo, a zmizelý řádek prostě nepřijde. Jediný, kdo si toho
+// všimne, je tenhle úklid — a proto běží u sdílejících po půlhodině místo
+// jednou za den. Bez sdílení nemá co uklízet, tam denně stačí.
+const UKLID_BEZNY = 24 * 3600_000
+const UKLID_SDILENI = 30 * 60_000
+
 async function sweepDue(): Promise<boolean> {
   const last = (await db.syncState.get('sweep'))?.cursor
   if (!last) return true
-  return Date.now() - new Date(last).getTime() > 24 * 3600_000
+  const sdilim = ((await db.syncState.get('shares'))?.cursor ?? '') !== ''
+  return Date.now() - new Date(last).getTime() > (sdilim ? UKLID_SDILENI : UKLID_BEZNY)
 }
 
 // null = nepodařilo se zjistit. Buď SQL ze supabase/shares.sql ještě

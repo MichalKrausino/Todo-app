@@ -32,6 +32,7 @@ export function SharingSheet({ onClose }: { onClose: () => void }) {
             <p className="mt-1 text-sm text-ink-soft">
               Sdílí se klient jako celek — jeho projekty i úkoly. Kdo je uvnitř,
               vidí je jako svoje: přidá úkol a máš ho, odškrtne ho a vidíš hotovo.
+              Jednotlivý úkol jde z toho vyjmout přímo v jeho detailu.
             </p>
           </header>
 
@@ -73,8 +74,9 @@ export function SharingSheet({ onClose }: { onClose: () => void }) {
 
               <p className="px-1 text-[12px] text-ink-faint">
                 Úkoly bez klienta zůstávají soukromé, stejně jako šablony a ranní
-                návrh dne. Komu sdílení vezmeš, tomu data klienta z jeho zařízení
-                zmizí — u tebe zůstanou.
+                návrh dne. Nechceš ukázat konkrétní úkol? V jeho detailu je
+                „Kdo úkol vidí". Komu sdílení vezmeš, tomu data klienta z jeho
+                zařízení zmizí — u tebe zůstanou.
               </p>
             </>
           )}

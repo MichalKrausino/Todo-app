@@ -83,6 +83,11 @@ export interface Task extends BaseRecord {
   // „Top 3 dne" — YYYY-MM-DD, na který den je úkol připíchnutý. Váže se
   // ke dni (ne bool), takže špendlík zítra sám vyprchá a neuklízí se ručně.
   pinnedFor?: string
+  // Komu se úkol NEukazuje, i když klienta sdílíme (Fáze 9). Ukládají se
+  // id uživatelů, ne e-maily — e-mail by v tomhle poli přečetl každý, kdo
+  // na řádek dosáhne. Rozhoduje o tom RLS na serveru, ne appka: filtr jen
+  // v UI by data pořád posílal do cizího zařízení.
+  hiddenFrom?: string[]
   subtasks?: Subtask[] // checklist — po respawnu opakování se nuluje na nehotové
   isClientCheck?: boolean // pravidelná připomínka „zkontrolovat klienta" (marker přežívá respawn)
   // Úkol přišel z Todoistu (Fáze 8). Název, termín a priorita patří Todoistu —

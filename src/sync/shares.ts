@@ -22,6 +22,8 @@ export async function sharedClientIds(): Promise<Set<string>> {
 export interface ClientShare {
   email: string
   isOwner: boolean
+  // Id se hodí k `Task.hiddenFrom` — do sdílených dat se píše id, ne e-mail.
+  userId: string
 }
 
 const OFFLINE = 'Sdílení potřebuje připojení k serveru.'
@@ -56,8 +58,9 @@ export async function listClientShares(clientId: string): Promise<ClientShare[]>
   if (!sb) return []
   const { data, error } = await sb.rpc('list_client_shares', { p_client_id: clientId })
   if (error || !data) return []
-  return (data as Array<{ email: string; is_owner: boolean }>).map((r) => ({
+  return (data as Array<{ email: string; is_owner: boolean; user_id: string }>).map((r) => ({
     email: r.email,
     isOwner: r.is_owner,
+    userId: r.user_id,
   }))
 }

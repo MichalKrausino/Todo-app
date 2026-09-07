@@ -48,6 +48,7 @@ const SHARING: string[] = [
   'Sdílí se klient jako celek: jeho projekty i úkoly. Kolega musí mít v appce účet.',
   'Kdo je uvnitř, vidí úkoly jako svoje — přidá úkol a máš ho, odškrtne ho a vidíš hotovo.',
   'Úkoly bez klienta zůstávají soukromé, stejně jako šablony a ranní návrh dne.',
+  'Jednotlivý úkol jde ze sdílení vyjmout: v jeho detailu je „Kdo úkol vidí“ a odškrtnutý kolega ho nedostane ani do zařízení.',
   'Sdílení zruší zakladatel klienta, nebo přizvaný sám za sebe („Odejít“).',
 ]
 
