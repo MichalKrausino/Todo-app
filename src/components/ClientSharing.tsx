@@ -76,7 +76,8 @@ export function ClientSharing({ clientId }: { clientId: string }) {
 
         {signedIn && shares.length === 0 && (
           <p className="px-4 py-2.5 text-sm text-ink-faint">
-            Klient je jen tvůj. Přidej e-mail a uvidíte na jeho úkoly oba.
+            Klient je jen tvůj. Přidej e-mail a uvidíte na jeho úkoly oba —
+            kromě těch, které v jejich detailu vyjmeš.
           </p>
         )}
 

@@ -108,8 +108,16 @@ Co se sdílí a co ne:
 | | sdílí se |
 |---|---|
 | Klient, jeho projekty a úkoly | ano |
+| Úkol, u kterého kolegu odškrtneš | ne — viz níž |
 | Úkoly bez klienta (inbox) | ne, zůstávají soukromé |
 | Šablony, ranní návrh dne, kalendář, Todoist | ne, každý má svoje |
+
+**Jednotlivý úkol jde ze sdílení vyjmout.** I u společného klienta se dělá
+práce, do které kolegovi nic není. V detailu úkolu je sekce **„Kdo úkol
+vidí"** — odškrtnutý člověk úkol nedostane vůbec, ani do svého zařízení.
+Hlídá to pravidlo na serveru (`data->'hiddenFrom'`), ne filtr v appce, takže
+se k němu nedá dostat ani obejitím appky. Kdo je odškrtnutý, na řádek
+nedosáhne, a nemůže se tedy ani sám vrátit zpátky.
 
 Sdílení může zrušit zakladatel klienta (odebere kohokoli), nebo přizvaný
 sám za sebe (**Odejít**). Komu se sdílení vezme, tomu se klientova data

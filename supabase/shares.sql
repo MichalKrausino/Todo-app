@@ -1,9 +1,12 @@
 -- Fáze 9: sdílení klienta s dalším uživatelem.
 -- Spusť jednou v Supabase → SQL Editor (navazuje na schema.sql).
 --
--- Jednotka sdílení je KLIENT. Co visí pod sdíleným klientem (projekty,
--- úkoly), je sdílené taky — jedno pravidlo, žádné výjimky. Úkoly bez
--- klienta (inbox) zůstávají soukromé.
+-- Jednotka sdílení je KLIENT: co visí pod sdíleným klientem (projekty,
+-- úkoly), je sdílené taky. Úkoly bez klienta (inbox) zůstávají soukromé.
+--
+-- Jedna výjimka je po úkolech: u konkrétního úkolu jde vypnout, že ho vidí
+-- konkrétní člověk (`data->'hiddenFrom'`) — u klienta se dělá i práce, do
+-- které kolegovi nic není. Rozhoduje o tom policy, ne appka.
 --
 -- Sdílení se nedělá druhým synchronizačním kanálem, ale rozšířením RLS:
 -- appka stahuje všechno, na co jí server dá právo, takže jakmile řádek
@@ -96,28 +99,48 @@ create policy "vlastni a sdilene" on public.clients
     or id::text in (select public.shared_client_ids())
   );
 
-do $$
-declare
-  t text;
-begin
-  foreach t in array array['projects', 'tasks'] loop
-    execute format('drop policy if exists "vlastni radky" on public.%I', t);
-    execute format('drop policy if exists "vlastni a sdilene" on public.%I', t);
-    execute format($f$
-      create policy "vlastni a sdilene" on public.%I
-        for all to authenticated
-        using (
-          user_id = (select auth.uid())
-          or data->>'clientId' in (select public.shared_client_ids())
-        )
-        with check (
-          user_id = (select auth.uid())
-          or data->>'clientId' in (select public.shared_client_ids())
-        )
-    $f$, t);
-  end loop;
-end;
-$$;
+drop policy if exists "vlastni radky" on public.projects;
+drop policy if exists "vlastni a sdilene" on public.projects;
+create policy "vlastni a sdilene" on public.projects
+  for all to authenticated
+  using (
+    user_id = (select auth.uid())
+    or data->>'clientId' in (select public.shared_client_ids())
+  )
+  with check (
+    user_id = (select auth.uid())
+    or data->>'clientId' in (select public.shared_client_ids())
+  );
+
+-- Úkoly mají navíc výjimku po jednotlivcích: `data->'hiddenFrom'` je seznam
+-- id lidí, kterým se TENHLE úkol neukazuje, i když klienta sdílíme.
+-- Sdílený klient je tím dohoda o rozsahu, ne o každém řádku — u klienta
+-- se dělá i práce, do které kolegovi nic není.
+--
+-- Skrytí musí platit na SERVERU, ne až v appce: filtr v UI by data pořád
+-- posílal do cizího zařízení a stačilo by se podívat do IndexedDB.
+--
+-- Vlastní řádek (`user_id = auth.uid()`) je schválně první a bez výjimky —
+-- ze svého vlastního úkolu se nikdo nevyřadí ani omylem. A kdo v seznamu
+-- je, na řádek nedosáhne vůbec, takže se z něj nemůže sám vyškrtnout.
+drop policy if exists "vlastni radky" on public.tasks;
+drop policy if exists "vlastni a sdilene" on public.tasks;
+create policy "vlastni a sdilene" on public.tasks
+  for all to authenticated
+  using (
+    user_id = (select auth.uid())
+    or (
+      data->>'clientId' in (select public.shared_client_ids())
+      and not (coalesce(data->'hiddenFrom', '[]'::jsonb) ? ((select auth.uid())::text))
+    )
+  )
+  with check (
+    user_id = (select auth.uid())
+    or (
+      data->>'clientId' in (select public.shared_client_ids())
+      and not (coalesce(data->'hiddenFrom', '[]'::jsonb) ? ((select auth.uid())::text))
+    )
+  );
 
 -- ---------------------------------------------------------------------------
 -- Správa sdílení (volá appka)
@@ -193,20 +216,25 @@ grant execute on function public.unshare_client(uuid, text) to authenticated;
 -- S kým je klient sdílený — pro výpis v appce. Vidí jen účastník sdílení.
 -- is_owner rozliší majitele od členů (appka podle toho nabídne „odebrat"
 -- versus „odejít ze sdílení").
+-- Vrací i user_id: podle něj se u jednotlivého úkolu zapisuje, komu se
+-- nemá ukazovat (`hiddenFrom`). E-mail by se do sdílených dat psát nesměl —
+-- četl by ho každý, kdo na řádek dosáhne.
+--
+-- Návratový typ se změnil, proto drop: `create or replace` typ nepřepíše.
+drop function if exists public.list_client_shares(uuid);
 create or replace function public.list_client_shares(p_client_id uuid)
-returns table (email text, is_owner boolean)
+returns table (email text, is_owner boolean, user_id uuid)
 language sql
 stable
 security definer
 set search_path = ''
 as $$
-  select u.email::text, (u.id = s.owner_id) as is_owner
+  select distinct u.email::text as email, (u.id = s.owner_id) as is_owner, u.id as user_id
   from public.shares s
   join auth.users u on u.id in (s.owner_id, s.member_id)
   where s.client_id = p_client_id
     and (s.owner_id = (select auth.uid()) or s.member_id = (select auth.uid()))
-  group by u.email, is_owner
-  order by is_owner desc, u.email
+  order by is_owner desc, email
 $$;
 
 revoke all on function public.list_client_shares(uuid) from public, anon;

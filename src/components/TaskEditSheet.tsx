@@ -11,6 +11,7 @@ import {
   updateTask,
 } from '../db/repo'
 import { Sheet } from './Sheet'
+import { TaskSharing } from './TaskSharing'
 import { deleteBlockForTask } from '../sync/calendar'
 import {
   addTodoistSubtask,
@@ -74,6 +75,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   const [title, setTitle] = useState(task.title)
   const [notes, setNotes] = useState(task.notes ?? '')
   const [clientId, setClientId] = useState(task.clientId ?? '')
+  const [hiddenFrom, setHiddenFrom] = useState<string[]>(task.hiddenFrom ?? [])
   const [projectId, setProjectId] = useState(task.projectId ?? '')
   const [priority, setPriority] = useState<Priority>(task.priority)
   // Importovaný úkol se dá upravovat a změny letí zpátky do Todoistu.
@@ -453,6 +455,15 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           <label className={label} htmlFor="pole-poznamky">Poznámky</label>
           <textarea id="pole-poznamky" className={field} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
+
+        {/* Ukládá se hned při přepnutí, ne až tlačítkem: „kdo to vidí" je
+            rozhodnutí o datech, ne rozepsaný text, a nemá čekat na Uložit. */}
+        <TaskSharing
+          taskId={task.id}
+          clientId={clientId || undefined}
+          hiddenFrom={hiddenFrom}
+          onChange={setHiddenFrom}
+        />
 
         {fromTodoist && (
           <a
