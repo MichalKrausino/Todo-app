@@ -694,9 +694,11 @@ body:has(.sheet-backdrop:not(.closing)) .app-shell {
   }
 }
 
+/* Zavírací sjezd začíná tam, kam se panel stáhl prstem (--sheet-drag píše
+   Sheet.tsx při tažení) — jinak by před sjetím dolů skočil zpátky nahoru. */
 @keyframes sheet-down {
   from {
-    transform: none;
+    transform: translateY(var(--sheet-drag, 0px));
   }
   to {
     transform: translateY(100%);

@@ -23,8 +23,10 @@ zdůvodnění rozhodnutí a roadmapa fází: **`docs/PLAN.md`** — před větš
   výjimky jsou v něm vyjmenované i s důvodem.
 - `npm run audit:chovani` — co pravítkem nezměříš: klidový režim
   (`prefers-reduced-motion`) musí zastavit **všechno**, běžný režim naopak
-  animovat, a appka musí přežít proklikání (založení úkolu, odškrtnutí,
-  přepnutí obrazovek, panely, uložení detailu, znovunačtení z IndexedDB).
+  animovat, appka musí přežít proklikání (založení úkolu, odškrtnutí,
+  přepnutí obrazovek, panely, uložení detailu, znovunačtení z IndexedDB)
+  a panel se musí dát zavřít stažením dolů (prst se posílá přes CDP —
+  rychlost tahu je součást gesta, švihnutí zavírá, pomalé lízmutí ne).
   Chce hotový `npm run build`.
 - `npm run nahled` — obrázky appky do `.snimky/` (obě schémata, rozměr iPhonu).
   **Vzhled posuzuj z nich, ne odhadem.** Chromium bez GPU vykresluje
