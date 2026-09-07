@@ -100,7 +100,8 @@ přidá úkol a druhý ho má, odškrtne ho a druhý vidí hotovo.
 1. V **Supabase → SQL Editoru** spusť [`supabase/shares.sql`](supabase/shares.sql).
 2. Kolega se v appce zaregistruje e-mailem a heslem (obláček vpravo nahoře).
    Účet musí existovat dřív, než ho půjde přidat.
-3. U klienta: **Klienti → klient → Sdílení** → vlož jeho e-mail → Sdílet.
+3. V appce: obláček vpravo nahoře → **Sdílení s kolegy** → vyber klienta →
+   vlož e-mail → Sdílet. (Totéž jde i dole v detailu klienta.)
 
 Co se sdílí a co ne:
 

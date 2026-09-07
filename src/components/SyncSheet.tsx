@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
 import { exportBackup, importBackup } from '../db/backup'
 import {
   FETCH_WINDOW_DAYS,
@@ -28,6 +29,8 @@ import {
 } from '../lib/theme'
 import { getTodoistStatus, subscribeTodoistStatus } from '../sync/todoist'
 import { HelpSheet } from './HelpSheet'
+import { SharingSheet } from './SharingSheet'
+import { sharedClientIds } from '../sync/shares'
 import { Sheet } from './Sheet'
 import { TodoistSheet } from './TodoistSheet'
 
@@ -46,9 +49,19 @@ export function useSyncStatus() {
   return useSyncExternalStore(subscribeSyncStatus, getSyncStatus)
 }
 
+// Popisek řádky sdílení. Odhlášenému se neslibuje nic, co nepůjde —
+// ale řádka zůstává vidět, jinak by se o sdílení nedozvěděl.
+function sdileniPopis(pocet: number, phase: SyncPhase): string {
+  if (phase === 'unconfigured' || phase === 'signedOut') return 'Vyžaduje přihlášení'
+  if (pocet === 0) return 'Klienta můžeš sdílet s kolegou'
+  return `${pocet} ${plural(pocet, 'sdílený klient', 'sdílení klienti', 'sdílených klientů')}`
+}
+
 export function SyncSheet({ onClose }: { onClose: () => void }) {
   const [helpOpen, setHelpOpen] = useState(false)
   const [todoistOpen, setTodoistOpen] = useState(false)
+  const [sharingOpen, setSharingOpen] = useState(false)
+  const sdilene = useLiveQuery(sharedClientIds, [], new Set<string>())
   const status = useSyncStatus()
   const todoist = useSyncExternalStore(subscribeTodoistStatus, getTodoistStatus)
 
@@ -133,6 +146,22 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
             </div>
           </>
         )}
+
+        {/* Sdílení klienta s kolegou (Fáze 9). Nastavuje se u klienta, ale
+            hledá se to tady u účtu — proto sem vede řádka. */}
+        <button
+          onClick={() => setSharingOpen(true)}
+          className="flex w-full items-center justify-between rounded-xl border border-line px-4 py-3 text-left transition-transform duration-150 active:scale-[0.99]"
+        >
+          <span>
+            <span className="block text-[15px] font-medium">Sdílení s kolegy</span>
+            <span className="text-[13px] text-ink-soft">{sdileniPopis(sdilene.size, status.phase)}</span>
+          </span>
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint/70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
+        {sharingOpen && <SharingSheet onClose={() => setSharingOpen(false)} />}
 
         <ThemeSection />
 

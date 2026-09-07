@@ -4,15 +4,16 @@
 // je ve svojí appce jako svoje: může přidávat úkoly i odškrtávat, a změna
 // se vrátí zpátky běžnou synchronizací.
 //
-// Sekce se ukáže jen přihlášenému: bez účtu není s kým sdílet a nabízet to
-// by znamenalo slibovat něco, co nefunguje.
+// Sekce se ukáže i odhlášenému — jen místo formuláře řekne, že to chce
+// přihlášení. Schovaná byla horší: kdo účet nemá, nedozvěděl se, že appka
+// sdílení vůbec umí, a hledal ho marně.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { listClientShares, shareClient, unshareClient, type ClientShare } from '../sync/shares'
-import { useSyncStatus } from './SyncSheet'
+import { getSyncStatus, subscribeSyncStatus } from '../sync/status'
 
 export function ClientSharing({ clientId }: { clientId: string }) {
-  const status = useSyncStatus()
+  const status = useSyncExternalStore(subscribeSyncStatus, getSyncStatus)
   const signedIn = status.phase !== 'signedOut' && status.phase !== 'unconfigured'
   const [shares, setShares] = useState<ClientShare[]>([])
   const [email, setEmail] = useState('')
@@ -29,8 +30,6 @@ export function ClientSharing({ clientId }: { clientId: string }) {
       live = false
     }
   }, [clientId, signedIn])
-
-  if (!signedIn) return null
 
   const refresh = async () => setShares(await listClientShares(clientId))
 
@@ -68,20 +67,27 @@ export function ClientSharing({ clientId }: { clientId: string }) {
     <section>
       <h2 className="mb-2 section-label">sdílení</h2>
       <section className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
-        {shares.length === 0 && (
+        {!signedIn && (
+          <p className="px-4 py-2.5 text-sm text-ink-soft">
+            Klienta jde sdílet s kolegou — uvidíte na tytéž úkoly a odškrtnutí
+            se ukáže oběma. Chce to přihlášení (obláček vpravo nahoře).
+          </p>
+        )}
+
+        {signedIn && shares.length === 0 && (
           <p className="px-4 py-2.5 text-sm text-ink-faint">
             Klient je jen tvůj. Přidej e-mail a uvidíte na jeho úkoly oba.
           </p>
         )}
 
-        {owner && !meIsOwner && (
+        {signedIn && owner && !meIsOwner && (
           <div className="px-4 py-2.5 text-sm">
             <span className="text-ink-faint">Sdílí ti </span>
             <span className="font-medium">{owner.email}</span>
           </div>
         )}
 
-        {members.map((m) => (
+        {signedIn && members.map((m) => (
           <div key={m.email} className="flex items-center justify-between gap-3 px-4 py-2.5">
             <div className="min-w-0 text-sm">
               <div className="truncate font-medium">{m.email}</div>
@@ -99,7 +105,7 @@ export function ClientSharing({ clientId }: { clientId: string }) {
           </div>
         ))}
 
-        {(meIsOwner || shares.length === 0) && (
+        {signedIn && (meIsOwner || shares.length === 0) && (
           <form onSubmit={(e) => void add(e)} className="flex items-center gap-2 px-4 py-2.5">
             <input
               type="email"

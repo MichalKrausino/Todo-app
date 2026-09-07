@@ -33,7 +33,8 @@ import {
   setClientCheck,
   type CheckFrequency,
 } from '../db/clientCheck'
-import { CLIENT_COLORS, KIND_LABELS, firstFreeColor, plural } from '../lib/labels'
+import { COLOR_NAMES, KIND_LABELS, firstFreeColor, plural } from '../lib/labels'
+import { ColorPicker } from '../components/ColorPicker'
 import { formatDayLabel, formatDaysAgo, todayISO } from '../lib/dates'
 import { parseQuickAdd } from '../lib/quickAdd'
 import { neglectedDays } from '../lib/signals'
@@ -391,6 +392,7 @@ function NewClientForm({ usedColors, onDone }: { usedColors: Array<string | unde
   const [name, setName] = useState('')
   const [kind, setKind] = useState<ClientKind>('client')
   const [color, setColor] = useState(() => firstFreeColor(usedColors))
+  const [pickingColor, setPickingColor] = useState(false)
   const [checkOn, setCheckOn] = useState(false)
   const [checkFreq, setCheckFreq] = useState<CheckFrequency>('weekly')
 
@@ -404,13 +406,38 @@ function NewClientForm({ usedColors, onDone }: { usedColors: Array<string | unde
 
   return (
     <form onSubmit={submit} className="space-y-3 rounded-2xl bg-card p-3 shadow-card">
-      <input
-        autoFocus
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Jméno klienta nebo oblasti"
-        className="w-full rounded-lg border border-line px-3 py-2 text-[15px] outline-none focus:border-accent/60"
-      />
+      {/* Barva sedí u jména, protože v seznamu je to jedna věc: tečka
+          a text vedle ní. Ťuknutím se rozbalí paleta — do formuláře se
+          nevejde jako trvalá dvouřádková mřížka, a hlavně tam nepatří:
+          appka barvu přidělí sama a měnit se hodí až mezi ostatními. */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setPickingColor((v) => !v)}
+          aria-label={`Barva klienta: ${COLOR_NAMES[color] ?? color}`}
+          aria-expanded={pickingColor}
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-full transition-transform duration-150 active:scale-90"
+        >
+          <span className="h-5 w-5 rounded-full" style={{ background: color }} />
+        </button>
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Jméno klienta"
+          aria-label="Jméno klienta nebo oblasti"
+          className="min-w-0 flex-1 rounded-lg border border-line px-3 py-2 text-[15px] outline-none focus:border-accent/60"
+        />
+      </div>
+      {pickingColor && (
+        <ColorPicker
+          value={color}
+          onPick={(c) => {
+            setColor(c)
+            setPickingColor(false)
+          }}
+        />
+      )}
       <select
         value={kind}
         onChange={(e) => setKind(e.target.value as ClientKind)}
@@ -422,19 +449,6 @@ function NewClientForm({ usedColors, onDone }: { usedColors: Array<string | unde
           </option>
         ))}
       </select>
-      <div className="flex flex-wrap gap-2">
-        {CLIENT_COLORS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            aria-label={`Barva ${c}`}
-            onClick={() => setColor(c)}
-            className={`h-7 w-7 rounded-full ${color === c ? 'ring-2 ring-accent ring-offset-2' : ''}`}
-            style={{ background: c }}
-          />
-        ))}
-      </div>
-
       <div className="overflow-hidden rounded-lg border border-line">
         <label className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5">
           <span className="text-[15px]">
@@ -615,12 +629,18 @@ function ClientDetail({
         Klienti
       </button>
 
-      <header className="pr-24">
+      {/* Hlavička se v klidu uhýbá plovoucím ikonám vpravo nahoře (pr-24),
+          aby jméno neběželo pod lupu a obláček. Při přejmenování ale panel
+          tu uhnutou šířku nechce — v 64 % šířky se paleta ořízne v půlce
+          a tlačítka se zlomí do dvou řádek. Sjede proto pod lištu ikon
+          (pt-14) a dostane celou šířku. */}
+      <header className={renaming ? 'pt-14' : 'pr-24'}>
         {renaming ? (
           <div className="rise space-y-2 rounded-2xl bg-card p-3 shadow-card">
             <input
               autoFocus
               value={draftName}
+              aria-label="Jméno klienta"
               onChange={(e) => setDraftName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') saveRename()
@@ -628,20 +648,7 @@ function ClientDetail({
               }}
               className="w-full rounded-lg border border-line bg-card px-3 py-2 text-[16px] outline-none focus:border-accent/60"
             />
-            <div className="flex flex-wrap gap-1.5">
-              {CLIENT_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  aria-label={`Barva ${c}`}
-                  onClick={() => void updateClient(id, { color: c })}
-                  className={`h-7 w-7 rounded-full transition-transform duration-150 active:scale-90 ${
-                    client.color === c ? 'ring-2 ring-ink ring-offset-2 ring-offset-card' : ''
-                  }`}
-                  style={{ background: c }}
-                />
-              ))}
-            </div>
+            <ColorPicker value={client.color} onPick={(c) => void updateClient(id, { color: c })} />
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setRenaming(false)}

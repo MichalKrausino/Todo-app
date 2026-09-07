@@ -90,6 +90,53 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 3. panel se zavírá stažením dolů (na iPhonu první instinkt) ---
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}, hasTouch:true, isMobile:true})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  const cdp = await ctx.newCDPSession(page)
+  // Tah prstem: pauza mezi kroky rozhoduje o rychlosti, a ta je součástí
+  // gesta — švihnutí zavírá i po krátké dráze, pomalé lízmutí ne.
+  const tah = async (x, y, dy, kroky, pauza) => {
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]})
+    for (let i=1;i<=kroky;i++) {
+      await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x,y:y+(dy*i)/kroky}]})
+      await page.waitForTimeout(pauza)
+    }
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})
+    await page.waitForTimeout(600)
+  }
+  // Escape napřed: kdyby gesto selhalo a panel zůstal otevřený, další
+  // kontrola by čekala na tlačítko pod ním a celý audit by spadl na časový
+  // limit místo toho, aby poctivě řekla, co nefunguje.
+  const otevri = async () => {
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(500)
+    await page.locator('button[aria-label^="Synchronizace"]').first().click()
+    await page.waitForTimeout(700)
+  }
+  const panelu = () => page.locator('.sheet-panel').count()
+
+  await otevri()
+  const y0 = (await page.locator('.sheet-panel').boundingBox()).y + 40
+  await tah(195, y0, 40, 6, 120)
+  T_(await panelu() > 0, 'krátké pomalé stažení panel nezavře')
+
+  await tah(195, y0, 260, 8, 40)
+  T_(await panelu() === 0, 'stažení panelu dolů ho zavře')
+
+  // Odrolovaný panel patří scrollování — jinak by gesto sebralo obsah.
+  await otevri()
+  await page.evaluate(() => { document.querySelector('.sheet-panel').scrollTop = 200 })
+  await page.waitForTimeout(200)
+  const y1 = (await page.locator('.sheet-panel').boundingBox()).y + 200
+  await tah(195, y1, 260, 8, 40)
+  T_(await panelu() > 0, 'odrolovaný panel se tažením nezavírá, jen scrolluje')
+
+  await ctx.close()
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)
