@@ -73,6 +73,7 @@ export function Sheet({
     const panel = panelRef.current
     if (!panel) return
 
+    let zacatekX = 0
     let zacatekY = 0
     let posledniY = 0
     let posledniCas = 0
@@ -91,6 +92,7 @@ export function Sheet({
 
     const start = (e: TouchEvent) => {
       if (e.touches.length !== 1) return
+      zacatekX = e.touches[0].clientX
       zacatekY = posledniY = e.touches[0].clientY
       posledniCas = e.timeStamp
       rychlost = 0
@@ -104,8 +106,14 @@ export function Sheet({
       const y = e.touches[0].clientY
       const dy = y - zacatekY
       if (!tahne) {
-        if (!odshora || dy < 8) return
+        // Svislé gesto musí převážit nad vodorovným — jinak by tažení
+        // po posuvné řádce (barvy, rychlé dny) sebralo panel místo obsahu.
+        if (!odshora || dy < 8 || dy <= Math.abs(e.touches[0].clientX - zacatekX)) return
         tahne = true
+        // Safari ignoruje preventDefault, jakmile jednou začne rolovat —
+        // proto se scrollování na dobu tahu vypne úplně. Bez toho zůstane
+        // pod prstem gumový doraz, který panel jen nafoukne a nezavře.
+        panel.style.overflowY = 'hidden'
       }
       const dt = e.timeStamp - posledniCas
       if (dt > 0) rychlost = (y - posledniY) / dt
@@ -123,6 +131,7 @@ export function Sheet({
     const konec = () => {
       if (!tahne) return
       tahne = false
+      panel.style.overflowY = ''
       const prah = Math.min(ZAVRIT_PX, panel.offsetHeight * 0.25)
       if (posun > prah || rychlost > ZAVRIT_RYCHLOST) {
         close()
