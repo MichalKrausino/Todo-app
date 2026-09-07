@@ -42,6 +42,15 @@ const AUTOMATIC: string[] = [
   'Dokud je appka otevřená a je signál, data se obnovují sama — na wifi i na datech.',
 ]
 
+// Sdílení je jediná věc v appce, kterou nezvládneš sám — kolega musí mít
+// taky účet. Proto je tu i ten první řádek.
+const SHARING: string[] = [
+  'Sdílí se klient jako celek: jeho projekty i úkoly. Kolega musí mít v appce účet.',
+  'Kdo je uvnitř, vidí úkoly jako svoje — přidá úkol a máš ho, odškrtne ho a vidíš hotovo.',
+  'Úkoly bez klienta zůstávají soukromé, stejně jako šablony a ranní návrh dne.',
+  'Sdílení zruší zakladatel klienta, nebo přizvaný sám za sebe („Odejít“).',
+]
+
 export function HelpSheet({ onClose }: { onClose: () => void }) {
   return (
     <Sheet onClose={onClose} tone="paper" className="space-y-5">
@@ -91,6 +100,20 @@ export function HelpSheet({ onClose }: { onClose: () => void }) {
             <p className="mt-1.5 px-1 text-[12px] text-ink-faint">
               Upozornění se zapínají v Synchronizaci. Když se zrovna díváš do appky,
               nepřijdou — jen se srovná číslo na ikoně.
+            </p>
+          </section>
+
+          <section>
+            <h3 className="section-label mb-2">sdílení s kolegy</h3>
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
+              {SHARING.map((s) => (
+                <li key={s} className="px-4 py-2.5 text-[14px] text-ink-soft">
+                  {s}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5 px-1 text-[12px] text-ink-faint">
+              Nastavuje se v Synchronizaci → Sdílení s kolegy, nebo dole v detailu klienta.
             </p>
           </section>
 

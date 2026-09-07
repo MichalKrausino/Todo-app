@@ -265,6 +265,7 @@ const panely = [
   ['Nastaveni', async () => { await otevriNastaveni() }, 1],
   ['Napoveda', async () => { await otevriNastaveni(); await page.waitForTimeout(450); await page.getByRole('button', { name: /Jak to funguje/ }).click() }, 2],
   ['Todoist', async () => { await otevriNastaveni(); await page.waitForTimeout(450); await page.getByRole('button', { name: /^Todoist/ }).click() }, 2],
+  ['Sdileni', async () => { await otevriNastaveni(); await page.waitForTimeout(450); await page.getByRole('button', { name: /^Sdílení s kolegy/ }).click() }, 2],
   ['Hledani', async () => { await page.getByRole('button', { name: 'Hledat' }).click() }, 1],
   ['Detail ukolu', async () => { await page.getByText('Zavolat Ondrovi').first().click() }, 1],
   ['Sablony', async () => { await page.getByRole('button', { name: 'Klienti' }).click(); await page.waitForTimeout(450); await page.getByRole('button', { name: /Šablony/ }).click() }, 1],
