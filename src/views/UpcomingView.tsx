@@ -14,6 +14,7 @@ import { plannedMinutes } from '../lib/capacity'
 import { addDays, formatDayLabel, formatEventRange, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { minutesToLabel } from '../lib/freeSlot'
 import { TaskRow } from '../components/TaskRow'
+import { DlouhySeznam } from '../components/DlouhySeznam'
 import { plural } from '../lib/labels'
 
 
@@ -236,7 +237,12 @@ export function UpcomingView({
                 </ul>
               )}
               {dayTasks.length > 0 ? (
-                <ul className="divide-y divide-line">{dayTasks.map((t) => row(t, false))}</ul>
+                <DlouhySeznam
+                  polozky={dayTasks}
+                  radek={(t) => row(t, false)}
+                  davka={12}
+                  className="divide-y divide-line"
+                />
               ) : (
                 <p className="px-4 py-2.5 text-[13px] text-ink-faint">Jen schůzky, žádný úkol.</p>
               )}
@@ -248,7 +254,7 @@ export function UpcomingView({
       {inbox.length > 0 && (
         <section className="rise" style={{ '--stagger': Math.min(dates.length + 1, 9) } as React.CSSProperties}>
           <h2 className="section-label mb-2">bez termínu · {inbox.length}</h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{inbox.map((t) => row(t, true))}</ul>
+          <DlouhySeznam polozky={inbox} radek={(t) => row(t, true)} />
         </section>
       )}
 

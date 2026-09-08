@@ -23,6 +23,7 @@ import { HelpSheet } from '../components/HelpSheet'
 import { ShutdownSheet } from '../components/ShutdownSheet'
 import { SignalsBlock } from '../components/SignalsBlock'
 import { TaskRow } from '../components/TaskRow'
+import { DlouhySeznam } from '../components/DlouhySeznam'
 import { plural } from '../lib/labels'
 
 // Nejbližší relevantní den úkolu — dřívější z „naplánováno“ a „termín“.
@@ -583,7 +584,7 @@ export function TodayView({
       {visOverdue.length > 0 && (
         <section className="rise" style={stagger(5)}>
           <h2 className="section-label mb-2 !text-danger">po termínu · {visOverdue.length}</h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{visOverdue.map((t) => row(t))}</ul>
+          <DlouhySeznam polozky={visOverdue} radek={(t) => row(t)} />
         </section>
       )}
 
@@ -591,9 +592,7 @@ export function TodayView({
         {visTodays.length > 0 && <h2 className="section-label mb-2">dnes · {visTodays.length}</h2>}
         {visTodays.length > 0 ? (
           <>
-            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
-              {visTodays.map((t) => row(t, false))}
-            </ul>
+            <DlouhySeznam polozky={visTodays} radek={(t) => row(t, false)} />
             {gestureTip && (
               <div className="rise mt-2 flex items-start gap-2 rounded-xl bg-accent-wash px-3 py-2">
                 <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-accent-deep" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -676,7 +675,7 @@ export function TodayView({
         return (
           <section className="rise" style={stagger(7)}>
             <h2 className="section-label mb-2">bez termínu · {inbox.length}</h2>
-            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{inbox.map((t) => row(t))}</ul>
+            <DlouhySeznam polozky={inbox} radek={(t) => row(t)} />
           </section>
         )
       })()}
@@ -684,7 +683,7 @@ export function TodayView({
       {done.length > 0 && (
         <section className="rise" style={stagger(8)}>
           <h2 className="section-label mb-2">hotovo · {done.length}</h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{done.map((t) => row(t))}</ul>
+          <DlouhySeznam polozky={done} radek={(t) => row(t)} />
         </section>
       )}
 

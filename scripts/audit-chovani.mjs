@@ -240,6 +240,58 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 6. dlouhé seznamy se nevykreslují celé ---
+// Změřeno na 1200 úkolech: appka vykreslovala 760 řádků na Dnes a 1 080
+// v Plánu, takže přepnutí obrazovky trvalo na pomalejším telefonu přes
+// čtyři vteřiny (čtení z databáze na tom mělo podíl 37 ms — zbytek bylo
+// vykreslování řádků, které stejně nikdo nepřečte).
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(700)
+  const nasypano = await page.evaluate(async () => {
+    const den = (p) => { const d = new Date(); d.setDate(d.getDate() + p); return d.toISOString().slice(0, 10) }
+    const ted = new Date().toISOString()
+    const db = await new Promise((res) => { const r = indexedDB.open('todo'); r.onsuccess = () => res(r.result) })
+    const zapis = (t, rows) => new Promise((res) => {
+      const tx = db.transaction(t, 'readwrite'); const st = tx.objectStore(t)
+      for (const r of rows) st.put(r); tx.oncomplete = res
+    })
+    const ukoly = Array.from({ length: 400 }, (_, i) => ({
+      id: 'zk' + i, createdAt: ted, updatedAt: ted, title: 'Zátěžový úkol ' + i,
+      priority: 'normal', status: 'active', order: i,
+      scheduledFor: den(i % 3 === 0 ? -2 : i % 10), // část po termínu, část dopředu
+    }))
+    await zapis('tasks', ukoly)
+    return ukoly.length
+  })
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(1500)
+
+  const radku = async () => await page.evaluate(() => document.querySelectorAll('main li').length)
+  const naDnes = await radku()
+  T_(naDnes > 0 && naDnes < 150, 'Dnes vykreslí jen část dlouhého seznamu (řádků: ' + naDnes + ' ze ' + nasypano + ')')
+
+  // Hlavička ale musí říkat pravdu — počet je celkový, ne kolik se kreslí.
+  const hlavicka = await page.evaluate(() => {
+    const t = document.body.innerText || ''
+    const m = t.match(/termínu[^0-9]*(\d+)/) || t.match(/dnes[^0-9]*(\d+)/i)
+    return m ? m[1] : 'nenalezeno: ' + t.slice(0, 120).replace(/\n/g, ' | ')
+  })
+  T_(Number(hlavicka) > 100, 'počet v hlavičce sekce je celkový, ne jen vykreslený (' + hlavicka + ')')
+
+  const vic = page.getByRole('button', { name: /Zobrazit \d+ dalš/ }).first()
+  T_(await vic.count() > 0, 'nabídne se dobrání dalších')
+  if (await vic.count()) {
+    await vic.click(); await page.waitForTimeout(400)
+    T_(await radku() > naDnes, 'dobrání opravdu přidá řádky')
+  }
+
+  await page.getByRole('button',{name:'Plán',exact:true}).click(); await page.waitForTimeout(1200)
+  const vPlanu = await radku()
+  T_(vPlanu > 0 && vPlanu < 200, 'Plán vykreslí jen část dlouhého seznamu (řádků: ' + vPlanu + ')')
+  await ctx.close()
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)
