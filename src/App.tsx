@@ -6,6 +6,8 @@ import { SearchSheet } from './components/SearchSheet'
 import { ToastHost } from './components/ToastHost'
 import { SyncButton, SyncSheet } from './components/SyncSheet'
 import { TaskEditSheet } from './components/TaskEditSheet'
+import { jeOtevrenyPanel } from './components/Sheet'
+import { zkratkaZKlavesy } from './lib/shortcuts'
 import { TodayView } from './views/TodayView'
 import { UpcomingView } from './views/UpcomingView'
 import { ClientsView } from './views/ClientsView'
@@ -74,6 +76,8 @@ export default function App() {
   // Zadávání úkolu je složené do pluska — dok tak zůstane slim kapsle
   // a možnosti (termín, klient…) se ukážou, až když je potřebuješ.
   const [addOpen, setAddOpen] = useState(false)
+  const addOpenRef = useRef(false)
+  addOpenRef.current = addOpen
   // Odscrollováno = horní lišta se zamlží a ukáže kompaktní titulek.
   const [scrolled, setScrolled] = useState(false)
   // Navigace z tichých signálů: otevřít konkrétního klienta na záložce Klienti.
@@ -91,6 +95,45 @@ export default function App() {
   // Spodní dok plave nad obsahem (aby přes sklo prosvítal), takže si
   // musí říct o odsazení — a jeho výška se mění (lišta, výběr termínu).
   const dockRef = useRef<HTMLElement>(null)
+  // Klávesnice na Macu: ⌘K hledá, N otevře zadávání, 1–3 přepínají
+  // záložky, Esc složí zadávání. Co je zkratka a co psaní, rozhoduje
+  // čistá logika v src/lib/shortcuts.ts; s otevřeným panelem mlčí.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement
+      const piseSe =
+        el instanceof HTMLElement &&
+        (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
+      const akce = zkratkaZKlavesy(e, { piseSe, panel: jeOtevrenyPanel(), zadavani: addOpenRef.current })
+      if (!akce) return
+      e.preventDefault()
+      switch (akce) {
+        case 'hledat':
+          setSearchOpen(true)
+          break
+        case 'novy':
+          setAddOpen(true)
+          // už rozbalené: autoFocus se znovu nespustí, tak se zaostří ručně
+          dockRef.current?.querySelector('input')?.focus()
+          break
+        case 'zavrit':
+          setAddOpen(false)
+          if (el instanceof HTMLElement) el.blur()
+          break
+        case 'dnes':
+          setTab('today')
+          break
+        case 'plan':
+          setTab('upcoming')
+          break
+        case 'klienti':
+          setTab('clients')
+          break
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   useLayoutEffect(() => {
     const el = dockRef.current
     if (!el) return

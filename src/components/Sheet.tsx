@@ -11,6 +11,10 @@ import { createPortal } from 'react-dom'
 // Bez něj by jedno stisknutí zavřelo i vyhledávání pod detailem úkolu.
 const stack: symbol[] = []
 
+// Klávesové zkratky appky (src/lib/shortcuts.ts) mlčí, dokud nad ní leží
+// panel — klávesy tam patří jemu.
+export const jeOtevrenyPanel = () => stack.length > 0
+
 // Stažení panelu dolů ho zavře — na iPhonu to člověk zkusí jako první.
 //
 // POSTAVENO PODLE OVĚŘENÉHO VZORU (vaul, drawer od Emila Kowalského),

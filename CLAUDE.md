@@ -100,6 +100,15 @@ záznam by se za chvíli smazal znovu. Ptát se smí jedině na to, co vrátit
 nejde: smazání úkolu v Todoistu (zmizí i klientovi ve sdíleném projektu),
 a i to se ptá **v panelu**, ne dialogem.
 
+**Klávesnice na Macu** (`src/lib/shortcuts.ts`, čistá logika s testy):
+⌘K / Ctrl K hledá i uprostřed psaní, jednopísmenné zkratky (N, /, 1–3)
+jen mimo pole a bez modifikátorů, s otevřeným panelem
+(`jeOtevrenyPanel()` ze `Sheet.tsx`) mlčí všechno — Escape patří panelu.
+⌘↩ v detailu úkolu ukládá. Nápověda sekci zkratek ukazuje jen na
+`(pointer: fine)`. **Odkazy** (`src/lib/links.ts`): URL z názvu i
+poznámky je na řádku úkolu cíl k ťuknutí (první odkaz, `TaskRow`) a v
+detailu čipy s doménou; tečka, čárka a závorka za adresou patří větě.
+
 **Panel se chytá za úchyt, ne za plochu** (`Sheet.tsx` + `.sheet-grip`).
 Tři věci, které se tu už dvakrát podařilo rozbít: (1) nájezd a sjezd dělá
 **přechod, ne animace s `fill: both`** — animace v kaskádě přebíjí inline

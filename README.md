@@ -46,6 +46,12 @@ instalace ani (v pozdější fázi) push notifikace.
   termínu"), jak dlouho je ticho a kdy je další práce
 - Triáž propadlých: nadpis „po termínu" otevře průchod jeden po druhém —
   u každého dnes / příští týden / už neplatí, se „Zpět" na poslední krok
+- Odkaz v úkolu jde otevřít ťuknutím: Canva, Drive nebo brief v poznámce
+  (i v názvu) se ukáže jako ikonka na řádku a jako čip v detailu — bez
+  opisování adresy
+- Klávesnice na Macu: ⌘K hledá, N otevře zadávání, 1 · 2 · 3 přepínají
+  záložky, ⌘↩ uloží detail, Esc zavře; při psaní se písmena berou jako
+  písmena
 - Mazání se neptá, ale jde vrátit — u doku se po smazání ukáže „Vrátit"
   (u klienta se vrátí i jeho projekty a úkoly)
 - Synchronizace mezi zařízeními přes Supabase (Google login, tombstony,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Priority, Project, Subtask, Task, TodoistComment } from '../db/types'
 import {
@@ -12,6 +12,7 @@ import {
   updateTask,
 } from '../db/repo'
 import { Sheet } from './Sheet'
+import { najdiOdkazy } from '../lib/links'
 import { nabidniVraceni, ukazToast } from '../lib/toast'
 import { TaskSharing } from './TaskSharing'
 import { deleteBlockForTask } from '../sync/calendar'
@@ -148,6 +149,25 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
       [clientId],
     ) ?? []
 
+  // ⌘↩ uloží — na Macu se to čeká od každého formuláře. Handler visí
+  // na okně (uvnitř panelu není jeden společný prvek, který by ho nesl),
+  // a close() z renderu si půjčuje přes ref.
+  const closeRef = useRef<() => void>(() => {})
+  const saveRef = useRef<() => void>(() => {})
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return
+      e.preventDefault()
+      saveRef.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // Odkazy z názvu i poznámky — Canva, Drive, brief. Bez tohohle by je
+  // člověk z appky opisoval.
+  const odkazy = najdiOdkazy(title, notes)
+
   const save = async (close: () => void) => {
     if (!title.trim()) return
     const hasDate = Boolean(dueDate || scheduledFor)
@@ -197,7 +217,10 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
 
   return (
     <Sheet onClose={onClose} className="space-y-3">
-      {(close) => (
+      {(close) => {
+        closeRef.current = close
+        saveRef.current = () => void save(closeRef.current)
+        return (
         <>
         <header className="flex items-start justify-between gap-3">
           <h2 className="text-lg font-bold">Upravit úkol</h2>
@@ -474,6 +497,25 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
         <div>
           <label className={label} htmlFor="pole-poznamky">Poznámky</label>
           <textarea id="pole-poznamky" className={field} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          {odkazy.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2" data-odkazy>
+              {odkazy.map((o) => (
+                <a
+                  key={o.url}
+                  href={o.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full bg-well px-3 text-[13px] font-medium text-accent-deep transition-transform duration-150 active:scale-95"
+                >
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10.5 13.5a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2" />
+                    <path d="M13.5 10.5a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2" />
+                  </svg>
+                  {o.popisek}
+                </a>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Ukládá se hned při přepnutí, ne až tlačítkem: „kdo to vidí" je
@@ -587,7 +629,8 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           </div>
         </div>
         </>
-      )}
+        )
+      }}
     </Sheet>
   )
 }

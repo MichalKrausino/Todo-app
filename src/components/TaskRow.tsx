@@ -3,6 +3,7 @@ import type { Client, Priority, Project, Task } from '../db/types'
 import { updateTask } from '../db/repo'
 import { deleteBlockForTask } from '../sync/calendar'
 import { addDays, formatDayLabel, fromISODate, toISODate, todayISO } from '../lib/dates'
+import { najdiOdkazy } from '../lib/links'
 
 // Priorita jako barevná pilulka — čitelnější než prostý text.
 const PRIO_BADGE: Partial<Record<Priority, { label: string; cls: string }>> = {
@@ -158,6 +159,9 @@ export function TaskRow({
     (task.dueDate < todayISO() ||
       (task.dueDate === todayISO() && !!task.dueTime && task.dueTime <= nowHM))
   const prio = PRIO_BADGE[task.priority]
+  // První odkaz z názvu nebo poznámky jde otevřít rovnou z řádku —
+  // „schválit banner" je jedno ťuknutí od Canvy, ne detail + kopírování.
+  const odkaz = najdiOdkazy(task.title, task.notes)[0]
   const subs = task.subtasks ?? []
   const subsDone = subs.filter((s) => s.done).length
   const fullPull = dragging && dx < -SWIPE_FULL // Zítra expanduje přes celou šířku
@@ -319,6 +323,23 @@ export function TaskRow({
             </div>
           )}
         </button>
+
+        {odkaz && !visualDone && (
+          <a
+            href={odkaz.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Otevřít odkaz ${odkaz.popisek}`}
+            title={odkaz.popisek}
+            onClick={(e) => e.stopPropagation()}
+            className="-my-1.5 -mr-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-soft transition-[background-color,transform] duration-150 hover:bg-well active:scale-90"
+          >
+            <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.5 13.5a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2" />
+              <path d="M13.5 10.5a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2" />
+            </svg>
+          </a>
+        )}
       </div>
     </li>
   )

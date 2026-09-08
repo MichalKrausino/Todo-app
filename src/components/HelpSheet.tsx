@@ -1,4 +1,5 @@
 import { Sheet } from './Sheet'
+import { zkratkyProNapovedu } from '../lib/shortcuts'
 
 // Nápověda: appka umí spoustu věcí gestem nebo psaním, ale nic z toho
 // není vidět. Tohle je jediné místo, kde se to dá přečíst — otevírá se
@@ -14,6 +15,7 @@ const SYNTAX: Array<{ example: string; means: string }> = [
   { example: 'zaplatit fakturu !!', means: 'vysoká priorita (i samotné !, !!! kritická)' },
   { example: 'každý pátek report', means: 'opakující se úkol' },
   { example: 'schůzka // vzít podklady', means: 'poznámka za dvěma lomítky' },
+  { example: 'schválit banner // https://canva.com/…', means: 'odkaz jde otevřít rovnou z řádku úkolu' },
 ]
 
 const GESTURES: Array<{ what: string; how: string }> = [
@@ -53,6 +55,10 @@ const SHARING: string[] = [
 ]
 
 export function HelpSheet({ onClose }: { onClose: () => void }) {
+  // Zkratky mají smysl jen tam, kde je klávesnice — na iPhonu by sekce
+  // jen mátla.
+  const klavesnice = typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches
+  const zkratky = zkratkyProNapovedu()
   return (
     <Sheet onClose={onClose} tone="paper" className="space-y-5">
       {() => (
@@ -87,6 +93,25 @@ export function HelpSheet({ onClose }: { onClose: () => void }) {
               ))}
             </ul>
           </section>
+
+          {klavesnice && (
+            <section>
+              <h3 className="section-label mb-2">klávesnice na Macu</h3>
+              <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
+                {zkratky.map((z) => (
+                  <li key={z.klavesy} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                    <span className="text-[15px] text-ink">{z.co}</span>
+                    <kbd className="shrink-0 rounded-md bg-well px-2 py-0.5 font-sans text-[13px] font-medium text-ink-soft">
+                      {z.klavesy}
+                    </kbd>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1.5 px-1 text-[12px] text-ink-faint">
+                Písmenné zkratky platí mimo pole — při psaní úkolu se „n" bere jako písmeno.
+              </p>
+            </section>
+          )}
 
           <section>
             <h3 className="section-label mb-2">kdy se ozve</h3>
