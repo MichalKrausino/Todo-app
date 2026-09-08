@@ -78,6 +78,8 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   const [notes, setNotes] = useState(task.notes ?? '')
   const [clientId, setClientId] = useState(task.clientId ?? '')
   const [hiddenFrom, setHiddenFrom] = useState<string[]>(task.hiddenFrom ?? [])
+  // Druhé datum se rozbalí jen tomu, kdo ho má nebo si o něj řekne.
+  const [planujuJinyDen, setPlanujuJinyDen] = useState(Boolean(task.scheduledFor))
   const [ptamSeNaTodoist, setPtamSeNaTodoist] = useState(false)
   const [projectId, setProjectId] = useState(task.projectId ?? '')
   const [priority, setPriority] = useState<Priority>(task.priority)
@@ -282,6 +284,14 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           </div>
         </div>
 
+        {/* Jedno datum, ne dvě. Dvě data vedle sebe byla nejčastější zádrhel
+            celé appky — potřebovala odstavec, který vysvětluje, čím se liší.
+            Když pole potřebuje odstavec, netrefil ho model, ne uživatel.
+            Primární je Termín: to píše parser i rychlé zadávání („ve čtvrtek
+            report"), to je pro člověka „ten den". Naplánováno je vrstva
+            navrch (ranní návrh, uzávěrka) a ukáže se, jen když je vyplněné
+            nebo si o něj člověk řekne. Data se nemění, jen se přestalo
+            ptát na obojí naráz. */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={label} htmlFor="pole-termin">Termín</label>
@@ -295,24 +305,8 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
             <DenChipy value={dueDate} onChange={setDueDate} />
           </div>
           <div>
-            <label className={label} htmlFor="pole-naplanovano">Naplánováno</label>
-            <input
-              id="pole-naplanovano"
-              type="date"
-              className={field}
-              value={scheduledFor}
-              onChange={(e) => setScheduledFor(e.target.value)}
-            />
-            <DenChipy value={scheduledFor} onChange={setScheduledFor} />
-          </div>
-          <div>
-            {/* Popisek nad polem jako u všech ostatních. Dřív stál vedle
-                něj a pole bylo užší než datum nad ním, takže sloupec
-                vypadal rozsypaně. Čas patří k termínu, proto je v jeho
-                sloupci hned pod ním. */}
-            <label className={label} htmlFor="cas-terminu">
-              Čas termínu
-            </label>
+            {/* Čas patří k termínu, proto stojí vedle něj. */}
+            <label className={label} htmlFor="cas-terminu">Čas</label>
             <input
               id="cas-terminu"
               type="time"
@@ -326,13 +320,33 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
             />
           </div>
         </div>
-        {/* Dvě data vedle sebe jsou nejčastější zádrhel celé appky —
-            bez věty pod nimi si nikdo nedomyslí, čím se liší. */}
-        <p className="-mt-1 text-[12px] leading-relaxed text-ink-faint">
-          <strong className="font-medium text-ink-soft">Termín</strong> je dokdy to musí být
-          hotové. <strong className="font-medium text-ink-soft">Naplánováno</strong> je den, kdy
-          se tomu chceš věnovat — ten se ukáže na Dnes.
-        </p>
+
+        {planujuJinyDen ? (
+          <div>
+            <label className={label} htmlFor="pole-naplanovano">Naplánováno na jiný den</label>
+            <input
+              id="pole-naplanovano"
+              type="date"
+              className={field}
+              value={scheduledFor}
+              onChange={(e) => setScheduledFor(e.target.value)}
+            />
+            <DenChipy value={scheduledFor} onChange={setScheduledFor} />
+            {/* Vysvětlení jen tady, kde je o co jde — ne pod každým úkolem. */}
+            <p className="mt-1 text-[12px] leading-relaxed text-ink-faint">
+              Den, kdy se tomu chceš věnovat — ten se ukáže na Dnes. Termín zůstává
+              tím, dokdy to musí být hotové.
+            </p>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPlanujuJinyDen(true)}
+            className="-my-1 py-2 text-[13px] font-medium text-accent-deep transition-transform duration-150 active:scale-95"
+          >
+            + Naplánovat na jiný den
+          </button>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>

@@ -271,6 +271,12 @@ const panely = [
   // co se dá snadno podměřit (kontrast a cíl pro prst).
   ['Triaz', async () => { await page.getByRole('button', { name: /Projít/ }).click() }, 1],
   ['Detail ukolu', async () => { await page.getByText('Zavolat Ondrovi').first().click() }, 1],
+  // Druhé datum je schované za odkazem — rozbalené se musí změřit zvlášť,
+  // jinak by se rozsypané pole nikdy neukázalo.
+  ['Detail ukolu (druhy den)', async () => {
+    await page.getByText('Zavolat Ondrovi').first().click(); await page.waitForTimeout(500)
+    await page.getByRole('button', { name: /Naplánovat na jiný den/ }).click()
+  }, 1],
   ['Sablony', async () => { await page.getByRole('button', { name: 'Klienti' }).click(); await page.waitForTimeout(450); await page.getByRole('button', { name: /Šablony/ }).click() }, 1],
 ]
 // Celý průchod se pouští dvakrát: světlá paleta se měří celá, tmavá jen
