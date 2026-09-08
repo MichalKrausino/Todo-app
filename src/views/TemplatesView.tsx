@@ -9,10 +9,12 @@ import {
   duplicateTemplate,
   newTemplateItem,
   removeTemplate,
+  restoreTemplate,
   undeployTemplate,
   updateTemplate,
 } from '../db/templates'
 import { addDays, formatDayLabel, fromISODate, toISODate, todayISO } from '../lib/dates'
+import { nabidniVraceni } from '../lib/toast'
 import { PRIORITY_LABELS, plural } from '../lib/labels'
 import { parseTemplateItem } from '../lib/quickAdd'
 import { RULE_EPOCH, humanizeRule, occurrencesBetween } from '../lib/rrule'
@@ -218,17 +220,22 @@ function TemplateDetail({
     setQuickText('')
   }
 
+  // Neptá se, ale jde vrátit — u položky stačí vrátit seznam, jaký byl.
+  // Budoucí úkoly z ní dogeneruje reconciler, to je jeho práce.
   const deleteItem = async (id: string) => {
-    if (confirm('Odebrat položku? Budoucí nehotové úkoly z ní zmizí u všech klientů.')) {
-      await updateTemplate(template.id, { items: template.items.filter((i) => i.id !== id) })
-    }
+    const puvodni = template.items
+    const polozka = puvodni.find((i) => i.id === id)
+    await updateTemplate(template.id, { items: puvodni.filter((i) => i.id !== id) })
+    nabidniVraceni(`Položka „${polozka?.title ?? ''}" odebrána`, () =>
+      updateTemplate(template.id, { items: puvodni }),
+    )
   }
 
   const del = async () => {
-    if (confirm(`Smazat šablonu „${template.name}“? Stáhne se ode všech klientů.`)) {
-      await removeTemplate(template.id)
-      onBack()
-    }
+    const jmeno = template.name
+    const plan = await removeTemplate(template.id)
+    onBack()
+    nabidniVraceni(`Šablona „${jmeno}" smazána`, () => restoreTemplate(plan))
   }
 
   const duplicate = async () => {

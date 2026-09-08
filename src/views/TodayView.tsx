@@ -21,8 +21,10 @@ import { WORK_END, WORK_START, freeGaps, freeMinutes, minutesToLabel, type BusyI
 import { computeSignals } from '../lib/signals'
 import { HelpSheet } from '../components/HelpSheet'
 import { ShutdownSheet } from '../components/ShutdownSheet'
+import { TriageSheet } from '../components/TriageSheet'
 import { SignalsBlock } from '../components/SignalsBlock'
 import { TaskRow } from '../components/TaskRow'
+import { DlouhySeznam } from '../components/DlouhySeznam'
 import { plural } from '../lib/labels'
 
 // Nejbližší relevantní den úkolu — dřívější z „naplánováno“ a „termín“.
@@ -102,6 +104,7 @@ export function TodayView({
   const [batchClient, setBatchClient] = useState<string | null>(null)
   // Večerní uzávěrka (shutdown ritual) — uzavření dne se pamatuje do půlnoci.
   const [shutdownOpen, setShutdownOpen] = useState(false)
+  const [triageOpen, setTriageOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   // Jednorázový tip na swipe gesta — jinak je nikdo neobjeví. Zmizí
   // navždy po zavření nebo po prvním použití gesta.
@@ -148,8 +151,16 @@ export function TodayView({
     window.addEventListener('hashchange', check)
     return () => window.removeEventListener('hashchange', check)
   }, [])
-  const open = useLiveQuery(openTasks, []) ?? []
-  const done = useLiveQuery(() => doneOn(today), [today]) ?? []
+  // `useLiveQuery` vrací `undefined`, dokud první dotaz nedoběhne — a to
+  // není totéž co „nic tu není". Když se rozdíl setře na `?? []`, appka po
+  // startu na chvíli tvrdí „Čistý stůl", i když je den plný; změřeno,
+  // úkoly naskočily až o 30 ms později (na telefonu se studenou databází
+  // násobně víc). První, co člověk po otevření vidí, nemá být nepravda.
+  const openRaw = useLiveQuery(openTasks, [])
+  const doneRaw = useLiveQuery(() => doneOn(today), [today])
+  const nacteno = openRaw !== undefined && doneRaw !== undefined
+  const open = openRaw ?? []
+  const done = doneRaw ?? []
   const clients = useLiveQuery(allClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []
   const dayPlan = useLiveQuery(() => getDayPlan(today), [today])
@@ -574,18 +585,32 @@ export function TodayView({
 
       {visOverdue.length > 0 && (
         <section className="rise" style={stagger(5)}>
-          <h2 className="section-label mb-2 !text-danger">po termínu · {visOverdue.length}</h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{visOverdue.map((t) => row(t))}</ul>
+          {/* Nadpis je akce: u stovky propadlých je seznam slepá ulička —
+              jediná cesta ven by bylo otevřít každý zvlášť. */}
+          <button
+            onClick={() => setTriageOpen(true)}
+            className="mb-1.5 flex w-full items-center justify-between gap-2 py-2 text-left"
+          >
+            <span className="section-label !text-danger">po termínu · {visOverdue.length}</span>
+            <span className="flex shrink-0 items-center gap-1 text-[13px] font-medium text-accent-deep">
+              Projít
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </span>
+          </button>
+          <DlouhySeznam polozky={visOverdue} radek={(t) => row(t)} />
         </section>
+      )}
+      {triageOpen && (
+        <TriageSheet ukoly={visOverdue} clients={clientMap} onClose={() => setTriageOpen(false)} />
       )}
 
       <section className="rise" style={stagger(6)}>
         {visTodays.length > 0 && <h2 className="section-label mb-2">dnes · {visTodays.length}</h2>}
         {visTodays.length > 0 ? (
           <>
-            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
-              {visTodays.map((t) => row(t, false))}
-            </ul>
+            <DlouhySeznam polozky={visTodays} radek={(t) => row(t, false)} />
             {gestureTip && (
               <div className="rise mt-2 flex items-start gap-2 rounded-xl bg-accent-wash px-3 py-2">
                 <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-accent-deep" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -608,6 +633,7 @@ export function TodayView({
             )}
           </>
         ) : batchClient ? (
+          nacteno &&
           visOverdue.length === 0 &&
           pinned.length === 0 && (
             <p className="rounded-2xl bg-card px-4 py-4 text-center text-sm text-ink-soft shadow-card">
@@ -615,6 +641,9 @@ export function TodayView({
             </p>
           )
         ) : (
+          // `nacteno` schválně až tady, ne kolem celé obrazovky: hlavička
+          // a dok musí naskočit hned, ať appka nezačíná prázdnou plochou.
+          nacteno &&
           overdue.length === 0 &&
           pinned.length === 0 && (
             <div className="rounded-2xl bg-card px-5 py-8 text-center shadow-card">
@@ -664,7 +693,7 @@ export function TodayView({
         return (
           <section className="rise" style={stagger(7)}>
             <h2 className="section-label mb-2">bez termínu · {inbox.length}</h2>
-            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{inbox.map((t) => row(t))}</ul>
+            <DlouhySeznam polozky={inbox} radek={(t) => row(t)} />
           </section>
         )
       })()}
@@ -672,7 +701,7 @@ export function TodayView({
       {done.length > 0 && (
         <section className="rise" style={stagger(8)}>
           <h2 className="section-label mb-2">hotovo · {done.length}</h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{done.map((t) => row(t))}</ul>
+          <DlouhySeznam polozky={done} radek={(t) => row(t)} />
         </section>
       )}
 

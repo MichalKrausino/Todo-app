@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { CalendarEvent, Priority, Task } from '../db/types'
 import { activeClients, addTask, allProjects, calendarCacheCount, calendarEventsOn, openTasks, removeTask } from '../db/repo'
@@ -8,6 +7,7 @@ import { WORK_END, WORK_START, freeMinutes, minutesToLabel, type BusyInterval } 
 import { PRIORITY_LABELS, plural } from '../lib/labels'
 import { foldToken, mentionToken, parseQuickAdd } from '../lib/quickAdd'
 import { humanizeRule } from '../lib/rrule'
+import { ukazToast, type ToastAkce } from '../lib/toast'
 import { FETCH_WINDOW_DAYS } from '../sync/calendar'
 import { MonthPicker } from './MonthPicker'
 
@@ -63,16 +63,11 @@ export function QuickAdd({
   // Počítadlo přidaných úkolů — mění key tlačítka, takže po každém
   // přidání proběhne potvrzovací pop (hmatová odezva bez haptiky).
   const [addedCount, setAddedCount] = useState(0)
-  // Pojistka proti špatnému parsování: pár vteřin po přidání jde úkol vrátit.
-  const [lastAdded, setLastAdded] = useState<{ id: string; title: string; dueDate?: string } | null>(
-    null,
-  )
-  const [toastLeaving, setToastLeaving] = useState(false)
-  const undoTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  // Pojistka proti špatnému parsování: pár vteřin po přidání jde úkol
+  // vrátit. Zpráva jde přes společný toast (`src/lib/toast.ts`) — dvě
+  // hlášky u doku by se jinak překrývaly se zprávou po smazání.
   const clients = useLiveQuery(activeClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []
-
-  useEffect(() => () => clearTimeout(undoTimer.current), [])
 
   // Příklad z prázdného stavu na Dnes se vloží rovnou do pole a zaostří
   // ho — uživatel vidí, co parser z věty vytáhne, a jen odešle.
@@ -252,21 +247,16 @@ export function QuickAdd({
     setOverrides({})
     setPicker(null)
     setAddedCount((n) => n + 1)
-    setToastLeaving(false)
-    setLastAdded({ id: task.id, title: task.title, dueDate: task.scheduledFor ?? task.dueDate })
-    clearTimeout(undoTimer.current)
-    // toast odejde animovaně: nejdřív třída .toast-out, pak odmontování
-    undoTimer.current = setTimeout(() => {
-      setToastLeaving(true)
-      undoTimer.current = setTimeout(() => setLastAdded(null), 300)
-    }, 5700)
-  }
-
-  const undo = async () => {
-    if (!lastAdded) return
-    clearTimeout(undoTimer.current)
-    await removeTask(lastAdded.id)
-    setLastAdded(null)
+    const den = task.scheduledFor ?? task.dueDate
+    const akce: ToastAkce[] = []
+    // „Zobrazit" má smysl u všeho, co po přidání zmizí z očí — nejen
+    // u inboxu: úkol na zítřek se z obrazovky Dnes taky ztratí a bez
+    // odkazu není kam se za ním podívat.
+    if (den !== todayISO() && onShowUpcoming) {
+      akce.push({ popisek: 'Zobrazit', kdyz: onShowUpcoming })
+    }
+    akce.push({ popisek: 'Zpět', kdyz: () => void removeTask(task.id) })
+    ukazToast(den ? `${formatDayLabel(den)} — „${task.title}"` : `Do inboxu — „${task.title}"`, akce)
   }
 
   const today = todayISO()
@@ -283,42 +273,6 @@ export function QuickAdd({
     // jeho okrajem. Zadávání se kvůli skládací animaci ořezává, takže bez
     // téhle rezervy byl prstenec dole seříznutý.
     <div className="relative px-3 pt-2.5 pb-1.5">
-      {lastAdded && createPortal(
-        <div
-          className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-3"
-          style={{ bottom: 'calc(var(--dock-h, 9rem) + var(--vv-bottom, 0px) + 0.75rem)' }}
-        >
-          <div className={`${toastLeaving ? 'toast-out' : 'pop'} pointer-events-auto flex items-center gap-2 rounded-full bg-ink/90 py-1.5 pl-4 pr-1.5 shadow-float backdrop-blur`}>
-            <span className="max-w-48 truncate text-[13px] text-paper">
-              {lastAdded.dueDate
-                ? `${formatDayLabel(lastAdded.dueDate)} — „${lastAdded.title}“`
-                : `Do inboxu — „${lastAdded.title}“`}
-            </span>
-            {/* „Zobrazit" má smysl u všeho, co po přidání zmizí z očí —
-                nejen u inboxu: úkol na zítřek se z obrazovky Dnes taky
-                ztratí a bez odkazu není kam se za ním podívat. */}
-            {lastAdded.dueDate !== today && onShowUpcoming && (
-              <button
-                onClick={() => {
-                  setLastAdded(null)
-                  onShowUpcoming()
-                }}
-                className="rounded-full bg-paper/15 px-3 py-1 text-[13px] font-semibold text-paper transition-transform duration-150 active:scale-95"
-              >
-                Zobrazit
-              </button>
-            )}
-            <button
-              onClick={() => void undo()}
-              className="rounded-full bg-paper/15 px-3 py-1 text-[13px] font-semibold text-paper transition-transform duration-150 active:scale-95"
-            >
-              Zpět
-            </button>
-          </div>
-        </div>,
-        document.body,
-      )}
-
       {/* Jediné místo, kde se cokoli rozbaluje. Roste nahoru, pole pod ním
           zůstává na místě — dřív se s každým otevřeným výběrem posunulo
           a iOS nechal kurzor viset nad ním. */}

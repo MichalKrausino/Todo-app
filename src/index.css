@@ -684,26 +684,6 @@ body:has(.sheet-backdrop:not(.closing)) .app-shell {
   animation-delay: calc(0.1s + var(--stagger, 0) * 45ms);
 }
 
-/* spodní panely — nájezd zdola po celé výšce, návrat tamtéž */
-@keyframes sheet-up {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: none;
-  }
-}
-
-/* Zavírací sjezd začíná tam, kam se panel stáhl prstem (--sheet-drag píše
-   Sheet.tsx při tažení) — jinak by před sjetím dolů skočil zpátky nahoru. */
-@keyframes sheet-down {
-  from {
-    transform: translateY(var(--sheet-drag, 0px));
-  }
-  to {
-    transform: translateY(100%);
-  }
-}
 
 @keyframes fade-in {
   from {
@@ -731,12 +711,35 @@ body:has(.sheet-backdrop:not(.closing)) .app-shell {
   animation: fade-out 0.26s ease-in both;
 }
 
+/* Nájezd i sjezd panelu dělá PŘECHOD, ne animace s fill: both.
+   Není to libovolná volba. Animace v kaskádě přebíjí obyčejný inline styl
+   a `both` drží koncovou hodnotu i dlouho po doběhnutí — takže dokud tu
+   animace byla, nešlo panelem hnout prstem: posun se zapsal do
+   `style.transform`, ale vykreslovala se pořád hodnota z animace.
+   S přechodem inline transform vyhraje, tažení tedy jen zapisuje polohu
+   a při puštění ji smaže; zbytek dojede CSS — zpátky nahoru, nebo dolů,
+   když panel zavírá. Stejné řešení používá vaul (drawer od Emila
+   Kowalského), odkud je i časování křivky. */
 .sheet-panel {
-  animation: sheet-up 0.44s var(--ease-ios) both;
+  transform: translateY(100%);
+  transition: transform 0.44s var(--ease-ios);
+}
+
+/* Úchyt: jediné místo, kde se panel chytá prstem. `touch-action: none`
+   je tu proto, že jinak si prohlížeč vezme svislé gesto jako rolování a
+   pošle `pointercancel` dřív, než se dá cokoli poznat (změřeno: po dvou
+   pohybech). Na rolovací plochu se to dát nedá — zabilo by to rolování. */
+.sheet-grip {
+  touch-action: none;
+}
+
+.sheet-backdrop.open .sheet-panel {
+  transform: none;
 }
 
 .sheet-backdrop.closing .sheet-panel {
-  animation: sheet-down 0.3s var(--ease-ios) both;
+  transform: translateY(100%);
+  transition-duration: 0.3s;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -754,10 +757,13 @@ body:has(.sheet-backdrop:not(.closing)) .app-shell {
   .confetti,
   .toast-out,
   .sheet-backdrop,
-  .sheet-panel,
-  .sheet-backdrop.closing,
-  .sheet-backdrop.closing .sheet-panel {
+  .sheet-backdrop.closing {
     animation: none;
+  }
+  /* Panel jezdí přechodem, ne animací — vypnout se musí zvlášť. */
+  .sheet-panel,
+  .sheet-backdrop.closing .sheet-panel {
+    transition: none;
   }
   .compose {
     transition: none;

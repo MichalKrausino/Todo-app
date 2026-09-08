@@ -20,6 +20,7 @@ import {
   openTasks,
   removeClient,
   removeProject,
+  restoreDeleted,
   reopenTask,
   sortTasks,
   updateClient,
@@ -34,6 +35,7 @@ import {
   type CheckFrequency,
 } from '../db/clientCheck'
 import { COLOR_NAMES, KIND_LABELS, firstFreeColor, plural } from '../lib/labels'
+import { nabidniVraceni } from '../lib/toast'
 import { ColorPicker } from '../components/ColorPicker'
 import { formatDayLabel, formatDaysAgo, todayISO } from '../lib/dates'
 import { parseQuickAdd } from '../lib/quickAdd'
@@ -77,7 +79,10 @@ function ClientList({
   onSelect: (id: string) => void
   onTemplates: () => void
 }) {
-  const clients = useLiveQuery(activeClients, []) ?? []
+  // Dokud první dotaz nedoběhne, není to „žádní klienti" — jen se ještě
+  // neví. Výzva k založení by na chvíli přebila plný seznam.
+  const clientsRaw = useLiveQuery(activeClients, [])
+  const clients = clientsRaw ?? []
   const archived = useLiveQuery(archivedClients, []) ?? []
   const open = useLiveQuery(openTasks, []) ?? []
   // Které klienty vidí i někdo další. Bez toho se od pohledu nepozná, co je
@@ -179,7 +184,7 @@ function ClientList({
         />
       )}
 
-      {clients.length === 0 && !adding && (
+      {clientsRaw !== undefined && clients.length === 0 && !adding && (
         <div className="rounded-2xl border border-dashed border-line bg-card/60 px-4 py-8 text-center text-sm text-ink-faint">
           Zatím žádní klienti. Začni tlačítkem „+ Nový“.
         </div>
@@ -593,11 +598,19 @@ function ClientDetail({
     void updateClient(id, { status: client.status === 'archived' ? 'active' : 'archived' })
   }
 
+  // Bez ptaní, ale vratně. Systémový `confirm()` rozbíjel dojem nativní
+  // appky a stejně nechrání — kdo ho vidí pokaždé, odklepne ho po očku.
   const del = async () => {
-    if (confirm(`Smazat klienta „${client.name}“ včetně projektů a úkolů?`)) {
-      await removeClient(id)
-      onBack()
-    }
+    const jmeno = client.name
+    const plan = await removeClient(id)
+    onBack()
+    const pocet = (plan.tasks?.length ?? 0)
+    nabidniVraceni(
+      pocet
+        ? `Smazán „${jmeno}" a ${pocet} ${plural(pocet, 'úkol', 'úkoly', 'úkolů')}`
+        : `Smazán „${jmeno}"`,
+      () => restoreDeleted(plan),
+    )
   }
 
   const saveProject = (projectId: string) => {
@@ -615,9 +628,8 @@ function ClientDetail({
   }
 
   const delProject = async (projectId: string, name: string) => {
-    if (confirm(`Smazat projekt „${name}“? Úkoly zůstanou pod klientem.`)) {
-      await removeProject(projectId)
-    }
+    const plan = await removeProject(projectId)
+    nabidniVraceni(`Projekt „${name}" smazán`, () => restoreDeleted(plan))
   }
 
   return (

@@ -7,10 +7,12 @@ import {
   clientProjects,
   getTask,
   removeTask,
+  restoreDeleted,
   togglePinned,
   updateTask,
 } from '../db/repo'
 import { Sheet } from './Sheet'
+import { nabidniVraceni, ukazToast } from '../lib/toast'
 import { TaskSharing } from './TaskSharing'
 import { deleteBlockForTask } from '../sync/calendar'
 import {
@@ -76,6 +78,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   const [notes, setNotes] = useState(task.notes ?? '')
   const [clientId, setClientId] = useState(task.clientId ?? '')
   const [hiddenFrom, setHiddenFrom] = useState<string[]>(task.hiddenFrom ?? [])
+  const [ptamSeNaTodoist, setPtamSeNaTodoist] = useState(false)
   const [projectId, setProjectId] = useState(task.projectId ?? '')
   const [priority, setPriority] = useState<Priority>(task.priority)
   // Importovaný úkol se dá upravovat a změny letí zpátky do Todoistu.
@@ -175,16 +178,19 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
     close()
   }
 
-  const del = async (close: () => void) => {
-    if (!confirm('Smazat úkol?')) return
-    // U todoistího úkolu se ptáme zvlášť: smazat ho tam znamená smazat ho
-    // i klientovi ve sdíleném projektu. Bez doptání zmizí jen z appky.
-    if (task.todoistId && confirm('Smazat ho i v Todoistu? Jinak zmizí jen odsud, klientovi zůstane.')) {
-      await deleteTodoistTask(task.id)
-    }
+  // Smazání se nepotvrzuje, jde vrátit — systémový `confirm()` rozbíjel
+  // dojem nativní appky a nechrání: kdo ho vidí pokaždé, odklepne ho po
+  // očku. Mazání je tombstone, takže „Vrátit" je jen zrušení razítka.
+  const del = async (close: () => void, iVTodoistu = false) => {
+    // Tohle vrátit nejde — v Todoistu úkol zmizí i klientovi ve sdíleném
+    // projektu. Proto se u todoistích úkolů ptá (viz VolbaSmazani níž),
+    // a jen na tohle jediné.
+    if (iVTodoistu) await deleteTodoistTask(task.id)
     if (task.calendarEventId) void deleteBlockForTask(task)
-    await removeTask(task.id)
+    const plan = await removeTask(task.id)
     close()
+    if (iVTodoistu) ukazToast('Smazáno i v Todoistu')
+    else nabidniVraceni('Úkol smazán', () => restoreDeleted(plan))
   }
 
   return (
@@ -511,10 +517,42 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           </button>
         )}
 
+        {/* Jediná otázka, která zbyla: smazání v Todoistu vzít zpět nejde,
+            protože úkol zmizí i klientovi ve sdíleném projektu. Ptá se
+            přímo v panelu, ne systémovým dialogem. */}
+        {ptamSeNaTodoist && (
+          <div className="rise rounded-xl border border-line p-3">
+            <p className="text-[13px] text-ink-soft">
+              Smazat úkol i v Todoistu? Tam zmizí i klientovi ve sdíleném projektu
+              a zpátky ho nevrátíš.
+            </p>
+            <div className="mt-2 flex flex-wrap justify-end gap-2">
+              <button
+                className="rounded-lg px-3 py-2 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-95"
+                onClick={() => setPtamSeNaTodoist(false)}
+              >
+                Zrušit
+              </button>
+              <button
+                className="rounded-lg bg-well px-3 py-2 text-sm font-medium text-ink transition-transform duration-150 active:scale-95"
+                onClick={() => void del(close)}
+              >
+                Jen tady
+              </button>
+              <button
+                className="rounded-lg bg-danger px-3 py-2 text-sm font-medium text-card transition-transform duration-150 active:scale-95"
+                onClick={() => void del(close, true)}
+              >
+                I v Todoistu
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between pt-1">
           <button
             className="px-2 py-2 text-sm font-medium text-danger transition-transform duration-150 active:scale-95"
-            onClick={() => void del(close)}
+            onClick={() => (fromTodoist ? setPtamSeNaTodoist(true) : void del(close))}
           >
             Smazat
           </button>

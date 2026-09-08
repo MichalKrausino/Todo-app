@@ -3,6 +3,7 @@ import type { Task } from './db/types'
 import { getTask } from './db/repo'
 import { QuickAdd } from './components/QuickAdd'
 import { SearchSheet } from './components/SearchSheet'
+import { ToastHost } from './components/ToastHost'
 import { SyncButton, SyncSheet } from './components/SyncSheet'
 import { TaskEditSheet } from './components/TaskEditSheet'
 import { TodayView } from './views/TodayView'
@@ -354,6 +355,9 @@ export default function App() {
       {editing && <TaskEditSheet task={editing} onClose={() => setEditing(null)} />}
       {syncOpen && <SyncSheet onClose={() => setSyncOpen(false)} />}
       {reviewOpen && <WeeklyReviewSheet onClose={() => setReviewOpen(false)} />}
+      {/* Zprávy u doku (a hlavně „Vrátit" po smazání) — jedna pro celou
+          appku, ať se dvě nepřekrývají. */}
+      <ToastHost />
     </div>
   )
 }

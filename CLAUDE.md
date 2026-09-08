@@ -25,8 +25,9 @@ zdůvodnění rozhodnutí a roadmapa fází: **`docs/PLAN.md`** — před větš
   (`prefers-reduced-motion`) musí zastavit **všechno**, běžný režim naopak
   animovat, appka musí přežít proklikání (založení úkolu, odškrtnutí,
   přepnutí obrazovek, panely, uložení detailu, znovunačtení z IndexedDB)
-  a panel se musí dát zavřít stažením dolů (prst se posílá přes CDP —
-  rychlost tahu je součást gesta, švihnutí zavírá, pomalé lízmutí ne).
+  a panel se musí dát zavřít stažením **za úchyt nahoře** (prst se posílá
+  přes CDP — rychlost tahu je součást gesta, švihnutí zavírá, pomalé
+  lízmutí ne) a zároveň musí jít obsah panelu pořád rolovat prstem.
   Chce hotový `npm run build`.
 - `npm run nahled` — obrázky appky do `.snimky/` (obě schémata, rozměr iPhonu).
   **Vzhled posuzuj z nich, ne odhadem.** Chromium bez GPU vykresluje
@@ -87,6 +88,28 @@ nechá kurzor viset mimo něj, velké titulky (`display`), hlavičky sekcí `sec
 **tiché, ne verzálky**: velké písmeno dělá `::first-letter`, takže texty
 v kódu zůstávají psané malými.
 
+**Žádné systémové dialogy.** `confirm()` ani `alert()` v appce nejsou:
+na ploše iPhonu vyskočí systémový alert s adresou webu a rozbije dojem
+nativní appky — a nic nechrání, protože kdo ho vidí pokaždé, odklepne ho
+po očku. Mazání se proto nepotvrzuje, ale **jde vrátit**: záznam dostane
+tombstone a u doku se ukáže „Vrátit" (`src/lib/toast.ts`, jeden toast pro
+celou appku, jinak by se dvě zprávy překrývaly). Vrácení musí obnovit
+celou kaskádu — klient bere s sebou projekty i úkoly — a razítkuje se
+novým `updatedAt`, jinak by tombstone ze serveru podle LWW vyhrál a
+záznam by se za chvíli smazal znovu. Ptát se smí jedině na to, co vrátit
+nejde: smazání úkolu v Todoistu (zmizí i klientovi ve sdíleném projektu),
+a i to se ptá **v panelu**, ne dialogem.
+
+**Panel se chytá za úchyt, ne za plochu** (`Sheet.tsx` + `.sheet-grip`).
+Tři věci, které se tu už dvakrát podařilo rozbít: (1) nájezd a sjezd dělá
+**přechod, ne animace s `fill: both`** — animace v kaskádě přebíjí inline
+styl, takže se panel prstem nehnul ani o pixel, i když se poloha poctivě
+zapisovala; (2) gesto stojí na **pointer events a pointer capture**, ne na
+`preventDefault` v touchmove — ten Safari od iOS 15 spolehlivě neposlouchá;
+(3) úchyt je samostatný nerolující pruh s `touch-action: none`, protože na
+rolovací ploše si prohlížeč vezme svislé gesto jako rolování a pošle
+`pointercancel` po dvou pohybech (změřeno). Vzor: vaul od E. Kowalského.
+
 Hloubku dělá **ostrý hairline v `--shadow-card`**, ne rozmazaný stín.
 Tokeny v `src/index.css` (Tailwind v4 `@theme`) — **používat výhradně je**,
 žádné surové Tailwind barvy: `paper`/`card`/`well`/`line`, text
@@ -131,6 +154,7 @@ Pravidelná připomínka kontroly klienta = opakující se úkol s markerem
 - [x] Fáze 4.5 — tiché signály (`src/lib/signals.ts`, čisté funkce): zanedbaní klienti, klienti bez naplánovaného úkolu, projekty bez dalšího kroku, ležáky v inboxu, opakovaně odkládané úkoly (`postponeCount` počítá `updateTask` při posunu termínu na později; respawn ho nuluje). Zobrazuje blok „Nepropadá ti něco?" na Dnes (`SignalsBlock`), řádky navigují na klienta/úkol/inbox. Ranní návrh dne (Fáze 6) má z těchto signálů čerpat.
 - [ ] Fáze 5 — AI: rozpad projektů a chytřejší parsování čekají na model (Claude úloha přes předplatné, ne API). Hotová první část: tiché odhady času heuristikou (`src/lib/estimate.ts`) — razítkuje je `addTask` i reconciler šablon do `estimateMinutes`, kalendářní blok tak má reálnější délku; odhad se nikde nezobrazuje
 - [x] Fáze 6 — push notifikace + ranní návrh dne: pg_cron (5:00 UTC) → edge funkce `morning-plan` (skórování a výběr = čistá logika v `supabase/functions/morning-plan/pick.ts`, testuje `pick.test.ts`; česká odůvodnění; deterministické id DayPlanu) → upsert do `day_plans` + Web Push (`@negrel/webpush`, VAPID v `private.vapid_keys`, RPC `get_vapid_keys` jen pro service_role). Klient: vlastní SW (`src/sw.ts`, injectManifest) s push/notificationclick, přepínač „Ranní návrh dne" v SyncSheet (`enablePush` v engine), blok návrhů na Dnes s přijmout/zamítnout (`decideDayPlanSuggestion` — accept nastaví `scheduledFor`; rozhodnutí se syncují pro budoucí učení ve Fázi 5). Model zatím nezapojen — jen formulace šablonami. **Úkoly bez termínu se nabízejí vždy**: mají vlastní základ skóre (jinak by s normální prioritou spadly na nulu a filtr `score > 0` by je vyhodil) a v návrhu rezervované sloty, aby je nabité dny s termíny nevytlačily. Jejich mix je vážený prioritou — klesající stropy `UNDATED_CAPS`, nevyčerpaná kapacita se dobere níž, takže bez kritických nabídku vyplní vysoké. Strop „nejvýš dva od jednoho klienta" platí jen na skutečné klienty; úkoly bez klienta spolu nesouvisí a nesdílejí ho. Zamítnutí úkol nikam neposouvá, takže se druhý den nabídne znovu — to je ono „odložit na zítra".
+- [x] Triáž propadlých (`TriageSheet`): sekce „po termínu" umí narůst do stovek (změřeno 134 na roční hromádce) a jako seznam je to slepá ulička. Nadpis je proto akce — průchod po jednom se třemi odpověďmi (dnes / příští týden / už neplatí). Fronta se snímá při otevření, jinak by živý dotaz pod rukama přerovnával pořadí. Termín se posouvá stejně jako všude jinde (`scheduledFor`, a když ho úkol nemá, `dueDate`) — pevný termín se nikdy nepřepisuje potichu. „Už neplatí" nastaví `status: 'dropped'`, ne tombstone: úkol zmizí z otevřených seznamů, ale zahozená práce zůstane v datech. „Zpět" vrací i to.
 - [x] Fáze 7 — týdenní zpětná vazba (`src/lib/weekReview.ts`, čisté funkce): nedělní/pondělní karta na Dnes otevírá `WeeklyReviewSheet` — hotové úkoly a rozpad podle klientů, plán vs. realita, nejodkládanější úkoly, tiší klienti, výhled na 7 dní. Porovnání odhadu a skutečnosti času přibude s Fází 5 (estimateMinutes). Až bude Fáze 6 (push), nedělní notifikace má vést sem.
 - [x] Fáze 8 — Todoist: sdílené projekty klientů a jejich úkoly do appky. API token žije na serveru (`public.todoist_tokens`, RLS bez policies, write-only RPC `store_todoist_token`), do Todoistu sahá jen edge funkce `todoist` (projects/pull/close/reopen). Mapování polí je čistá logika (`src/lib/todoistMap.ts`), srovnání s lokální DB taky (`src/db/todoistImport.ts`) — projekt → klient (párování na `Client.todoistProjectIds`; za cizí se bere `is_shared || workspace_id`, jinak by týmové projekty nešly napojit), sekce → projekt, `deadline` → `dueDate`, `due` → `scheduledFor`, podúkoly → checklist (odškrtnutí kroku zavře podúkol i tam, nový krok tam vznikne, vlastní kroky stažení přežijí); lokální id deterministicky z todoistího. Todoist vlastní název, prioritu a termín; naplánování dne, odhad a špendlík zůstávají naše, poznámku a checklist si bere jen když je sám má. Zpátky letí odškrtnutí, znovuotevření, úpravy (`todoistDirty` = neodeslaná změna, stažení ji nepřepíše) a — po zapnutí u klienta (`todoistPushSince`) — i nové úkoly. Zamčené je jen zařazení. Opakovaný úkol se v Todoistu odškrtnutím posouvá, ne zavírá: nový termín se bere jako nový výskyt, hotový spadne do lokální historie (jinak by druhý `close` posunul úkol podruhé). Do appky chodí **jen úkoly, na kterých je uživatel označený**
   (`isMine`) — i z projektů, které nejsou spárované s klientem (server je

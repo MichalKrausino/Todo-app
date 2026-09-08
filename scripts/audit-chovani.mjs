@@ -118,8 +118,25 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   }
   const panelu = () => page.locator('.sheet-panel').count()
 
+  // Nejdřív to podstatné: jde panel VIDĚT za prstem? Zavírací logika může
+  // fungovat a panel se přitom nehne — pak to na telefonu vypadá jako
+  // rozbité a člověk pustí dřív, než se práh vůbec překročí.
   await otevri()
   const y0 = (await page.locator('.sheet-panel').boundingBox()).y + 40
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 195, y: y0 }] })
+  for (let i = 1; i <= 6; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 195, y: y0 + i * 15 }] })
+    await page.waitForTimeout(60)
+  }
+  const posun = await page.evaluate(() => {
+    const t = getComputedStyle(document.querySelector('.sheet-panel')).transform
+    return t && t !== 'none' ? Math.round(parseFloat(t.split(',').pop())) : 0
+  })
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await page.waitForTimeout(600)
+  T_(posun > 40, 'panel jde při tažení za prstem (posun ' + posun + ' px)')
+
+  await otevri()
   await tah(195, y0, 40, 6, 120)
   T_(await panelu() > 0, 'krátké pomalé stažení panel nezavře')
 
@@ -134,6 +151,178 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await tah(195, y1, 260, 8, 40)
   T_(await panelu() > 0, 'odrolovaný panel se tažením nezavírá, jen scrolluje')
 
+  // A hlavně: obsah panelu musí jít pořád rolovat prstem. Tažení se kvůli
+  // tomu chytá jen za úchyt nahoře — kdyby se `touch-action: none` dostalo
+  // na celou plochu, rolování by přestalo fungovat úplně.
+  await otevri()
+  await page.evaluate(() => { document.querySelector('.sheet-panel').scrollTop = 0 })
+  const yObsah = (await page.locator('.sheet-panel').boundingBox()).y + 260
+  await tah(195, yObsah, -200, 8, 30)
+  const odrolovano = await page.evaluate(() => document.querySelector('.sheet-panel').scrollTop)
+  T_(odrolovano > 20, 'obsah panelu jde rolovat prstem (scrollTop ' + odrolovano + ')')
+  T_(await panelu() > 0, 'rolování obsahu panel nezavře')
+  await page.keyboard.press('Escape'); await page.waitForTimeout(500)
+
+  await ctx.close()
+}
+
+// --- 4. mazání se nepotvrzuje, ale jde vrátit ---
+// Tohle je pojistka proti nejhoršímu možnému výsledku téhle změny: když
+// „Vrátit" nefunguje, appka bez ptaní maže data nenávratně.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  await page.getByRole('button',{name:'Nový úkol'}).click(); await page.waitForTimeout(300)
+  await page.locator('input[placeholder]').first().fill('dnes úkol na smazání')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(400)
+  await page.keyboard.press('Escape'); await page.waitForTimeout(400)
+
+  const naObrazovce = () => page.locator('main button').filter({hasText:'úkol na smazání'}).count()
+  T_(await naObrazovce() > 0, 'úkol k pokusu se založil')
+
+  await page.getByText('úkol na smazání').first().click(); await page.waitForTimeout(700)
+  await page.getByRole('button',{name:'Smazat',exact:true}).click(); await page.waitForTimeout(700)
+  T_(await naObrazovce() === 0, 'smazání proběhne bez potvrzovacího dialogu')
+
+  const vratit = page.getByRole('button',{name:'Vrátit'})
+  T_(await vratit.count() > 0, 'po smazání se nabídne vrácení')
+  if (await vratit.count()) { await vratit.click(); await page.waitForTimeout(700) }
+  T_(await naObrazovce() > 0, 'vrácení úkol opravdu obnoví')
+
+  // A přežije to synchronizaci s IndexedDB, ne jen stav v paměti.
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  T_(await naObrazovce() > 0, 'vrácený úkol přežije znovunačtení')
+
+  // Nejrizikovější případ: klient bere s sebou projekty i úkoly, takže
+  // vrácení musí obnovit celou kaskádu, ne jen řádek klienta.
+  await page.getByRole('button',{name:'Klienti',exact:true}).click(); await page.waitForTimeout(500)
+  await page.getByRole('button',{name:'+ Nový'}).first().click(); await page.waitForTimeout(400)
+  await page.getByRole('textbox',{name:'Jméno klienta nebo oblasti'}).fill('Pokusný')
+  await page.getByRole('button',{name:'Vytvořit'}).click(); await page.waitForTimeout(700)
+  await page.locator('main button').filter({hasText:'Pokusný'}).first().click(); await page.waitForTimeout(600)
+  await page.getByRole('textbox',{name:'Nový úkol pro klienta'}).fill('úkol pod klientem')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(700)
+  const ukolKlienta = () => page.locator('main').getByText('úkol pod klientem').count()
+  T_(await ukolKlienta() > 0, 'úkol pod klientem se založil')
+
+  await page.getByRole('button',{name:'Smazat klienta'}).click(); await page.waitForTimeout(700)
+  T_(await page.locator('main button').filter({hasText:'Pokusný'}).count() === 0, 'klient se smazal bez potvrzování')
+  const vratitKlienta = page.getByRole('button',{name:'Vrátit'})
+  T_(await vratitKlienta.count() > 0, 'po smazání klienta se nabídne vrácení')
+  if (await vratitKlienta.count()) { await vratitKlienta.click(); await page.waitForTimeout(800) }
+  T_(await page.locator('main button').filter({hasText:'Pokusný'}).count() > 0, 'vrácený klient je zpátky v seznamu')
+  await page.locator('main button').filter({hasText:'Pokusný'}).first().click(); await page.waitForTimeout(600)
+  T_(await ukolKlienta() > 0, 'vrácení klienta obnoví i jeho úkoly')
+  await ctx.close()
+}
+
+// --- 5. po startu neproblikne prázdný stav ---
+// „Čistý stůl" na plném dni je první, co člověk po otevření vidí — a je
+// to nepravda. `useLiveQuery` vrací undefined, dokud dotaz nedoběhne,
+// takže se to nesmí setřít na prázdné pole.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  for (const t of ['dnes ranní kontrola', 'zítra fakturace']) {
+    const novy = page.getByRole('button',{name:'Nový úkol'})
+    if (await novy.count()) { await novy.click(); await page.waitForTimeout(200) }
+    await page.locator('input[placeholder]').first().fill(t)
+    await page.keyboard.press('Enter'); await page.waitForTimeout(350)
+  }
+  await page.waitForTimeout(800)
+
+  // Vzorkuje se DOM hned po startu, ne až ustálený stav.
+  await page.reload({waitUntil:'commit'})
+  let blik = 0, videnUkol = false
+  for (let i = 0; i < 45; i++) {
+    const v = await page.evaluate(() => {
+      const t = document.body.innerText || ''
+      return { prazdny: t.includes('Čistý stůl'), ukol: t.includes('ranní kontrola') }
+    }).catch(() => null)
+    if (v) {
+      if (v.prazdny && !v.ukol) blik++
+      if (v.ukol) videnUkol = true
+    }
+    await page.waitForTimeout(16)
+  }
+  T_(videnUkol, 'úkoly se po startu vůbec objevily')
+  T_(blik === 0, 'po startu neproblikne „Čistý stůl", když úkoly jsou (snímků: ' + blik + ')')
+  await ctx.close()
+}
+
+// --- 6. dlouhé seznamy se nevykreslují celé ---
+// Změřeno na 1200 úkolech: appka vykreslovala 760 řádků na Dnes a 1 080
+// v Plánu, takže přepnutí obrazovky trvalo na pomalejším telefonu přes
+// čtyři vteřiny (čtení z databáze na tom mělo podíl 37 ms — zbytek bylo
+// vykreslování řádků, které stejně nikdo nepřečte).
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(700)
+  const nasypano = await page.evaluate(async () => {
+    const den = (p) => { const d = new Date(); d.setDate(d.getDate() + p); return d.toISOString().slice(0, 10) }
+    const ted = new Date().toISOString()
+    const db = await new Promise((res) => { const r = indexedDB.open('todo'); r.onsuccess = () => res(r.result) })
+    const zapis = (t, rows) => new Promise((res) => {
+      const tx = db.transaction(t, 'readwrite'); const st = tx.objectStore(t)
+      for (const r of rows) st.put(r); tx.oncomplete = res
+    })
+    const ukoly = Array.from({ length: 400 }, (_, i) => ({
+      id: 'zk' + i, createdAt: ted, updatedAt: ted, title: 'Zátěžový úkol ' + i,
+      priority: 'normal', status: 'active', order: i,
+      scheduledFor: den(i % 3 === 0 ? -2 : i % 10), // část po termínu, část dopředu
+    }))
+    await zapis('tasks', ukoly)
+    return ukoly.length
+  })
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(1500)
+
+  const radku = async () => await page.evaluate(() => document.querySelectorAll('main li').length)
+  const naDnes = await radku()
+  T_(naDnes > 0 && naDnes < 150, 'Dnes vykreslí jen část dlouhého seznamu (řádků: ' + naDnes + ' ze ' + nasypano + ')')
+
+  // Hlavička ale musí říkat pravdu — počet je celkový, ne kolik se kreslí.
+  const hlavicka = await page.evaluate(() => {
+    const t = document.body.innerText || ''
+    const m = t.match(/termínu[^0-9]*(\d+)/) || t.match(/dnes[^0-9]*(\d+)/i)
+    return m ? m[1] : 'nenalezeno: ' + t.slice(0, 120).replace(/\n/g, ' | ')
+  })
+  T_(Number(hlavicka) > 100, 'počet v hlavičce sekce je celkový, ne jen vykreslený (' + hlavicka + ')')
+
+  const vic = page.getByRole('button', { name: /Zobrazit \d+ dalš/ }).first()
+  T_(await vic.count() > 0, 'nabídne se dobrání dalších')
+  if (await vic.count()) {
+    await vic.click(); await page.waitForTimeout(400)
+    T_(await radku() > naDnes, 'dobrání opravdu přidá řádky')
+  }
+
+  await page.getByRole('button',{name:'Plán',exact:true}).click(); await page.waitForTimeout(1200)
+  const vPlanu = await radku()
+  T_(vPlanu > 0 && vPlanu < 200, 'Plán vykreslí jen část dlouhého seznamu (řádků: ' + vPlanu + ')')
+
+  // --- triáž propadlých: odpověď musí úkol opravdu posunout a jít vzít zpět
+  await page.getByRole('button',{name:'Dnes',exact:true}).click(); await page.waitForTimeout(900)
+  const poTerminu = async () => Number((await page.evaluate(() => (document.body.innerText.match(/termínu[^0-9]*(\d+)/) || [])[1])) || 0)
+  const pred = await poTerminu()
+  T_(pred > 100, 'sekce po termínu je plná (' + pred + ')')
+
+  await page.getByRole('button',{name:/Projít/}).click(); await page.waitForTimeout(800)
+  T_(await page.locator('.sheet-panel').count() > 0, 'triáž se otevřela')
+  await page.getByRole('button',{name:'Dnes',exact:true}).last().click(); await page.waitForTimeout(500)
+  await page.getByRole('button',{name:/Příští týden/}).click(); await page.waitForTimeout(500)
+  await page.getByRole('button',{name:'Už neplatí'}).click(); await page.waitForTimeout(700)
+  await page.keyboard.press('Escape'); await page.waitForTimeout(700)
+  const po = await poTerminu()
+  T_(po === pred - 3, 'tři odpovědi ubraly tři úkoly z propadlých (' + pred + ' → ' + po + ')')
+
+  // Zpět musí vrátit i „Už neplatí" — jinak by to bylo tiché mazání práce.
+  await page.getByRole('button',{name:/Projít/}).click(); await page.waitForTimeout(800)
+  await page.getByRole('button',{name:'Už neplatí'}).click(); await page.waitForTimeout(500)
+  await page.getByRole('button',{name:'Zpět'}).click(); await page.waitForTimeout(500)
+  await page.keyboard.press('Escape'); await page.waitForTimeout(700)
+  T_(await poTerminu() === po, 'zpět v triáži vrátí i zahozený úkol')
   await ctx.close()
 }
 

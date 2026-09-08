@@ -267,6 +267,9 @@ const panely = [
   ['Todoist', async () => { await otevriNastaveni(); await page.waitForTimeout(450); await page.getByRole('button', { name: /^Todoist/ }).click() }, 2],
   ['Sdileni', async () => { await otevriNastaveni(); await page.waitForTimeout(450); await page.getByRole('button', { name: /^Sdílení s kolegy/ }).click() }, 2],
   ['Hledani', async () => { await page.getByRole('button', { name: 'Hledat' }).click() }, 1],
+  // Triáž propadlých: velká tlačítka a červený „Už neplatí" — přesně to,
+  // co se dá snadno podměřit (kontrast a cíl pro prst).
+  ['Triaz', async () => { await page.getByRole('button', { name: /Projít/ }).click() }, 1],
   ['Detail ukolu', async () => { await page.getByText('Zavolat Ondrovi').first().click() }, 1],
   ['Sablony', async () => { await page.getByRole('button', { name: 'Klienti' }).click(); await page.waitForTimeout(450); await page.getByRole('button', { name: /Šablony/ }).click() }, 1],
 ]
