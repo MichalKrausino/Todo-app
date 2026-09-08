@@ -39,6 +39,8 @@ instalace ani (v pozdější fázi) push notifikace.
 - Obrazovky **Dnes** (po termínu / dnes / hotovo), **Plán** (podle dnů + bez
   termínu) a **Klienti** (detail, projekty, archivace)
 - Instalace na plochu, offline režim přes service worker
+- Seznam klientů jako přehled: u každého na jedné řádce, co hoří („2 po
+  termínu"), jak dlouho je ticho a kdy je další práce
 - Triáž propadlých: nadpis „po termínu" otevře průchod jeden po druhém —
   u každého dnes / příští týden / už neplatí, se „Zpět" na poslední krok
 - Mazání se neptá, ale jde vrátit — u doku se po smazání ukáže „Vrátit"
