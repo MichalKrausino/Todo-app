@@ -205,6 +205,41 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 5. po startu neproblikne prázdný stav ---
+// „Čistý stůl" na plném dni je první, co člověk po otevření vidí — a je
+// to nepravda. `useLiveQuery` vrací undefined, dokud dotaz nedoběhne,
+// takže se to nesmí setřít na prázdné pole.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  for (const t of ['dnes ranní kontrola', 'zítra fakturace']) {
+    const novy = page.getByRole('button',{name:'Nový úkol'})
+    if (await novy.count()) { await novy.click(); await page.waitForTimeout(200) }
+    await page.locator('input[placeholder]').first().fill(t)
+    await page.keyboard.press('Enter'); await page.waitForTimeout(350)
+  }
+  await page.waitForTimeout(800)
+
+  // Vzorkuje se DOM hned po startu, ne až ustálený stav.
+  await page.reload({waitUntil:'commit'})
+  let blik = 0, videnUkol = false
+  for (let i = 0; i < 45; i++) {
+    const v = await page.evaluate(() => {
+      const t = document.body.innerText || ''
+      return { prazdny: t.includes('Čistý stůl'), ukol: t.includes('ranní kontrola') }
+    }).catch(() => null)
+    if (v) {
+      if (v.prazdny && !v.ukol) blik++
+      if (v.ukol) videnUkol = true
+    }
+    await page.waitForTimeout(16)
+  }
+  T_(videnUkol, 'úkoly se po startu vůbec objevily')
+  T_(blik === 0, 'po startu neproblikne „Čistý stůl", když úkoly jsou (snímků: ' + blik + ')')
+  await ctx.close()
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)

@@ -148,8 +148,16 @@ export function TodayView({
     window.addEventListener('hashchange', check)
     return () => window.removeEventListener('hashchange', check)
   }, [])
-  const open = useLiveQuery(openTasks, []) ?? []
-  const done = useLiveQuery(() => doneOn(today), [today]) ?? []
+  // `useLiveQuery` vrací `undefined`, dokud první dotaz nedoběhne — a to
+  // není totéž co „nic tu není". Když se rozdíl setře na `?? []`, appka po
+  // startu na chvíli tvrdí „Čistý stůl", i když je den plný; změřeno,
+  // úkoly naskočily až o 30 ms později (na telefonu se studenou databází
+  // násobně víc). První, co člověk po otevření vidí, nemá být nepravda.
+  const openRaw = useLiveQuery(openTasks, [])
+  const doneRaw = useLiveQuery(() => doneOn(today), [today])
+  const nacteno = openRaw !== undefined && doneRaw !== undefined
+  const open = openRaw ?? []
+  const done = doneRaw ?? []
   const clients = useLiveQuery(allClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []
   const dayPlan = useLiveQuery(() => getDayPlan(today), [today])
@@ -608,6 +616,7 @@ export function TodayView({
             )}
           </>
         ) : batchClient ? (
+          nacteno &&
           visOverdue.length === 0 &&
           pinned.length === 0 && (
             <p className="rounded-2xl bg-card px-4 py-4 text-center text-sm text-ink-soft shadow-card">
@@ -615,6 +624,9 @@ export function TodayView({
             </p>
           )
         ) : (
+          // `nacteno` schválně až tady, ne kolem celé obrazovky: hlavička
+          // a dok musí naskočit hned, ať appka nezačíná prázdnou plochou.
+          nacteno &&
           overdue.length === 0 &&
           pinned.length === 0 && (
             <div className="rounded-2xl bg-card px-5 py-8 text-center shadow-card">

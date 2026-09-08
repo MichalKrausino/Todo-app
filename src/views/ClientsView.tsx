@@ -79,7 +79,10 @@ function ClientList({
   onSelect: (id: string) => void
   onTemplates: () => void
 }) {
-  const clients = useLiveQuery(activeClients, []) ?? []
+  // Dokud první dotaz nedoběhne, není to „žádní klienti" — jen se ještě
+  // neví. Výzva k založení by na chvíli přebila plný seznam.
+  const clientsRaw = useLiveQuery(activeClients, [])
+  const clients = clientsRaw ?? []
   const archived = useLiveQuery(archivedClients, []) ?? []
   const open = useLiveQuery(openTasks, []) ?? []
   // Které klienty vidí i někdo další. Bez toho se od pohledu nepozná, co je
@@ -181,7 +184,7 @@ function ClientList({
         />
       )}
 
-      {clients.length === 0 && !adding && (
+      {clientsRaw !== undefined && clients.length === 0 && !adding && (
         <div className="rounded-2xl border border-dashed border-line bg-card/60 px-4 py-8 text-center text-sm text-ink-faint">
           Zatím žádní klienti. Začni tlačítkem „+ Nový“.
         </div>

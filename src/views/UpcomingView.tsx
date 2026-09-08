@@ -48,7 +48,9 @@ export function UpcomingView({
   onOpenReview?: () => void
 }) {
   const today = todayISO()
-  const open = useLiveQuery(openTasks, []) ?? []
+  // Než první dotaz doběhne, není to „volný výhled" — jen se ještě neví.
+  const openRaw = useLiveQuery(openTasks, [])
+  const open = openRaw ?? []
   const clients = useLiveQuery(allClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []
 
@@ -184,7 +186,7 @@ export function UpcomingView({
         })}
       </div>
 
-      {dates.length === 0 && inbox.length === 0 && (
+      {openRaw !== undefined && dates.length === 0 && inbox.length === 0 && (
         <div className="rise rounded-2xl bg-card px-6 py-10 text-center shadow-card">
           <svg viewBox="0 0 48 48" className="mx-auto h-12 w-12 text-accent/70" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
             <rect x="7" y="10" width="34" height="31" rx="4" />
