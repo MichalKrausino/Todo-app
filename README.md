@@ -39,6 +39,9 @@ instalace ani (v pozdější fázi) push notifikace.
 - Obrazovky **Dnes** (po termínu / dnes / hotovo), **Plán** (podle dnů + bez
   termínu) a **Klienti** (detail, projekty, archivace)
 - Instalace na plochu, offline režim přes service worker
+- Dnes bez zdi: propadlé ukážou pár řádků a zbytek řeší triáž, „bez
+  termínu" a „hotovo" stojí sbalené do řádky s počtem (rozbalení si appka
+  pamatuje)
 - Seznam klientů jako přehled: u každého na jedné řádce, co hoří („2 po
   termínu"), jak dlouho je ticho a kdy je další práce
 - Triáž propadlých: nadpis „po termínu" otevře průchod jeden po druhém —

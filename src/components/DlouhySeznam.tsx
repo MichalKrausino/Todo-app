@@ -17,6 +17,7 @@ export function DlouhySeznam<T>({
   polozky,
   radek,
   davka = 25,
+  uvod = davka,
   className = 'divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card',
 }: {
   polozky: T[]
@@ -24,9 +25,12 @@ export function DlouhySeznam<T>({
   // navíc jen kvůli tomu, aby ho zopakoval.
   radek: (p: T) => React.ReactNode
   davka?: number
+  // Kolik se ukáže napoprvé. U propadlých je to míň než dávka: pár řádků
+  // řekne, o co jde, a zbytek patří do triáže, ne do zdi.
+  uvod?: number
   className?: string
 }) {
-  const [limit, setLimit] = useState(davka)
+  const [limit, setLimit] = useState(uvod)
   const viditelne = polozky.slice(0, limit)
   const zbyva = polozky.length - viditelne.length
 

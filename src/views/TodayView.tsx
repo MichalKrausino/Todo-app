@@ -25,6 +25,7 @@ import { TriageSheet } from '../components/TriageSheet'
 import { SignalsBlock } from '../components/SignalsBlock'
 import { TaskRow } from '../components/TaskRow'
 import { DlouhySeznam } from '../components/DlouhySeznam'
+import { SbalenaSekce } from '../components/SbalenaSekce'
 import { plural } from '../lib/labels'
 
 // Nejbližší relevantní den úkolu — dřívější z „naplánováno“ a „termín“.
@@ -599,7 +600,8 @@ export function TodayView({
               </svg>
             </span>
           </button>
-          <DlouhySeznam polozky={visOverdue} radek={(t) => row(t)} />
+          {/* Pět řádků řekne, o co jde; zbytek patří do triáže, ne do zdi. */}
+          <DlouhySeznam polozky={visOverdue} radek={(t) => row(t)} uvod={5} />
         </section>
       )}
       {triageOpen && (
@@ -690,19 +692,19 @@ export function TodayView({
       {(() => {
         const inbox = sortTasks(open.filter((t) => !effectiveDate(t))).filter(byBatch)
         if (inbox.length === 0) return null
+        // Sbalené: není to dnešní práce. Vidět je, že tam něco leží
+        // a kolik — a je to na jedno klepnutí.
         return (
-          <section className="rise" style={stagger(7)}>
-            <h2 className="section-label mb-2">bez termínu · {inbox.length}</h2>
+          <SbalenaSekce id="inbox" popisek="bez termínu" pocet={inbox.length} className="rise" style={stagger(7)}>
             <DlouhySeznam polozky={inbox} radek={(t) => row(t)} />
-          </section>
+          </SbalenaSekce>
         )
       })()}
 
       {done.length > 0 && (
-        <section className="rise" style={stagger(8)}>
-          <h2 className="section-label mb-2">hotovo · {done.length}</h2>
+        <SbalenaSekce id="hotovo" popisek="hotovo" pocet={done.length} className="rise" style={stagger(8)}>
           <DlouhySeznam polozky={done} radek={(t) => row(t)} />
-        </section>
+        </SbalenaSekce>
       )}
 
       {/* Večerní uzávěrka: od 16:00, dokud zbývá nedokončené a den není

@@ -76,15 +76,24 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
     T_(await page.locator('.sheet-panel').count()===0, jmeno+' se zavřelo escapem')
   }
 
+  // Odškrtnutý úkol spadl do „hotovo" — a ta sekce stojí sbalená, protože
+  // to není dnešní práce. Rozbalení se tu ověří rovnou: řádka s počtem
+  // musí jít otevřít a úkol v ní být.
+  const hotovo = page.getByRole('button', { name: /hotovo · \d+/ })
+  T_(await hotovo.count() > 0, 'sekce hotovo stojí sbalená jako řádka s počtem')
+  if (await hotovo.count()) { await hotovo.click(); await page.waitForTimeout(500) }
+  T_(await page.getByText('první úkol').count() > 0, 'rozbalená sekce hotovo ukáže odškrtnutý úkol')
+
   // detail úkolu: uložení změny (úkol s termínem „dnes“ je na Dnes)
   await page.getByText('první úkol').first().click(); await page.waitForTimeout(700)
   await page.locator('#pole-ukol').fill('druhý úkol přejmenovaný')
   await page.getByRole('button',{name:'Uložit'}).click(); await page.waitForTimeout(700)
   T_(await page.getByText('přejmenovaný').count()>0,'přejmenování v detailu se uložilo')
 
-  // přežije reload (IndexedDB)
+  // přežije reload (IndexedDB) — a s ním i rozbalení sekce hotovo, protože
+  // přejmenovaný úkol je právě v ní; kdyby se sbalila zpátky, text by chyběl.
   await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
-  T_(await page.getByText('přejmenovaný').count()>0,'data přežila znovunačtení')
+  T_(await page.getByText('přejmenovaný').count()>0,'data přežila znovunačtení (a rozbalení sekce si appka pamatuje)')
 
   T_(konzole.length===0,'nic nepadlo do konzole'+(konzole.length?' — '+konzole.slice(0,3).join(' | '):''))
   await ctx.close()
