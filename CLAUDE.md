@@ -87,6 +87,18 @@ nechá kurzor viset mimo něj, velké titulky (`display`), hlavičky sekcí `sec
 **tiché, ne verzálky**: velké písmeno dělá `::first-letter`, takže texty
 v kódu zůstávají psané malými.
 
+**Žádné systémové dialogy.** `confirm()` ani `alert()` v appce nejsou:
+na ploše iPhonu vyskočí systémový alert s adresou webu a rozbije dojem
+nativní appky — a nic nechrání, protože kdo ho vidí pokaždé, odklepne ho
+po očku. Mazání se proto nepotvrzuje, ale **jde vrátit**: záznam dostane
+tombstone a u doku se ukáže „Vrátit" (`src/lib/toast.ts`, jeden toast pro
+celou appku, jinak by se dvě zprávy překrývaly). Vrácení musí obnovit
+celou kaskádu — klient bere s sebou projekty i úkoly — a razítkuje se
+novým `updatedAt`, jinak by tombstone ze serveru podle LWW vyhrál a
+záznam by se za chvíli smazal znovu. Ptát se smí jedině na to, co vrátit
+nejde: smazání úkolu v Todoistu (zmizí i klientovi ve sdíleném projektu),
+a i to se ptá **v panelu**, ne dialogem.
+
 Hloubku dělá **ostrý hairline v `--shadow-card`**, ne rozmazaný stín.
 Tokeny v `src/index.css` (Tailwind v4 `@theme`) — **používat výhradně je**,
 žádné surové Tailwind barvy: `paper`/`card`/`well`/`line`, text

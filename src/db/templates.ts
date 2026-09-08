@@ -55,13 +55,35 @@ export async function updateTemplate(id: string, patch: Partial<Template>): Prom
   await reconcileTemplates()
 }
 
-export async function removeTemplate(id: string): Promise<void> {
+// Vrací, komu se šablona stáhla — bez toho by ji „Vrátit" nasadilo zpátky
+// všem, nebo nikomu.
+export interface PlanVraceniSablony {
+  templateId: string
+  clientIds: string[]
+}
+
+export async function removeTemplate(id: string): Promise<PlanVraceniSablony> {
   const t = now()
   await db.templates.update(id, { deletedAt: t, updatedAt: t })
   // stáhnout z klientů, kteří ji měli nasazenou
   const clients = await db.clients.filter((c) => !c.deletedAt && c.templateIds.includes(id)).toArray()
   for (const c of clients) {
     await updateClient(c.id, { templateIds: c.templateIds.filter((x) => x !== id) })
+  }
+  emitRepoWrite()
+  await reconcileTemplates()
+  return { templateId: id, clientIds: clients.map((c) => c.id) }
+}
+
+// Vrácení smazané šablony i s nasazením. Úkoly z ní se nevrací ručně —
+// dogeneruje je reconciler, protože přesně to je jeho práce.
+export async function restoreTemplate(plan: PlanVraceniSablony): Promise<void> {
+  const t = now()
+  await db.templates.update(plan.templateId, { deletedAt: undefined, updatedAt: t })
+  for (const clientId of plan.clientIds) {
+    const c = await db.clients.get(clientId)
+    if (!c || c.deletedAt || c.templateIds.includes(plan.templateId)) continue
+    await updateClient(clientId, { templateIds: [...c.templateIds, plan.templateId] })
   }
   emitRepoWrite()
   await reconcileTemplates()

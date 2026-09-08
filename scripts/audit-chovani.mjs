@@ -154,6 +154,57 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 4. mazání se nepotvrzuje, ale jde vrátit ---
+// Tohle je pojistka proti nejhoršímu možnému výsledku téhle změny: když
+// „Vrátit" nefunguje, appka bez ptaní maže data nenávratně.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  await page.getByRole('button',{name:'Nový úkol'}).click(); await page.waitForTimeout(300)
+  await page.locator('input[placeholder]').first().fill('dnes úkol na smazání')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(400)
+  await page.keyboard.press('Escape'); await page.waitForTimeout(400)
+
+  const naObrazovce = () => page.locator('main button').filter({hasText:'úkol na smazání'}).count()
+  T_(await naObrazovce() > 0, 'úkol k pokusu se založil')
+
+  await page.getByText('úkol na smazání').first().click(); await page.waitForTimeout(700)
+  await page.getByRole('button',{name:'Smazat',exact:true}).click(); await page.waitForTimeout(700)
+  T_(await naObrazovce() === 0, 'smazání proběhne bez potvrzovacího dialogu')
+
+  const vratit = page.getByRole('button',{name:'Vrátit'})
+  T_(await vratit.count() > 0, 'po smazání se nabídne vrácení')
+  if (await vratit.count()) { await vratit.click(); await page.waitForTimeout(700) }
+  T_(await naObrazovce() > 0, 'vrácení úkol opravdu obnoví')
+
+  // A přežije to synchronizaci s IndexedDB, ne jen stav v paměti.
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  T_(await naObrazovce() > 0, 'vrácený úkol přežije znovunačtení')
+
+  // Nejrizikovější případ: klient bere s sebou projekty i úkoly, takže
+  // vrácení musí obnovit celou kaskádu, ne jen řádek klienta.
+  await page.getByRole('button',{name:'Klienti',exact:true}).click(); await page.waitForTimeout(500)
+  await page.getByRole('button',{name:'+ Nový'}).first().click(); await page.waitForTimeout(400)
+  await page.getByRole('textbox',{name:'Jméno klienta nebo oblasti'}).fill('Pokusný')
+  await page.getByRole('button',{name:'Vytvořit'}).click(); await page.waitForTimeout(700)
+  await page.locator('main button').filter({hasText:'Pokusný'}).first().click(); await page.waitForTimeout(600)
+  await page.getByRole('textbox',{name:'Nový úkol pro klienta'}).fill('úkol pod klientem')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(700)
+  const ukolKlienta = () => page.locator('main').getByText('úkol pod klientem').count()
+  T_(await ukolKlienta() > 0, 'úkol pod klientem se založil')
+
+  await page.getByRole('button',{name:'Smazat klienta'}).click(); await page.waitForTimeout(700)
+  T_(await page.locator('main button').filter({hasText:'Pokusný'}).count() === 0, 'klient se smazal bez potvrzování')
+  const vratitKlienta = page.getByRole('button',{name:'Vrátit'})
+  T_(await vratitKlienta.count() > 0, 'po smazání klienta se nabídne vrácení')
+  if (await vratitKlienta.count()) { await vratitKlienta.click(); await page.waitForTimeout(800) }
+  T_(await page.locator('main button').filter({hasText:'Pokusný'}).count() > 0, 'vrácený klient je zpátky v seznamu')
+  await page.locator('main button').filter({hasText:'Pokusný'}).first().click(); await page.waitForTimeout(600)
+  T_(await ukolKlienta() > 0, 'vrácení klienta obnoví i jeho úkoly')
+  await ctx.close()
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)

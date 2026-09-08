@@ -42,12 +42,62 @@ export async function updateClient(id: string, patch: Partial<Client>): Promise<
   emitRepoWrite()
 }
 
-export async function removeClient(id: string): Promise<void> {
+// Co přesně se smazalo — podklad pro „Vrátit" u zprávy v doku. Mazání je
+// tombstone, takže vrácení je jen zrušení razítka; potřebuje ale vědět,
+// koho všeho kaskáda potkala, ať se nevrátí i něco, co bylo smazané dřív.
+export interface PlanVraceni {
+  clients?: string[]
+  projects?: string[]
+  tasks?: string[]
+  // Projekt bere úkolům zařazení, ne život — tohle jim ho vrátí.
+  ukolyDoProjektu?: Array<{ id: string; projectId: string }>
+}
+
+export async function removeClient(id: string): Promise<PlanVraceni> {
   const t = now()
+  const plan: PlanVraceni = { clients: [id], projects: [], tasks: [] }
   await db.transaction('rw', db.clients, db.projects, db.tasks, async () => {
     await db.clients.update(id, { deletedAt: t, updatedAt: t })
-    await db.projects.where('clientId').equals(id).modify({ deletedAt: t, updatedAt: t })
-    await db.tasks.where('clientId').equals(id).modify({ deletedAt: t, updatedAt: t })
+    await db.projects
+      .where('clientId')
+      .equals(id)
+      .filter((p) => !p.deletedAt)
+      .modify((p) => {
+        plan.projects!.push(p.id)
+        p.deletedAt = t
+        p.updatedAt = t
+      })
+    await db.tasks
+      .where('clientId')
+      .equals(id)
+      .filter((u) => !u.deletedAt)
+      .modify((u) => {
+        plan.tasks!.push(u.id)
+        u.deletedAt = t
+        u.updatedAt = t
+      })
+  })
+  emitRepoWrite()
+  return plan
+}
+
+// Vrácení dostane nové `updatedAt` schválně: se starým by tombstone ze
+// serveru vyhrál podle LWW a záznam by se za chvíli smazal znovu.
+export async function restoreDeleted(plan: PlanVraceni): Promise<void> {
+  const t = now()
+  await db.transaction('rw', db.clients, db.projects, db.tasks, async () => {
+    for (const id of plan.clients ?? []) {
+      await db.clients.update(id, { deletedAt: undefined, updatedAt: t })
+    }
+    for (const id of plan.projects ?? []) {
+      await db.projects.update(id, { deletedAt: undefined, updatedAt: t })
+    }
+    for (const id of plan.tasks ?? []) {
+      await db.tasks.update(id, { deletedAt: undefined, updatedAt: t })
+    }
+    for (const { id, projectId } of plan.ukolyDoProjektu ?? []) {
+      await db.tasks.update(id, { projectId, updatedAt: t })
+    }
   })
   emitRepoWrite()
 }
@@ -102,14 +152,23 @@ export async function updateProject(id: string, patch: Partial<Project>): Promis
   emitRepoWrite()
 }
 
-export async function removeProject(id: string): Promise<void> {
+export async function removeProject(id: string): Promise<PlanVraceni> {
   const t = now()
+  const plan: PlanVraceni = { projects: [id], ukolyDoProjektu: [] }
   await db.transaction('rw', db.projects, db.tasks, async () => {
     await db.projects.update(id, { deletedAt: t, updatedAt: t })
     // Úkoly zůstávají pod klientem, jen přijdou o projekt.
-    await db.tasks.where('projectId').equals(id).modify({ projectId: undefined, updatedAt: t })
+    await db.tasks
+      .where('projectId')
+      .equals(id)
+      .modify((u) => {
+        plan.ukolyDoProjektu!.push({ id: u.id, projectId: id })
+        u.projectId = undefined
+        u.updatedAt = t
+      })
   })
   emitRepoWrite()
+  return plan
 }
 
 export const clientProjects = (clientId: string) =>
@@ -251,10 +310,11 @@ export async function reopenTask(id: string): Promise<void> {
   emitRepoWrite()
 }
 
-export async function removeTask(id: string): Promise<void> {
+export async function removeTask(id: string): Promise<PlanVraceni> {
   const t = now()
   await db.tasks.update(id, { deletedAt: t, updatedAt: t })
   emitRepoWrite()
+  return { tasks: [id] }
 }
 
 // Follow-up ze schůzky (dokončení Fáze 3): úkol „Follow-up: <schůzka>"

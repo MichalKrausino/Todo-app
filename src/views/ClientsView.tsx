@@ -20,6 +20,7 @@ import {
   openTasks,
   removeClient,
   removeProject,
+  restoreDeleted,
   reopenTask,
   sortTasks,
   updateClient,
@@ -34,6 +35,7 @@ import {
   type CheckFrequency,
 } from '../db/clientCheck'
 import { COLOR_NAMES, KIND_LABELS, firstFreeColor, plural } from '../lib/labels'
+import { nabidniVraceni } from '../lib/toast'
 import { ColorPicker } from '../components/ColorPicker'
 import { formatDayLabel, formatDaysAgo, todayISO } from '../lib/dates'
 import { parseQuickAdd } from '../lib/quickAdd'
@@ -593,11 +595,19 @@ function ClientDetail({
     void updateClient(id, { status: client.status === 'archived' ? 'active' : 'archived' })
   }
 
+  // Bez ptaní, ale vratně. Systémový `confirm()` rozbíjel dojem nativní
+  // appky a stejně nechrání — kdo ho vidí pokaždé, odklepne ho po očku.
   const del = async () => {
-    if (confirm(`Smazat klienta „${client.name}“ včetně projektů a úkolů?`)) {
-      await removeClient(id)
-      onBack()
-    }
+    const jmeno = client.name
+    const plan = await removeClient(id)
+    onBack()
+    const pocet = (plan.tasks?.length ?? 0)
+    nabidniVraceni(
+      pocet
+        ? `Smazán „${jmeno}" a ${pocet} ${plural(pocet, 'úkol', 'úkoly', 'úkolů')}`
+        : `Smazán „${jmeno}"`,
+      () => restoreDeleted(plan),
+    )
   }
 
   const saveProject = (projectId: string) => {
@@ -615,9 +625,8 @@ function ClientDetail({
   }
 
   const delProject = async (projectId: string, name: string) => {
-    if (confirm(`Smazat projekt „${name}“? Úkoly zůstanou pod klientem.`)) {
-      await removeProject(projectId)
-    }
+    const plan = await removeProject(projectId)
+    nabidniVraceni(`Projekt „${name}" smazán`, () => restoreDeleted(plan))
   }
 
   return (
