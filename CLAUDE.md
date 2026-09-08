@@ -25,8 +25,9 @@ zdůvodnění rozhodnutí a roadmapa fází: **`docs/PLAN.md`** — před větš
   (`prefers-reduced-motion`) musí zastavit **všechno**, běžný režim naopak
   animovat, appka musí přežít proklikání (založení úkolu, odškrtnutí,
   přepnutí obrazovek, panely, uložení detailu, znovunačtení z IndexedDB)
-  a panel se musí dát zavřít stažením dolů (prst se posílá přes CDP —
-  rychlost tahu je součást gesta, švihnutí zavírá, pomalé lízmutí ne).
+  a panel se musí dát zavřít stažením **za úchyt nahoře** (prst se posílá
+  přes CDP — rychlost tahu je součást gesta, švihnutí zavírá, pomalé
+  lízmutí ne) a zároveň musí jít obsah panelu pořád rolovat prstem.
   Chce hotový `npm run build`.
 - `npm run nahled` — obrázky appky do `.snimky/` (obě schémata, rozměr iPhonu).
   **Vzhled posuzuj z nich, ne odhadem.** Chromium bez GPU vykresluje
@@ -98,6 +99,16 @@ novým `updatedAt`, jinak by tombstone ze serveru podle LWW vyhrál a
 záznam by se za chvíli smazal znovu. Ptát se smí jedině na to, co vrátit
 nejde: smazání úkolu v Todoistu (zmizí i klientovi ve sdíleném projektu),
 a i to se ptá **v panelu**, ne dialogem.
+
+**Panel se chytá za úchyt, ne za plochu** (`Sheet.tsx` + `.sheet-grip`).
+Tři věci, které se tu už dvakrát podařilo rozbít: (1) nájezd a sjezd dělá
+**přechod, ne animace s `fill: both`** — animace v kaskádě přebíjí inline
+styl, takže se panel prstem nehnul ani o pixel, i když se poloha poctivě
+zapisovala; (2) gesto stojí na **pointer events a pointer capture**, ne na
+`preventDefault` v touchmove — ten Safari od iOS 15 spolehlivě neposlouchá;
+(3) úchyt je samostatný nerolující pruh s `touch-action: none`, protože na
+rolovací ploše si prohlížeč vezme svislé gesto jako rolování a pošle
+`pointercancel` po dvou pohybech (změřeno). Vzor: vaul od E. Kowalského.
 
 Hloubku dělá **ostrý hairline v `--shadow-card`**, ne rozmazaný stín.
 Tokeny v `src/index.css` (Tailwind v4 `@theme`) — **používat výhradně je**,

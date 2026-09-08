@@ -151,6 +151,18 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await tah(195, y1, 260, 8, 40)
   T_(await panelu() > 0, 'odrolovaný panel se tažením nezavírá, jen scrolluje')
 
+  // A hlavně: obsah panelu musí jít pořád rolovat prstem. Tažení se kvůli
+  // tomu chytá jen za úchyt nahoře — kdyby se `touch-action: none` dostalo
+  // na celou plochu, rolování by přestalo fungovat úplně.
+  await otevri()
+  await page.evaluate(() => { document.querySelector('.sheet-panel').scrollTop = 0 })
+  const yObsah = (await page.locator('.sheet-panel').boundingBox()).y + 260
+  await tah(195, yObsah, -200, 8, 30)
+  const odrolovano = await page.evaluate(() => document.querySelector('.sheet-panel').scrollTop)
+  T_(odrolovano > 20, 'obsah panelu jde rolovat prstem (scrollTop ' + odrolovano + ')')
+  T_(await panelu() > 0, 'rolování obsahu panel nezavře')
+  await page.keyboard.press('Escape'); await page.waitForTimeout(500)
+
   await ctx.close()
 }
 
