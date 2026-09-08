@@ -21,6 +21,7 @@ import { WORK_END, WORK_START, freeGaps, freeMinutes, minutesToLabel, type BusyI
 import { computeSignals } from '../lib/signals'
 import { HelpSheet } from '../components/HelpSheet'
 import { ShutdownSheet } from '../components/ShutdownSheet'
+import { TriageSheet } from '../components/TriageSheet'
 import { SignalsBlock } from '../components/SignalsBlock'
 import { TaskRow } from '../components/TaskRow'
 import { DlouhySeznam } from '../components/DlouhySeznam'
@@ -103,6 +104,7 @@ export function TodayView({
   const [batchClient, setBatchClient] = useState<string | null>(null)
   // Večerní uzávěrka (shutdown ritual) — uzavření dne se pamatuje do půlnoci.
   const [shutdownOpen, setShutdownOpen] = useState(false)
+  const [triageOpen, setTriageOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   // Jednorázový tip na swipe gesta — jinak je nikdo neobjeví. Zmizí
   // navždy po zavření nebo po prvním použití gesta.
@@ -583,9 +585,25 @@ export function TodayView({
 
       {visOverdue.length > 0 && (
         <section className="rise" style={stagger(5)}>
-          <h2 className="section-label mb-2 !text-danger">po termínu · {visOverdue.length}</h2>
+          {/* Nadpis je akce: u stovky propadlých je seznam slepá ulička —
+              jediná cesta ven by bylo otevřít každý zvlášť. */}
+          <button
+            onClick={() => setTriageOpen(true)}
+            className="mb-1.5 flex w-full items-center justify-between gap-2 py-2 text-left"
+          >
+            <span className="section-label !text-danger">po termínu · {visOverdue.length}</span>
+            <span className="flex shrink-0 items-center gap-1 text-[13px] font-medium text-accent-deep">
+              Projít
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </span>
+          </button>
           <DlouhySeznam polozky={visOverdue} radek={(t) => row(t)} />
         </section>
+      )}
+      {triageOpen && (
+        <TriageSheet ukoly={visOverdue} clients={clientMap} onClose={() => setTriageOpen(false)} />
       )}
 
       <section className="rise" style={stagger(6)}>

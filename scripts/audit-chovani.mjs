@@ -289,6 +289,28 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await page.getByRole('button',{name:'Plán',exact:true}).click(); await page.waitForTimeout(1200)
   const vPlanu = await radku()
   T_(vPlanu > 0 && vPlanu < 200, 'Plán vykreslí jen část dlouhého seznamu (řádků: ' + vPlanu + ')')
+
+  // --- triáž propadlých: odpověď musí úkol opravdu posunout a jít vzít zpět
+  await page.getByRole('button',{name:'Dnes',exact:true}).click(); await page.waitForTimeout(900)
+  const poTerminu = async () => Number((await page.evaluate(() => (document.body.innerText.match(/termínu[^0-9]*(\d+)/) || [])[1])) || 0)
+  const pred = await poTerminu()
+  T_(pred > 100, 'sekce po termínu je plná (' + pred + ')')
+
+  await page.getByRole('button',{name:/Projít/}).click(); await page.waitForTimeout(800)
+  T_(await page.locator('.sheet-panel').count() > 0, 'triáž se otevřela')
+  await page.getByRole('button',{name:'Dnes',exact:true}).last().click(); await page.waitForTimeout(500)
+  await page.getByRole('button',{name:/Příští týden/}).click(); await page.waitForTimeout(500)
+  await page.getByRole('button',{name:'Už neplatí'}).click(); await page.waitForTimeout(700)
+  await page.keyboard.press('Escape'); await page.waitForTimeout(700)
+  const po = await poTerminu()
+  T_(po === pred - 3, 'tři odpovědi ubraly tři úkoly z propadlých (' + pred + ' → ' + po + ')')
+
+  // Zpět musí vrátit i „Už neplatí" — jinak by to bylo tiché mazání práce.
+  await page.getByRole('button',{name:/Projít/}).click(); await page.waitForTimeout(800)
+  await page.getByRole('button',{name:'Už neplatí'}).click(); await page.waitForTimeout(500)
+  await page.getByRole('button',{name:'Zpět'}).click(); await page.waitForTimeout(500)
+  await page.keyboard.press('Escape'); await page.waitForTimeout(700)
+  T_(await poTerminu() === po, 'zpět v triáži vrátí i zahozený úkol')
   await ctx.close()
 }
 
