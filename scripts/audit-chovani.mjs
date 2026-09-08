@@ -118,8 +118,25 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   }
   const panelu = () => page.locator('.sheet-panel').count()
 
+  // Nejdřív to podstatné: jde panel VIDĚT za prstem? Zavírací logika může
+  // fungovat a panel se přitom nehne — pak to na telefonu vypadá jako
+  // rozbité a člověk pustí dřív, než se práh vůbec překročí.
   await otevri()
   const y0 = (await page.locator('.sheet-panel').boundingBox()).y + 40
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 195, y: y0 }] })
+  for (let i = 1; i <= 6; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 195, y: y0 + i * 15 }] })
+    await page.waitForTimeout(60)
+  }
+  const posun = await page.evaluate(() => {
+    const t = getComputedStyle(document.querySelector('.sheet-panel')).transform
+    return t && t !== 'none' ? Math.round(parseFloat(t.split(',').pop())) : 0
+  })
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await page.waitForTimeout(600)
+  T_(posun > 40, 'panel jde při tažení za prstem (posun ' + posun + ' px)')
+
+  await otevri()
   await tah(195, y0, 40, 6, 120)
   T_(await panelu() > 0, 'krátké pomalé stažení panel nezavře')
 

@@ -82,11 +82,19 @@ export function Sheet({
     let odshora = false
     let posun = 0
 
+    // POZOR na `!important`, není to kosmetika: `.sheet-panel` má
+    // `animation: sheet-up … both` a CSS animace přebíjí obyčejný inline
+    // styl. Fill „both" navíc drží koncový `transform: none` i dlouho po
+    // doběhnutí, takže se posun sice zapsal, ale vykreslovala se pořád
+    // nula — panel stál na místě a tažení vypadalo jako rozbité. Nad
+    // animací je jen `!important` (a přechody).
+    //
     // Posun se píše i do proměnné, ze které vychází zavírací animace —
     // jinak by panel před sjetím dolů nejdřív skočil zpátky nahoru.
     const nastav = (px: number) => {
       posun = px
-      panel.style.transform = px ? `translateY(${px}px)` : ''
+      if (px) panel.style.setProperty('transform', `translateY(${px}px)`, 'important')
+      else panel.style.removeProperty('transform')
       panel.style.setProperty('--sheet-drag', `${px}px`)
     }
 
@@ -134,14 +142,30 @@ export function Sheet({
       panel.style.overflowY = ''
       const prah = Math.min(ZAVRIT_PX, panel.offsetHeight * 0.25)
       if (posun > prah || rychlost > ZAVRIT_RYCHLOST) {
+        // Inline transform musí pryč, jinak by (jako `!important`) přebil
+        // i zavírací animaci a panel by místo sjetí dolů jen ztuhl. Sjezd
+        // začne tam, kde skončil prst — drží to `--sheet-drag`.
+        panel.style.removeProperty('transform')
         close()
         return
       }
-      if (!klidovyRezim()) panel.style.transition = 'transform 0.28s var(--ease-ios)'
-      nastav(0)
+      if (klidovyRezim()) {
+        nastav(0)
+        return
+      }
+      // Nula se nastavuje jako hodnota, ne odebráním vlastnosti: po odebrání
+      // by transform spadl zpátky pod animaci a přechod by neměl co
+      // animovat — panel by skočil. Vlastnost se sundá až po dojetí.
+      panel.style.transition = 'transform 0.28s var(--ease-ios)'
+      panel.style.setProperty('transform', 'translateY(0px)', 'important')
+      panel.style.setProperty('--sheet-drag', '0px')
+      posun = 0
       const uklid = () => {
-        panel.style.transition = ''
         panel.removeEventListener('transitionend', uklid)
+        // Mezitím začal nový tah — ten si transform řídí sám.
+        if (tahne) return
+        panel.style.transition = ''
+        panel.style.removeProperty('transform')
       }
       panel.addEventListener('transitionend', uklid)
     }
