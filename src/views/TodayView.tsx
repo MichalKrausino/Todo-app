@@ -1,8 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import type { Task } from '../db/types'
+import type { Client, Task } from '../db/types'
 import {
-  addMeetingFollowUp,
   allClients,
   allProjects,
   calendarEventsOn,
@@ -14,25 +13,34 @@ import {
   sortTasks,
 } from '../db/repo'
 import { isOverloaded, plannedMinutes } from '../lib/capacity'
-import { formatEventRange, formatFullDate, fromISODate, todayISO } from '../lib/dates'
+import { formatFullDate, todayISO } from '../lib/dates'
 import { WORK_END, WORK_START, freeGaps, freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { computeSignals } from '../lib/signals'
+import { plural } from '../lib/labels'
+import { cn } from '../lib/cn'
 import { HelpSheet } from '../components/HelpSheet'
 import { ShutdownSheet } from '../components/ShutdownSheet'
 import { TriageSheet } from '../components/TriageSheet'
-import { SignalsBlock } from '../components/SignalsBlock'
+import { NavrhSheet } from '../components/NavrhSheet'
+import { KalendarSheet, minutesOfDay, untilLabel } from '../components/KalendarSheet'
+import { SignalySheet, signalRadky } from '../components/SignalySheet'
 import { TaskRow } from '../components/TaskRow'
-import { DlouhySeznam } from '../components/DlouhySeznam'
-import { SbalenaSekce } from '../components/SbalenaSekce'
-import { plural } from '../lib/labels'
+import { useRozbaleno } from '../components/SbalenaSekce'
 import { TextEffect } from '../components/ui/TextEffect'
-import confetti from 'canvas-confetti'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
+import { AnimatedBackground } from '../components/ui/AnimatedBackground'
 import { BlurText } from '../components/ui/BlurText'
 import { BorderBeam } from '../components/ui/BorderBeam'
+import { DisclosureContent } from '../components/ui/Disclosure'
 import { Ripple } from '../components/ui/Ripple'
-import { AnimatedBackground } from '../components/ui/AnimatedBackground'
-import { NavrhSheet } from '../components/NavrhSheet'
+import confetti from 'canvas-confetti'
+
+// Obrazovka Dnes je jedna odpověď na „co teď?": nahoře hlavička, pod ní
+// JEDNA řádka kontextu (nejbližší schůzka, ranní návrh, uzávěrka, signály,
+// inbox — každé je chip, každé se otevře v panelu) a pod tím JEDEN seznam
+// úkolů v jedné kartě: připnuté, propadlé, dnešní; hotové sbalené na
+// konci. Dřív tu stálo až jedenáct bloků pod sebou a každý s vlastním
+// nadpisem — obrazovka odpovídala jedenáctkrát a pokaždé jinak.
 
 // Nejbližší relevantní den úkolu — dřívější z „naplánováno“ a „termín“.
 const effectiveDate = (t: Task): string | undefined => {
@@ -43,52 +51,50 @@ const effectiveDate = (t: Task): string | undefined => {
 // Kaskáda nástupu sekcí (proměnnou čte animace .rise v index.css).
 const stagger = (i: number) => ({ '--stagger': i }) as React.CSSProperties
 
-// Chip filtru klientů: mezi chipy plyne inkoustová pilulka
-// (AnimatedBackground). Vybraný chip dostane vlastní inkoust až se
-// zpožděním, kdy pilulka dolétne — v klidu tak text stojí na pevném
-// podkladu (audit kontrastu čte podklad z předků, ne ze sourozence),
-// a během letu je vidět jen pilulka. Odznačený pouští inkoust hned.
-const CHIP =
-  'shrink-0 rounded-full bg-well px-3 py-1.5 text-[13px] font-medium text-ink-soft transition-[background-color,color,transform] duration-150 active:scale-95 data-[checked=true]:bg-ink data-[checked=true]:text-paper data-[checked=true]:[transition-delay:300ms,0ms,0ms]'
-
-const minutesOfDay = (iso: string) => {
-  const d = new Date(iso)
-  return d.getHours() * 60 + d.getMinutes()
-}
-
-// „za 25 min" / „za 1 h 20" — odpočet do nejbližší schůzky.
-const untilLabel = (min: number): string => {
-  if (min < 60) return `za ${min} min`
-  const h = Math.floor(min / 60)
-  const m = min % 60
-  return m === 0 ? `za ${h} h` : `za ${h} h ${m} min`
-}
-
-// Kolikátý den vícedenní události dnes je („2. den ze 4").
-const dayIndex = (startDay: string, endDay: string, today: string) => {
-  const day = 86_400_000
-  const from = fromISODate(startDay).getTime()
-  const to = fromISODate(endDay).getTime()
-  const now = fromISODate(today).getTime()
-  const total = Math.round((to - from) / day) + 1
-  return { index: Math.round((now - from) / day) + 1, total }
-}
-
 // Příklady do prázdného stavu — každý ukazuje jinou schopnost parseru.
-const EXAMPLES = [
-  'zítra poslat report',
-  'v pátek fakturace !!',
-  'zavolat Pepovi do 14:00',
-]
+const EXAMPLES = ['zítra poslat report', 'v pátek fakturace !!', 'zavolat Pepovi do 14:00']
 
 // Kratší okno než půl hodiny nemá cenu nabízet jako volný slot.
 const MIN_GAP_MIN = 30
-
-// Pevně rozmístěné tečky oslavy splněného dne (žádná runtime náhoda —
-// deterministické, jen se přehrají při přepnutí allDone).
+// Kolik řádků seznamu se vykreslí napoprvé a po kolika se dobírá.
+const DAVKA = 30
 // obvod kroužku postupu (r = 7,5 ve viewBoxu 20)
 const RING = 2 * Math.PI * 7.5
 
+// Řazení seznamu: podle naléhavosti (připnuté, propadlé, dnešní), nebo
+// seskupené po klientech — jeden klient v kuse, míň přepínání kontextu.
+type Razeni = 'priorita' | 'klient'
+const RAZENI_KLIC = 'todo.dnes.razeni'
+
+interface Polozka {
+  task: Task
+  showDate: boolean
+}
+
+// Kontextový chip: jedna řádka nad seznamem, každý chip otevře panel.
+const CHIP =
+  'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-transform duration-150 active:scale-95'
+
+function Chip({
+  tone = 'card',
+  className,
+  ...props
+}: React.ComponentProps<'button'> & { tone?: 'card' | 'accent' | 'note' | 'moss' }) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        CHIP,
+        tone === 'card' && 'bg-card text-ink shadow-card',
+        tone === 'accent' && 'bg-accent-wash text-accent-deep',
+        tone === 'note' && 'bg-card text-note-ink shadow-card',
+        tone === 'moss' && 'bg-card text-moss shadow-card',
+        className,
+      )}
+      {...props}
+    />
+  )
+}
 
 export function TodayView({
   onOpenTask,
@@ -100,33 +106,31 @@ export function TodayView({
   onOpenInbox: () => void
 }) {
   const today = todayISO()
-  // Panel s ranním návrhem — rozhoduje se po jednom, ne na obrazovce.
   const [navrhOpen, setNavrhOpen] = useState(false)
-  // Schůzky, ze kterých už v tomhle otevření vznikl follow-up (ukáže ✓).
-  const [followedUp, setFollowedUp] = useState<Set<string>>(new Set())
-  // Batching podle klienta: přepínání kontextu žere výkon — filtr drží
-  // jednoho klienta v kuse. Jen lokální stav, nikam se neukládá.
-  const [batchClient, setBatchClient] = useState<string | null>(null)
-  // Večerní uzávěrka (shutdown ritual) — uzavření dne se pamatuje do půlnoci.
+  const [kalendarOpen, setKalendarOpen] = useState(false)
+  const [signalyOpen, setSignalyOpen] = useState(false)
   const [shutdownOpen, setShutdownOpen] = useState(false)
   const [triageOpen, setTriageOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   // Jednorázový tip na swipe gesta — jinak je nikdo neobjeví. Zmizí
   // navždy po zavření nebo po prvním použití gesta.
-  const [gestureTip, setGestureTip] = useState(
-    () => localStorage.getItem('todo.gestureTipSeen') !== '1',
-  )
+  const [gestureTip, setGestureTip] = useState(() => localStorage.getItem('todo.gestureTipSeen') !== '1')
   const dismissTip = () => {
     localStorage.setItem('todo.gestureTipSeen', '1')
     setGestureTip(false)
   }
-  const [dayClosed, setDayClosed] = useState(
-    () => localStorage.getItem('todo.dayClosed') === todayISO(),
+  const [dayClosed, setDayClosed] = useState(() => localStorage.getItem('todo.dayClosed') === todayISO())
+  const [razeni, setRazeni] = useState<Razeni>(() =>
+    localStorage.getItem(RAZENI_KLIC) === 'klient' ? 'klient' : 'priorita',
   )
-  // Rozbalený seznam schůzek (jinak se ukáže jen prvních pár).
-  const [allEvents, setAllEvents] = useState(false)
-  // Živý čas — časová osa dne musí stárnout sama od sebe. Minutová
-  // kadence stačí; při návratu do popředí se dorovná okamžitě.
+  const zmenRazeni = (r: Razeni) => {
+    localStorage.setItem(RAZENI_KLIC, r)
+    setRazeni(r)
+  }
+  const [hotovoOpen, prepniHotovo] = useRozbaleno('hotovo')
+  const [limit, setLimit] = useState(DAVKA)
+  // Živý čas — nejbližší schůzka a volno musí stárnout samy od sebe.
+  // Minutová kadence stačí; při návratu do popředí se dorovná okamžitě.
   const [nowMin, setNowMin] = useState(() => {
     const d = new Date()
     return d.getHours() * 60 + d.getMinutes()
@@ -156,6 +160,7 @@ export function TodayView({
     window.addEventListener('hashchange', check)
     return () => window.removeEventListener('hashchange', check)
   }, [])
+
   // `useLiveQuery` vrací `undefined`, dokud první dotaz nedoběhne — a to
   // není totéž co „nic tu není". Když se rozdíl setře na `?? []`, appka po
   // startu na chvíli tvrdí „Čistý stůl", i když je den plný; změřeno,
@@ -181,6 +186,7 @@ export function TodayView({
     }),
   )
   const todays = sortTasks(open.filter((t) => effectiveDate(t) === today))
+  const inbox = sortTasks(open.filter((t) => !effectiveDate(t)))
 
   const planned = todays.length + done.length
   const progress = planned > 0 ? done.length / planned : 0
@@ -200,23 +206,9 @@ export function TodayView({
   const restStart = Math.min(Math.max(nowMin, WORK_START), WORK_END)
   const freeMin = events.length > 0 ? freeMinutes(busy, restStart) : null
   const workMin = plannedMinutes(unfinished)
-  const overloaded = unfinished.length > 0 && isOverloaded(workMin, freeMin)
-
-  // Batching: klienti dnešních úkolů (chipy se ukážou od dvou různých)
-  const batchClients = [
-    ...new Map(
-      unfinished
-        .filter((t) => t.clientId && clientMap.has(t.clientId))
-        .map((t) => [t.clientId!, clientMap.get(t.clientId!)!]),
-    ).values(),
-  ]
-  const byBatch = (t: Task) => !batchClient || t.clientId === batchClient
-  // „Top 3 dne" — připíchnuté úkoly stojí nahoře ve vlastní sekci a
-  // z ostatních seznamů zmizí, ať se nezdvojují.
-  const isPinned = (t: Task) => t.pinnedFor === today
-  const pinned = sortTasks(unfinished.filter(isPinned)).filter(byBatch)
-  const visOverdue = overdue.filter((t) => !isPinned(t)).filter(byBatch)
-  const visTodays = todays.filter((t) => !isPinned(t)).filter(byBatch)
+  const overloaded = isOverloaded(workMin, freeMin)
+  // Volná okna zbývající do konce pracovní doby (pro panel kalendáře).
+  const gaps = freeGaps(busy, restStart).filter((g) => g.endMin - g.startMin >= MIN_GAP_MIN && g.endMin > nowMin)
 
   // Splněný den slaví konfety přes celou obrazovku (canvas-confetti, jak
   // ho zapojuje magicui) — jednou za den, ne při každém překreslení, a v
@@ -250,9 +242,7 @@ export function TodayView({
     void (t.status === 'done' ? reopenTask(t.id) : completeTask(t.id))
   }
 
-  // V sekci „dnes" je štítek data redundantní — skrývá se (showDate).
-  // V sekci „na čem záleží" je zase redundantní špendlík (showPin).
-  const row = (t: Task, showDate = true, showPin = true) => (
+  const row = (t: Task, showDate = true) => (
     <TaskRow
       key={t.id}
       task={t}
@@ -261,42 +251,83 @@ export function TodayView({
       onToggle={toggle}
       onOpen={onOpenTask}
       showDate={showDate}
-      showPin={showPin}
     />
   )
 
+  // Pořadí v seznamu: připnuté (Top 3 dne), propadlé, dnešní. Připnuté
+  // nese špendlík na řádku, propadlé červené datum — vlastní sekce
+  // s nadpisem k tomu nepotřebují.
+  const isPinned = (t: Task) => t.pinnedFor === today
+  const pinned = sortTasks(unfinished.filter(isPinned))
+  const visOverdue = overdue.filter((t) => !isPinned(t))
+  const visTodays = todays.filter((t) => !isPinned(t))
+  const poradi: Polozka[] = [
+    ...pinned.map((t) => ({ task: t, showDate: effectiveDate(t) !== today })),
+    ...visOverdue.map((t) => ({ task: t, showDate: true })),
+    ...visTodays.map((t) => ({ task: t, showDate: false })),
+  ]
+  const otevrene = poradi.length
+  const viditelne = poradi.slice(0, limit)
+  const zbyva = otevrene - viditelne.length
+
+  // Seskupení po klientech (jen když jich dnes je víc než jeden).
+  const klientiDnes = [...new Set(poradi.map((p) => p.task.clientId).filter((id): id is string => !!id && clientMap.has(id)))]
+  const skupiny: Array<{ client?: Client; polozky: Polozka[] }> = (() => {
+    if (razeni !== 'klient' || klientiDnes.length < 2) return [{ polozky: viditelne }]
+    const map = new Map<string, Polozka[]>()
+    for (const p of viditelne) {
+      const k = p.task.clientId && clientMap.has(p.task.clientId) ? p.task.clientId : ''
+      map.set(k, [...(map.get(k) ?? []), p])
+    }
+    return [...map.entries()]
+      .sort((a, b) => {
+        if (!a[0]) return 1
+        if (!b[0]) return -1
+        return clientMap.get(a[0])!.name.localeCompare(clientMap.get(b[0])!.name, 'cs')
+      })
+      .map(([id, polozky]) => ({ client: id ? clientMap.get(id) : undefined, polozky }))
+  })()
+
+  // Kontext: ranní návrh, nejbližší schůzka, uzávěrka, signály, inbox.
+  const taskById = new Map(open.map((t) => [t.id, t]))
+  const navrhy = (dayPlan?.suggestions ?? [])
+    .filter((s) => s.decision === 'ignored' && taskById.has(s.taskId))
+    .map((s) => ({ task: taskById.get(s.taskId)!, reason: s.reason }))
+  const bezici = events.find((e) => !e.allDay && minutesOfDay(e.start) <= nowMin && nowMin < minutesOfDay(e.end))
+  const dalsi = events
+    .filter((e) => !e.allDay && minutesOfDay(e.start) > nowMin)
+    .sort((a, b) => minutesOfDay(a.start) - minutesOfDay(b.start))[0]
+  const signaly = signalRadky(computeSignals(clients, projects, [...open, ...done], today), {
+    onOpenClient,
+    onOpenTask,
+    onOpenInbox,
+  })
+  const timeFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <header className="rise">
         <TextEffect as="h1" per="char" preset="blur" className="display text-[2.1rem] font-semibold leading-tight">Dnes</TextEffect>
-        {/* Jedna tichá řádka pod titulkem místo tří pater metadat. Postup
-            dne nese kroužek (dřív pruh přes celou šířku), datum, počet a
-            odhad práce stojí za ním jako text. Přetížení dne má vlastní
-            řádek — je to jediné, co tu smí mít barvu. */}
+        {/* Jedna tichá řádka pod titulkem: kroužek postupu, datum a počet;
+            odhad práce má vlastní řádku — jediné, co tu smí mít barvu, je
+            přetížení dne. */}
         <div className="relative mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-ink-soft">
           {planned > 0 && (
-            <>
-              <svg
-                key={done.length}
-                viewBox="0 0 20 20"
-                className="pop-soft h-[18px] w-[18px] shrink-0 -rotate-90"
-                aria-hidden="true"
-              >
-                <circle cx="10" cy="10" r="7.5" fill="none" stroke="var(--color-line)" strokeWidth="3" />
-                <circle
-                  cx="10"
-                  cy="10"
-                  r="7.5"
-                  fill="none"
-                  stroke={allDone ? 'var(--color-moss)' : 'var(--color-accent)'}
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeDasharray={RING}
-                  strokeDashoffset={RING * (1 - progress)}
-                  style={{ transition: 'stroke-dashoffset 0.7s var(--ease-glide), stroke 0.4s' }}
-                />
-              </svg>
-            </>
+            <svg key={done.length} viewBox="0 0 20 20" className="pop-soft h-[18px] w-[18px] shrink-0 -rotate-90" aria-hidden="true">
+              <circle cx="10" cy="10" r="7.5" fill="none" stroke="var(--color-line)" strokeWidth="3" />
+              <circle
+                cx="10"
+                cy="10"
+                r="7.5"
+                fill="none"
+                stroke={allDone ? 'var(--color-moss)' : 'var(--color-accent)'}
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray={RING}
+                strokeDashoffset={RING * (1 - progress)}
+                style={{ transition: 'stroke-dashoffset 0.7s var(--ease-glide), stroke 0.4s' }}
+              />
+            </svg>
           )}
           <span className="inline-block first-letter:uppercase">{formatFullDate(new Date())}</span>
           {planned > 0 && (
@@ -305,254 +336,168 @@ export function TodayView({
             </span>
           )}
         </div>
-        {/* Odhad práce má vlastní řádku vždy — přilepený za datum se na
-            390 px zalamoval a druhá řádka začínala osamocenou tečkou. */}
         {unfinished.length > 0 && (
-          <p
-            className={`mt-1 flex items-center gap-1.5 text-[13px] ${overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'}`}
-          >
-            <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${overloaded ? 'bg-note-ink' : 'bg-moss'}`} />
+          <p className={`mt-1 flex items-start gap-1.5 text-[13px] leading-snug ${overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'}`}>
+            {/* tečka drží u první řádky i při zalomení na úzkém displeji */}
+            <span className={`mt-[6px] inline-block h-1.5 w-1.5 shrink-0 rounded-full ${overloaded ? 'bg-note-ink' : 'bg-moss'}`} />
+            <span>
             {overloaded && <>na den je toho moc · </>}
             práce ~{minutesToLabel(workMin)}
-            {/* stejné slovo jako v hlavičce kalendáře — jde o totéž číslo */}
             {freeMin !== null && <> · zbývá ~{minutesToLabel(freeMin)}</>}
+            </span>
           </p>
         )}
       </header>
 
-      {/* Ranní návrh jako jedna řádka s počtem, rozhoduje se v panelu
-          (NavrhSheet). Dřív tu stál seznam se dvěma kolečky na řádek a tytéž
-          úkoly se o kus níž opakovaly v „po termínu" — obrazovka odpovídala
-          na „co teď?" dvakrát a pokaždé jinak. */}
-      {(() => {
-        if (!dayPlan) return null
-        const taskById = new Map(open.map((t) => [t.id, t]))
-        const pending = dayPlan.suggestions.filter(
-          (s) => s.decision === 'ignored' && taskById.has(s.taskId),
-        )
-        if (pending.length === 0) return null
-        const nazvy = pending.slice(0, 2).map((s) => taskById.get(s.taskId)!.title)
-        const zbytek = pending.length - nazvy.length
-        return (
-          <section className="rise" style={stagger(1)}>
-            <button
-              onClick={() => setNavrhOpen(true)}
-              className="relative flex w-full items-center gap-3 overflow-hidden rounded-2xl bg-card px-4 py-3 text-left shadow-card transition-transform duration-150 active:scale-[0.99]"
-            >
-              {/* BorderBeam (magicui): světlo obíhá jedinou kartu, kterou napsal server */}
-              <BorderBeam size={140} duration={9} />
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-wash text-accent">
-                <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="currentColor">
-                  <path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z" />
-                  <path d="M18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />
-                </svg>
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[15px] font-semibold">
-                  Ranní návrh · {pending.length} {plural(pending.length, 'úkol', 'úkoly', 'úkolů')}
-                </span>
-                <span className="block truncate text-[13px] text-ink-soft">
-                  {nazvy.join(', ')}
-                  {zbytek > 0 && ` +${zbytek}`}
-                </span>
-              </span>
-              <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 6l6 6-6 6" />
+      {/* Kontext: jedna vodorovná řádka chipů. Nic z toho není dnešní
+          práce, každé je na jedno ťuknutí v panelu. Pořadí podle toho, co
+          se dnes mění: návrh (ráno), schůzka (během dne), uzávěrka
+          (večer), signály a inbox (kdykoli). */}
+      {(navrhy.length > 0 || events.length > 0 || (isEvening && unfinished.length > 0) || signaly.length > 0 || inbox.length > 0) && (
+        <div className="rise -mx-4 flex gap-2 overflow-x-auto px-4 pb-1" style={{ scrollbarWidth: 'none', ...stagger(1) }}>
+          {navrhy.length > 0 && (
+            <Chip tone="accent" className="relative overflow-hidden" onClick={() => setNavrhOpen(true)}>
+              {/* BorderBeam (magicui): světlo obíhá jediný chip, který napsal server */}
+              <BorderBeam size={48} duration={5} />
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                <path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z" />
               </svg>
-            </button>
-            {navrhOpen && (
-              <NavrhSheet
-                planId={dayPlan.id}
-                navrhy={pending.map((s) => ({ task: taskById.get(s.taskId)!, reason: s.reason }))}
-                clients={clientMap}
-                onClose={() => setNavrhOpen(false)}
-              />
-            )}
-          </section>
-        )
-      })()}
+              Návrh · {navrhy.length}
+            </Chip>
+          )}
+          {events.length > 0 && (
+            <Chip onClick={() => setKalendarOpen(true)}>
+              <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-soft" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <rect x="4" y="5.5" width="16" height="15" rx="3" />
+                <path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" />
+              </svg>
+              {bezici ? (
+                <>
+                  <span className="text-accent-deep">Teď</span>
+                  <span className="max-w-[9rem] truncate">{bezici.title}</span>
+                </>
+              ) : dalsi ? (
+                <>
+                  <span className="tabular-nums text-ink-soft">{timeFmt.format(new Date(dalsi.start))}</span>
+                  <span className="max-w-[9rem] truncate">{dalsi.title}</span>
+                  <span className="text-accent-deep">{untilLabel(minutesOfDay(dalsi.start) - nowMin)}</span>
+                </>
+              ) : (
+                <span className="text-ink-soft">
+                  {events.length} {plural(events.length, 'schůzka', 'schůzky', 'schůzek')} · po všech
+                </span>
+              )}
+            </Chip>
+          )}
+          {isEvening && unfinished.length > 0 && !dayClosed && (
+            <Chip onClick={() => setShutdownOpen(true)}>
+              <svg viewBox="0 0 24 24" className="breathe h-4 w-4 text-accent" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z" />
+              </svg>
+              Uzávěrka dne
+            </Chip>
+          )}
+          {isEvening && unfinished.length > 0 && dayClosed && (
+            <Chip tone="moss" disabled className="opacity-100">
+              ✓ Den uzavřen
+            </Chip>
+          )}
+          {signaly.length > 0 && (
+            <Chip tone="note" onClick={() => setSignalyOpen(true)}>
+              <span className="inline-block h-2 w-2 rounded-full bg-amber" />
+              Signály · {signaly.length}
+            </Chip>
+          )}
+          {inbox.length > 0 && (
+            <Chip onClick={onOpenInbox} className="text-ink-soft">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 13l2.5-7h11L20 13v6H4z" />
+                <path d="M4 13h5l1.5 2h3L15 13h5" />
+              </svg>
+              Bez termínu · {inbox.length}
+            </Chip>
+          )}
+        </div>
+      )}
 
-      {(() => {
-        if (events.length === 0) return null
-        const timeFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
+      {/* JEDEN seznam v JEDNÉ kartě. Uvnitř: řádka triáže, když něco
+          propadlo; řádky úkolů (připnuté → propadlé → dnešní, nebo po
+          klientech); hotové sbalené na konci. */}
+      <section className="rise" style={stagger(2)}>
+        {otevrene > 0 ? (
+          <>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h2 className="section-label">dnes · {otevrene}</h2>
+              {klientiDnes.length >= 2 && (
+                <div className="flex gap-0.5 rounded-full bg-well p-0.5">
+                  {/* AnimatedBackground (motion-primitives): pilulka mezi volbami plyne */}
+                  <AnimatedBackground value={razeni} onValueChange={(id) => zmenRazeni(id as Razeni)} className="rounded-full bg-card shadow-card">
+                    <button data-id="priorita" className="h-8 rounded-full px-2.5 text-[12px] font-medium text-ink-soft data-[checked=true]:text-ink">
+                      Priorita
+                    </button>
+                    <button data-id="klient" className="h-8 rounded-full px-2.5 text-[12px] font-medium text-ink-soft data-[checked=true]:text-ink">
+                      Klient
+                    </button>
+                  </AnimatedBackground>
+                </div>
+              )}
+            </div>
 
-        // Úkol stojící za blokem z appky — ať se na blok dá ťuknout.
-        const taskByEvent = new Map(
-          [...open, ...done]
-            .filter((t) => t.calendarEventId)
-            .map((t) => [t.calendarEventId!, t]),
-        )
+            <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+              {visOverdue.length > 0 && (
+                // Řádka triáže: u stovky propadlých je seznam slepá ulička —
+                // průchod po jednom je jediná cesta ven.
+                <button
+                  onClick={() => setTriageOpen(true)}
+                  className="flex w-full items-center justify-between gap-2 border-b border-line px-4 py-2.5 text-left transition-colors duration-150 active:bg-well/60"
+                >
+                  <span className="text-[13px] font-medium text-danger first-letter:uppercase">
+                    po termínu · {visOverdue.length}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1 text-[13px] font-medium text-accent-deep">
+                    Projít
+                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                  </span>
+                </button>
+              )}
 
-        // Volná okna zbývající do konce pracovní doby. Ta, co už uplynula,
-        // by jen zabírala místo — proto se počítají od teď.
-        const gaps = freeGaps(busy, restStart).filter(
-          (g) => g.endMin - g.startMin >= MIN_GAP_MIN && g.endMin > nowMin,
-        )
-
-        // Nejbližší budoucí schůzka — jen u ní se ukáže odpočet.
-        const nextStart = events
-          .filter((e) => !e.allDay)
-          .map((e) => minutesOfDay(e.start))
-          .filter((m) => m > nowMin)
-          .sort((a, b) => a - b)[0]
-
-        // Sbalený kalendář ukáže jen jednu řádku: co běží, nebo co je
-        // nejblíž; když už je po všem, poslední proběhlou. Celý den
-        // s volnými okny je na ťuknutí — plán dne stojí v seznamu úkolů,
-        // ne v rozpisu schůzek.
-        const nejblizsi =
-          events.find((e) => !e.allDay && minutesOfDay(e.start) <= nowMin && nowMin < minutesOfDay(e.end)) ??
-          events.find((e) => !e.allDay && minutesOfDay(e.start) === nextStart) ??
-          events[events.length - 1]
-        const shown = allEvents ? events : [nejblizsi]
-        const hidden = events.length - shown.length
-        // Dvě schůzky ve stejnou minutu by jinak vykreslily tentýž
-        // řádek volna dvakrát — každé okno se ukáže nejvýš jednou.
-        const usedGaps = new Set<number>()
-
-        return (
-          <section className="rise" style={stagger(2)}>
-            <h2 className="section-label mb-2">
-              {/* po pracovní době už „volno" nedává smysl */}
-              kalendář{freeMin !== null && restStart < WORK_END && ` · zbývá ~${minutesToLabel(freeMin)}`}
-            </h2>
-            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
-              {shown.map((e) => {
-                const startMin = e.allDay ? 0 : minutesOfDay(e.start)
-                const endMin = e.allDay ? 24 * 60 : minutesOfDay(e.end)
-                const past = !e.allDay && endMin <= nowMin
-                const running = !e.allDay && startMin <= nowMin && nowMin < endMin
-                const isNext = !e.allDay && startMin === nextStart
-                const task = e.isTodoBlock ? taskByEvent.get(e.eventId) : undefined
-                const span = e.startDay !== e.endDay ? dayIndex(e.startDay, e.endDay, today) : null
-                // volné okno, které končí přesně tam, kde schůzka začíná
-                const gapBefore = e.allDay || !allEvents
-                  ? undefined
-                  : gaps.find((g) => g.endMin === startMin && !usedGaps.has(g.startMin))
-                if (gapBefore) usedGaps.add(gapBefore.startMin)
-
-                return (
-                  <Fragment key={e.id}>
-                    {gapBefore && (
-                      <li className="flex items-center gap-3 bg-well/40 px-4 py-1.5">
-                        <span className="w-24 shrink-0 text-[12px] tabular-nums text-ink-faint">
-                          {timeFmt.format(new Date(0, 0, 1, 0, Math.max(gapBefore.startMin, nowMin)))}
-                        </span>
-                        <span className="text-[12px] text-ink-faint">
-                          volno {minutesToLabel(gapBefore.endMin - Math.max(gapBefore.startMin, nowMin))}
-                        </span>
+              <ul className="divide-y divide-line">
+                {skupiny.map((sk, i) => (
+                  <Fragment key={sk.client?.id ?? `bez-${i}`}>
+                    {skupiny.length > 1 && (
+                      <li className="flex items-center gap-1.5 bg-well/40 px-4 py-1.5 text-[12px] font-medium text-ink-soft">
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: sk.client?.color ?? 'var(--color-edge)' }} />
+                        {sk.client?.name ?? 'bez klienta'}
                       </li>
                     )}
-                    <li
-                      className={`flex items-center gap-3 px-4 py-2.5 transition-opacity duration-300 ${
-                        past ? 'opacity-45' : ''
-                      } ${running ? 'bg-accent-wash/60' : ''}`}
-                    >
-                      <span className={`w-24 shrink-0 text-[13px] tabular-nums ${running ? 'font-semibold text-accent-deep' : 'text-ink-soft'}`}>
-                        {e.allDay
-                          ? 'celý den'
-                          : formatEventRange(e)}
-                      </span>
-
-                      {/* blok z appky je zástupce úkolu → ťuknutím se otevře */}
-                      {task ? (
-                        <button
-                          className="min-w-0 flex-1 truncate text-left text-[15px] transition-colors duration-150 active:text-accent-deep"
-                          onClick={() => onOpenTask(task)}
-                        >
-                          <span className={task.status === 'done' ? 'text-ink-faint line-through' : ''}>
-                            {e.title}
-                          </span>
-                        </button>
-                      ) : (
-                        <span className="min-w-0 flex-1 truncate text-[15px]">
-                          {e.title}
-                          {span && (
-                            <span className="ml-1.5 text-[12px] text-ink-faint">
-                              {span.index}. den ze {span.total}
-                            </span>
-                          )}
-                        </span>
-                      )}
-
-                      {running && (
-                        <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-accent-deep">
-                          <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-accent align-middle breathe" />
-                          teď
-                        </span>
-                      )}
-                      {!running && isNext && (
-                        <span className="shrink-0 text-[12px] font-medium text-accent-deep">
-                          {untilLabel(startMin - nowMin)}
-                        </span>
-                      )}
-
-                      {/* follow-up jen u schůzky s časem — celodenní událost
-                          (dovolená, svátek) není jednání k dotažení */}
-                      {e.isTodoBlock ? (
-                        <span
-                          className={`h-2 w-2 shrink-0 rounded-full ${task?.status === 'done' ? 'bg-moss' : 'bg-accent'}`}
-                          title="Blok z appky"
-                        />
-                      ) : e.allDay ? null : followedUp.has(e.id) ? (
-                        <span className="pop shrink-0 text-[12px] font-medium text-moss">✓ úkol</span>
-                      ) : (
-                        <button
-                          aria-label={`Vytvořit follow-up ke schůzce ${e.title}`}
-                          title="Follow-up úkol ze schůzky"
-                          onClick={() => {
-                            void addMeetingFollowUp(e)
-                            setFollowedUp((s) => new Set(s).add(e.id))
-                          }}
-                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-well text-ink-soft transition-transform duration-150 active:scale-90"
-                        >
-                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 6v12M6 12h12" />
-                          </svg>
-                        </button>
-                      )}
-                    </li>
+                    {sk.polozky.map((p) => row(p.task, p.showDate))}
                   </Fragment>
-                )
-              })}
+                ))}
+              </ul>
 
-              {/* volno po poslední schůzce dne */}
-              {allEvents
-                ? (() => {
-                    const lastEnd = Math.max(
-                      restStart,
-                      ...events.filter((e) => !e.allDay).map((e) => minutesOfDay(e.end)),
-                    )
-                    const tail = gaps.find((g) => g.startMin >= lastEnd)
-                    if (!tail) return null
-                    return (
-                      <li className="flex items-center gap-3 bg-well/40 px-4 py-1.5">
-                        <span className="w-24 shrink-0 text-[12px] tabular-nums text-ink-faint">
-                          {timeFmt.format(new Date(0, 0, 1, 0, Math.max(tail.startMin, nowMin)))}
-                        </span>
-                        <span className="text-[12px] text-ink-faint">
-                          volno {minutesToLabel(tail.endMin - Math.max(tail.startMin, nowMin))} do konce dne
-                        </span>
-                      </li>
-                    )
-                  })()
-                : null}
+              {zbyva > 0 && (
+                <button
+                  onClick={() => setLimit((l) => l + DAVKA)}
+                  className="w-full border-t border-line py-2.5 text-center text-sm font-medium text-accent-deep transition-colors duration-150 active:bg-well/60"
+                >
+                  {`Zobrazit ${Math.min(zbyva, DAVKA)} ${plural(Math.min(zbyva, DAVKA), 'další', 'další', 'dalších')}`}
+                  {zbyva > DAVKA && ` (zbývá ${zbyva})`}
+                </button>
+              )}
 
-              {(hidden > 0 || allEvents) && (
-                <li>
+              {done.length > 0 && (
+                <>
                   <button
-                    onClick={() => setAllEvents((v) => !v)}
-                    aria-expanded={allEvents}
-                    className="flex w-full items-center justify-between px-4 py-2 text-left text-[13px] font-medium text-accent-deep transition-colors duration-150 active:bg-well/60"
+                    onClick={prepniHotovo}
+                    aria-expanded={hotovoOpen}
+                    className="flex w-full items-center justify-between gap-2 border-t border-line px-4 py-2.5 text-left transition-colors duration-150 active:bg-well/60"
                   >
-                    <span>
-                      {allEvents
-                        ? 'Jen nejbližší'
-                        : `Celý den · ${events.length} ${plural(events.length, 'schůzka', 'schůzky', 'schůzek')}`}
-                    </span>
+                    <span className="text-[13px] font-medium text-ink-soft first-letter:uppercase">hotovo · {done.length}</span>
                     <svg
                       viewBox="0 0 24 24"
-                      className={`h-3.5 w-3.5 transition-transform duration-200 ${allEvents ? 'rotate-90' : ''}`}
+                      className={`h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 ${hotovoOpen ? 'rotate-90' : ''}`}
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
@@ -562,223 +507,121 @@ export function TodayView({
                       <path d="M9 6l6 6-6 6" />
                     </svg>
                   </button>
-                </li>
+                  <DisclosureContent open={hotovoOpen}>
+                    <ul className="divide-y divide-line border-t border-line">{done.map((t) => row(t))}</ul>
+                  </DisclosureContent>
+                </>
               )}
-            </ul>
-          </section>
-        )
-      })()}
+            </div>
 
-      {/* Batching podle klienta — jeden klient v kuse, méně přepínání kontextu */}
-      {batchClients.length >= 2 && (
-        <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1" style={{ scrollbarWidth: 'none' }}>
-          {/* AnimatedBackground (motion-primitives): inkoustová pilulka mezi
-              chipy plyne, ne naskakuje. Ťuknutí na vybraného klienta ho
-              zase pustí — vrátí se „Vše". */}
-          <AnimatedBackground
-            value={batchClient ?? 'vse'}
-            onValueChange={(id) => setBatchClient(id === 'vse' || id === batchClient ? null : id)}
-            className="rounded-full bg-ink"
-          >
-            <button data-id="vse" className={CHIP}>
-              Vše
-            </button>
-            {batchClients.map((c) => (
-              <button key={c.id} data-id={c.id} className={CHIP}>
-                <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />
-                {c.name}
-              </button>
-            ))}
-          </AnimatedBackground>
-        </div>
-      )}
-
-      {/* Top 3 dne — co musí padnout, ať se stane cokoli. Stojí nahoře,
-          zvýrazněné rámečkem, ostatní sekce tyhle úkoly už neopakují. */}
-      {pinned.length > 0 && (
-        <section className="rise" style={stagger(4)}>
-          <h2 className="section-label mb-2 !text-accent-deep">
-            na čem záleží · {pinned.length}
-          </h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card ring-1 ring-accent/35">
-            {/* datum jen u toho, co není z dneška (propadlé úkoly) */}
-            {pinned.map((t) => row(t, effectiveDate(t) !== today, false))}
-          </ul>
-        </section>
-      )}
-
-      {visOverdue.length > 0 && (
-        <section className="rise" style={stagger(5)}>
-          {/* Nadpis je akce: u stovky propadlých je seznam slepá ulička —
-              jediná cesta ven by bylo otevřít každý zvlášť. */}
-          <button
-            onClick={() => setTriageOpen(true)}
-            className="mb-1.5 flex w-full items-center justify-between gap-2 py-2 text-left"
-          >
-            <span className="section-label !text-danger">po termínu · {visOverdue.length}</span>
-            <span className="flex shrink-0 items-center gap-1 text-[13px] font-medium text-accent-deep">
-              Projít
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 6l6 6-6 6" />
-              </svg>
-            </span>
-          </button>
-          {/* Pět řádků řekne, o co jde; zbytek patří do triáže, ne do zdi. */}
-          <DlouhySeznam polozky={visOverdue} radek={(t) => row(t)} uvod={5} />
-        </section>
-      )}
-      {triageOpen && (
-        <TriageSheet ukoly={visOverdue} clients={clientMap} onClose={() => setTriageOpen(false)} />
-      )}
-
-      <section className="rise" style={stagger(6)}>
-        {visTodays.length > 0 && <h2 className="section-label mb-2">dnes · {visTodays.length}</h2>}
-        {visTodays.length > 0 ? (
-          <>
-            <DlouhySeznam polozky={visTodays} radek={(t) => row(t, false)} />
             {gestureTip && (
-              <div className="rise mt-2 flex items-start gap-2 rounded-xl bg-well px-3 py-2">
-                <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-ink-soft" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 12h6M7 9l-3 3 3 3M20 12h-6M17 9l3 3-3 3" />
-                </svg>
-                <span className="flex-1 text-[13px] text-ink-soft">
-                  Tip: přejeď po úkolu <strong className="font-semibold">doprava</strong> = hotovo,{' '}
-                  <strong className="font-semibold">doleva</strong> = odložit na zítra.
+              <p className="mt-2 flex items-start gap-2 px-1 text-[12px] text-ink-faint">
+                <span className="min-w-0 flex-1">
+                  Přejeď po úkolu doprava = hotovo, doleva = odložit na zítra.
                 </span>
-                <button
-                  aria-label="Skrýt tip"
-                  onClick={dismissTip}
-                  className="-m-2 shrink-0 p-2 text-ink-faint transition-transform duration-150 active:scale-90"
-                >
+                <button aria-label="Skrýt tip" onClick={dismissTip} className="-m-2 shrink-0 p-2 transition-transform duration-150 active:scale-90">
                   <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                     <path d="M6 6l12 12M18 6L6 18" />
                   </svg>
                 </button>
-              </div>
+              </p>
             )}
           </>
-        ) : batchClient ? (
-          nacteno &&
-          visOverdue.length === 0 &&
-          pinned.length === 0 && (
-            <p className="rounded-2xl bg-card px-4 py-4 text-center text-sm text-ink-soft shadow-card">
-              U tohohle klienta dnes nic nezbývá.
-            </p>
-          )
         ) : (
           // `nacteno` schválně až tady, ne kolem celé obrazovky: hlavička
           // a dok musí naskočit hned, ať appka nezačíná prázdnou plochou.
-          nacteno &&
-          overdue.length === 0 &&
-          pinned.length === 0 && (
-            <div className="relative overflow-hidden rounded-2xl bg-card px-5 py-8 text-center shadow-card">
-              {/* Ripple (magicui): klidná hladina za sluníčkem */}
-              <Ripple className="-translate-y-6" />
-              <svg viewBox="0 0 48 48" className="breathe relative mx-auto h-12 w-12 text-accent/70" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="24" cy="24" r="15" />
-                <path d="M24 4v5M24 39v5M4 24h5M39 24h5M9.9 9.9l3.5 3.5M34.6 34.6l3.5 3.5M9.9 38.1l3.5-3.5M34.6 13.4l3.5-3.5" />
-              </svg>
-              <BlurText text="Čistý stůl" className="display relative mt-3 text-lg font-medium" />
-              <p className="mt-1 text-sm text-ink-soft">Na dnešek nic neplánuješ.</p>
+          nacteno && (
+            <>
+              <div className="relative overflow-hidden rounded-2xl bg-card px-5 py-8 text-center shadow-card">
+                {/* Ripple (magicui): klidná hladina za sluníčkem */}
+                <Ripple className="-translate-y-6" />
+                <svg viewBox="0 0 48 48" className="breathe relative mx-auto h-12 w-12 text-accent/70" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="24" cy="24" r="15" />
+                  <path d="M24 4v5M24 39v5M4 24h5M39 24h5M9.9 9.9l3.5 3.5M34.6 34.6l3.5 3.5M9.9 38.1l3.5-3.5M34.6 13.4l3.5-3.5" />
+                </svg>
+                <BlurText text={done.length > 0 ? 'Všechno hotovo' : 'Čistý stůl'} className="display relative mt-3 text-lg font-medium" />
+                <p className="mt-1 text-sm text-ink-soft">
+                  {done.length > 0 ? `${done.length} ${plural(done.length, 'úkol', 'úkoly', 'úkolů')} dnes odškrtnuto.` : 'Na dnešek nic neplánuješ.'}
+                </p>
 
-              {/* Učící prázdný stav: příklady se ťuknutím vloží do pole,
-                  takže se syntaxe rychlého zadávání naučí sama od sebe. */}
-              {open.length === 0 && done.length === 0 && (
-                <>
-                  <p className="mt-4 text-[13px] font-medium text-ink-soft">Zkus napsat třeba:</p>
-                  <div className="mt-2 flex flex-col gap-1.5">
-                    {EXAMPLES.map((ex) => (
-                      <button
-                        key={ex}
-                        onClick={() =>
-                          window.dispatchEvent(new CustomEvent('todo:prefill', { detail: ex }))
-                        }
-                        className="rounded-full bg-well px-3 py-2 text-[13px] text-ink transition-transform duration-150 active:scale-95"
-                      >
-                        „{ex}"
-                      </button>
-                    ))}
-                  </div>
-                </>
+                {/* Učící prázdný stav: příklady se ťuknutím vloží do pole,
+                    takže se syntaxe rychlého zadávání naučí sama od sebe. */}
+                {open.length === 0 && done.length === 0 && (
+                  <>
+                    <p className="mt-4 text-[13px] font-medium text-ink-soft">Zkus napsat třeba:</p>
+                    <div className="mt-2 flex flex-col gap-1.5">
+                      {EXAMPLES.map((ex) => (
+                        <button
+                          key={ex}
+                          onClick={() => window.dispatchEvent(new CustomEvent('todo:prefill', { detail: ex }))}
+                          className="rounded-full bg-well px-3 py-2 text-[13px] text-ink transition-transform duration-150 active:scale-95"
+                        >
+                          „{ex}"
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <button
+                  onClick={() => setHelpOpen(true)}
+                  className="mt-4 text-[13px] font-medium text-accent-deep transition-transform duration-150 active:scale-95"
+                >
+                  Jak to funguje
+                </button>
+              </div>
+
+              {done.length > 0 && (
+                <div className="mt-3 overflow-hidden rounded-2xl bg-card shadow-card">
+                  <button
+                    onClick={prepniHotovo}
+                    aria-expanded={hotovoOpen}
+                    className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition-colors duration-150 active:bg-well/60"
+                  >
+                    <span className="text-[13px] font-medium text-ink-soft first-letter:uppercase">hotovo · {done.length}</span>
+                    <svg
+                      viewBox="0 0 24 24"
+                      className={`h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 ${hotovoOpen ? 'rotate-90' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                  </button>
+                  <DisclosureContent open={hotovoOpen}>
+                    <ul className="divide-y divide-line border-t border-line">{done.map((t) => row(t))}</ul>
+                  </DisclosureContent>
+                </div>
               )}
-
-              <button
-                onClick={() => setHelpOpen(true)}
-                className="mt-4 text-[13px] font-medium text-accent-deep transition-transform duration-150 active:scale-95"
-              >
-                Jak to funguje
-              </button>
-            </div>
+            </>
           )
         )}
       </section>
 
-      {/* Úkoly bez termínu (inbox) — vidět přímo na Dnes, ať se nic neztrácí. */}
-      {(() => {
-        const inbox = sortTasks(open.filter((t) => !effectiveDate(t))).filter(byBatch)
-        if (inbox.length === 0) return null
-        // Sbalené: není to dnešní práce. Vidět je, že tam něco leží
-        // a kolik — a je to na jedno klepnutí.
-        return (
-          <SbalenaSekce id="inbox" popisek="bez termínu" pocet={inbox.length} className="rise" style={stagger(7)}>
-            <DlouhySeznam polozky={inbox} radek={(t) => row(t)} />
-          </SbalenaSekce>
-        )
-      })()}
-
-      {done.length > 0 && (
-        <SbalenaSekce id="hotovo" popisek="hotovo" pocet={done.length} className="rise" style={stagger(8)}>
-          <DlouhySeznam polozky={done} radek={(t) => row(t)} />
-        </SbalenaSekce>
+      {navrhOpen && dayPlan && (
+        <NavrhSheet planId={dayPlan.id} navrhy={navrhy} clients={clientMap} onClose={() => setNavrhOpen(false)} />
       )}
-
-      {/* Večerní uzávěrka: od 16:00, dokud zbývá nedokončené a den není
-          zavřený. Stojí až pod seznamem — je to akce na konec dne, ne to
-          první, co má člověk po otevření appky řešit. Stejně jako týdenní
-          ohlédnutí sedí na konci Plánu. */}
-      {isEvening && !dayClosed && unfinished.length > 0 && (
-        <button
-          onClick={() => setShutdownOpen(true)}
-          className="rise flex w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-card transition-[background-color,transform] duration-150 active:scale-[0.99] active:bg-well/60"
-          style={stagger(9)}
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-wash text-accent">
-            <svg viewBox="0 0 24 24" className="breathe h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z" />
-            </svg>
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[15px] font-semibold">Uzávěrka dne</span>
-            <span className="text-[13px] text-ink-soft">
-              {unfinished.length}{' '}
-              {plural(unfinished.length, 'nedokončený úkol', 'nedokončené úkoly', 'nedokončených úkolů')}{' '}
-              — zavři den s čistou hlavou
-            </span>
-          </span>
-          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint/70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </button>
+      {kalendarOpen && (
+        <KalendarSheet
+          events={events}
+          tasks={[...open, ...done]}
+          gaps={gaps}
+          nowMin={nowMin}
+          restStart={restStart}
+          today={today}
+          freeMin={freeMin !== null && restStart < WORK_END ? freeMin : null}
+          onOpenTask={onOpenTask}
+          onClose={() => setKalendarOpen(false)}
+        />
       )}
-      {isEvening && dayClosed && (
-        <p className="rise px-1 text-sm font-medium text-moss">✓ Den uzavřen — večer je tvůj.</p>
-      )}
-
-      <SignalsBlock
-        signals={computeSignals(clients, projects, [...open, ...done], today)}
-        onOpenClient={onOpenClient}
-        onOpenTask={onOpenTask}
-        onOpenInbox={onOpenInbox}
-      />
-
+      {signalyOpen && <SignalySheet radky={signaly} onClose={() => setSignalyOpen(false)} />}
+      {triageOpen && <TriageSheet ukoly={visOverdue} clients={clientMap} onClose={() => setTriageOpen(false)} />}
       {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
       {shutdownOpen && (
-        <ShutdownSheet
-          tasks={unfinished}
-          onOpenTask={onOpenTask}
-          onCloseDay={closeDay}
-          onClose={() => setShutdownOpen(false)}
-        />
+        <ShutdownSheet tasks={unfinished} onOpenTask={onOpenTask} onCloseDay={closeDay} onClose={() => setShutdownOpen(false)} />
       )}
     </div>
   )

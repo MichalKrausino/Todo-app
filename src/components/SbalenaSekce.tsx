@@ -29,6 +29,19 @@ const uloz = (ids: Set<string>) => {
   }
 }
 
+// Rozbalení s pamětí i mimo SbalenaSekce (řádka „hotovo" uvnitř karty na Dnes).
+export function useRozbaleno(id: string): [boolean, () => void] {
+  const [otevreno, setOtevreno] = useState(() => nacti().has(id))
+  const prepni = () => {
+    const ids = nacti()
+    if (otevreno) ids.delete(id)
+    else ids.add(id)
+    uloz(ids)
+    setOtevreno(!otevreno)
+  }
+  return [otevreno, prepni]
+}
+
 export function SbalenaSekce({
   id,
   popisek,

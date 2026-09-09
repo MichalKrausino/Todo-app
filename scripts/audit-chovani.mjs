@@ -295,7 +295,7 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   // Hlavička ale musí říkat pravdu — počet je celkový, ne kolik se kreslí.
   const hlavicka = await page.evaluate(() => {
     const t = document.body.innerText || ''
-    const m = t.match(/termínu[^0-9]*(\d+)/) || t.match(/dnes[^0-9]*(\d+)/i)
+    const m = t.match(/po termínu[^0-9]*(\d+)/i) || t.match(/dnes[^0-9]*(\d+)/i)
     return m ? m[1] : 'nenalezeno: ' + t.slice(0, 120).replace(/\n/g, ' | ')
   })
   T_(Number(hlavicka) > 100, 'počet v hlavičce sekce je celkový, ne jen vykreslený (' + hlavicka + ')')
@@ -313,7 +313,7 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
 
   // --- triáž propadlých: odpověď musí úkol opravdu posunout a jít vzít zpět
   await page.getByRole('button',{name:'Dnes',exact:true}).click(); await page.waitForTimeout(900)
-  const poTerminu = async () => Number((await page.evaluate(() => (document.body.innerText.match(/termínu[^0-9]*(\d+)/) || [])[1])) || 0)
+  const poTerminu = async () => Number((await page.evaluate(() => (document.body.innerText.match(/po termínu[^0-9]*(\d+)/i) || [])[1])) || 0)
   const pred = await poTerminu()
   T_(pred > 100, 'sekce po termínu je plná (' + pred + ')')
 
