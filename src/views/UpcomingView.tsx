@@ -16,6 +16,7 @@ import { minutesToLabel } from '../lib/freeSlot'
 import { TaskRow } from '../components/TaskRow'
 import { DlouhySeznam } from '../components/DlouhySeznam'
 import { plural } from '../lib/labels'
+import { Titulek } from '../components/Titulek'
 
 
 const effectiveDate = (t: Task): string | undefined => {
@@ -30,13 +31,15 @@ const STRIP_DAYS = 14
 // Jak daleko se hledají naplánované úkoly a schůzky.
 const HORIZON_DAYS = 30
 
-// Sytost proužku pod dnem = kolik toho ten den je. Stejná semaforová
-// škála jako v kalendáříku u zadávání úkolu.
+// Tečka pod dnem = kolik toho ten den je. Stejná semaforová škála jako
+// v kalendáříku u zadávání úkolu. Dřív to byl proužek na dlaždici —
+// šedé, bílé a podtržené dlaždice byly tři způsoby, jak říct „něco tam
+// je"; teď dny stojí na papíře a mluví jen číslo a tečka.
 function loadClass(count: number): string {
   if (count <= 0) return 'bg-transparent'
-  if (count <= 2) return 'bg-accent/45'
-  if (count <= 4) return 'bg-amber/60'
-  return 'bg-danger/60'
+  if (count <= 2) return 'bg-accent'
+  if (count <= 4) return 'bg-amber'
+  return 'bg-danger'
 }
 
 export function UpcomingView({
@@ -135,7 +138,7 @@ export function UpcomingView({
   return (
     <div className="space-y-6">
       <header className="rise">
-        <h1 className="display text-[2.1rem] font-semibold leading-tight">Plán</h1>
+        <Titulek text="Plán" />
         <p className="text-sm text-ink-soft">Co je přede mnou</p>
       </header>
 
@@ -148,13 +151,13 @@ export function UpcomingView({
         {onShowToday && (
           <button
             onClick={onShowToday}
-            className="flex w-12 shrink-0 flex-col items-center gap-1 rounded-xl bg-well px-1 py-1.5 transition-transform duration-150 active:scale-95"
+            className="flex w-12 shrink-0 flex-col items-center gap-1 rounded-xl px-1 py-1.5 transition-[background-color,transform] duration-150 active:scale-95 active:bg-well"
           >
-            <span className="text-[10px] font-medium text-ink-faint">dnes</span>
+            <span className="text-[10px] font-medium text-accent-deep">dnes</span>
             <span className="text-[15px] font-semibold text-accent-deep tabular-nums">
               {fromISODate(today).getDate()}
             </span>
-            <span className={`h-1 w-6 rounded-full ${loadClass(todayCount)}`} />
+            <span className={`h-1.5 w-1.5 rounded-full ${loadClass(todayCount)}`} />
           </button>
         )}
         {strip.map((d) => {
@@ -169,8 +172,8 @@ export function UpcomingView({
               data-load={count}
               disabled={!has}
               onClick={() => jumpTo(d)}
-              className={`flex w-12 shrink-0 flex-col items-center gap-1 rounded-xl px-1 py-1.5 transition-transform duration-150 ${
-                has ? 'bg-card shadow-card active:scale-95' : 'bg-well/50'
+              className={`flex w-12 shrink-0 flex-col items-center gap-1 rounded-xl px-1 py-1.5 transition-[background-color,transform] duration-150 ${
+                has ? 'active:scale-95 active:bg-well' : ''
               }`}
             >
               <span className={`text-[10px] font-medium ${weekend ? 'text-ink-faint' : 'text-ink-soft'}`}>
@@ -181,7 +184,7 @@ export function UpcomingView({
               >
                 {date.getDate()}
               </span>
-              <span className={`h-1 w-6 rounded-full ${loadClass(count)}`} />
+              <span className={`h-1.5 w-1.5 rounded-full ${loadClass(count)}`} />
             </button>
           )
         })}

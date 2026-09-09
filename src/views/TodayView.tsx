@@ -25,7 +25,9 @@ import { TriageSheet } from '../components/TriageSheet'
 import { SignalsBlock } from '../components/SignalsBlock'
 import { TaskRow } from '../components/TaskRow'
 import { DlouhySeznam } from '../components/DlouhySeznam'
+import { SbalenaSekce } from '../components/SbalenaSekce'
 import { plural } from '../lib/labels'
+import { Titulek } from '../components/Titulek'
 
 // Nejbližší relevantní den úkolu — dřívější z „naplánováno“ a „termín“.
 const effectiveDate = (t: Task): string | undefined => {
@@ -73,6 +75,9 @@ const MIN_GAP_MIN = 30
 
 // Pevně rozmístěné tečky oslavy splněného dne (žádná runtime náhoda —
 // deterministické, jen se přehrají při přepnutí allDone).
+// obvod kroužku postupu (r = 7,5 ve viewBoxu 20)
+const RING = 2 * Math.PI * 7.5
+
 const CONFETTI = [
   { left: '12%', cx: '-14px', cy: '-30px', color: 'var(--color-accent)' },
   { left: '28%', cx: '10px', cy: '-38px', color: 'var(--color-moss)' },
@@ -241,56 +246,64 @@ export function TodayView({
   return (
     <div className="space-y-6">
       <header className="rise">
-        <h1 className="display text-[2.1rem] font-semibold leading-tight">Dnes</h1>
-        <p className="text-sm text-ink-soft first-letter:uppercase">{formatFullDate(new Date())}</p>
-        {planned > 0 && (
-          <div className="relative mt-3 flex items-center gap-2.5">
-            {/* tichá oslava: pár teček vyletí, když je den splněný */}
-            {allDone &&
-              CONFETTI.map((c, i) => (
-                <span
-                  key={i}
-                  className="confetti"
-                  style={{ left: c.left, background: c.color, '--cx': c.cx, '--cy': c.cy, '--stagger': i } as React.CSSProperties}
-                />
-              ))}
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-well">
-              <div
-                className={`relative h-full overflow-hidden rounded-full transition-[width,background-color] duration-700 ease-glide ${
-                  allDone ? 'bg-moss' : 'progress-fill'
-                }`}
-                style={{ width: `${Math.round(progress * 100)}%` }}
+        <Titulek text="Dnes" />
+        {/* Jedna tichá řádka pod titulkem místo tří pater metadat. Postup
+            dne nese kroužek (dřív pruh přes celou šířku), datum, počet a
+            odhad práce stojí za ním jako text. Přetížení dne má vlastní
+            řádek — je to jediné, co tu smí mít barvu. */}
+        <div className="relative mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-ink-soft">
+          {planned > 0 && (
+            <>
+              {/* tichá oslava: pár teček vyletí, když je den splněný */}
+              {allDone &&
+                CONFETTI.map((c, i) => (
+                  <span
+                    key={i}
+                    className="confetti"
+                    style={{ left: c.left, background: c.color, '--cx': c.cx, '--cy': c.cy, '--stagger': i } as React.CSSProperties}
+                  />
+                ))}
+              <svg
+                key={done.length}
+                viewBox="0 0 20 20"
+                className="pop-soft h-[18px] w-[18px] shrink-0 -rotate-90"
+                aria-hidden="true"
               >
-                {allDone && <span className="shimmer" />}
-                {!allDone && done.length > 0 && <span key={done.length} className="bar-pulse" />}
-              </div>
-            </div>
-            <span className="text-xs font-medium text-ink-soft">
-              <span key={done.length} className="roll-in">
-                {done.length}
-              </span>{' '}
-              z {planned}
+                <circle cx="10" cy="10" r="7.5" fill="none" stroke="var(--color-line)" strokeWidth="3" />
+                <circle
+                  cx="10"
+                  cy="10"
+                  r="7.5"
+                  fill="none"
+                  stroke={allDone ? 'var(--color-moss)' : 'var(--color-accent)'}
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeDasharray={RING}
+                  strokeDashoffset={RING * (1 - progress)}
+                  style={{ transition: 'stroke-dashoffset 0.7s var(--ease-glide), stroke 0.4s' }}
+                />
+              </svg>
+            </>
+          )}
+          <span className="inline-block first-letter:uppercase">{formatFullDate(new Date())}</span>
+          {planned > 0 && (
+            <span className="font-medium">
+              · <span key={done.length} className="roll-in">{done.length}</span> z {planned}
             </span>
-          </div>
-        )}
-        {/* Jeden tichý řádek místo tří. Dřív tu byl odhad práce, pod ním
-            oranžová bublina „Den je přeplněný" a nad tím pruh postupu —
-            tři pásy metadat, než člověk uviděl první úkol. Přeplnění teď
-            nese ten samý řádek barvou a dovětkem; tečka u něj drží
-            semafor, takže se informace neztratila, jen přestala křičet. */}
-        {unfinished.length > 0 && (
-          <p
-            className={`mt-2 flex items-center gap-1.5 text-xs ${
-              overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'
-            }`}
-          >
-            <span
-              className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${overloaded ? 'bg-note-ink' : 'bg-moss'}`}
-            />
-            práce ~{minutesToLabel(workMin)}
-            {/* stejné slovo jako v hlavičce kalendáře — jde o totéž číslo */}
+          )}
+          {unfinished.length > 0 && !overloaded && (
+            <span>
+              · práce ~{minutesToLabel(workMin)}
+              {/* stejné slovo jako v hlavičce kalendáře — jde o totéž číslo */}
+              {freeMin !== null && <> · zbývá ~{minutesToLabel(freeMin)}</>}
+            </span>
+          )}
+        </div>
+        {unfinished.length > 0 && overloaded && (
+          <p className="mt-1 flex items-center gap-1.5 text-[13px] font-medium text-note-ink">
+            <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-note-ink" />
+            na den je toho moc · práce ~{minutesToLabel(workMin)}
             {freeMin !== null && <> · zbývá ~{minutesToLabel(freeMin)}</>}
-            {overloaded && <> · na den je toho moc</>}
           </p>
         )}
       </header>
@@ -599,7 +612,8 @@ export function TodayView({
               </svg>
             </span>
           </button>
-          <DlouhySeznam polozky={visOverdue} radek={(t) => row(t)} />
+          {/* Pět řádků řekne, o co jde; zbytek patří do triáže, ne do zdi. */}
+          <DlouhySeznam polozky={visOverdue} radek={(t) => row(t)} uvod={5} />
         </section>
       )}
       {triageOpen && (
@@ -612,18 +626,18 @@ export function TodayView({
           <>
             <DlouhySeznam polozky={visTodays} radek={(t) => row(t, false)} />
             {gestureTip && (
-              <div className="rise mt-2 flex items-start gap-2 rounded-xl bg-accent-wash px-3 py-2">
-                <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-accent-deep" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <div className="rise mt-2 flex items-start gap-2 rounded-xl bg-well px-3 py-2">
+                <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-ink-soft" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M4 12h6M7 9l-3 3 3 3M20 12h-6M17 9l3 3-3 3" />
                 </svg>
-                <span className="flex-1 text-[13px] text-accent-deep">
+                <span className="flex-1 text-[13px] text-ink-soft">
                   Tip: přejeď po úkolu <strong className="font-semibold">doprava</strong> = hotovo,{' '}
                   <strong className="font-semibold">doleva</strong> = odložit na zítra.
                 </span>
                 <button
                   aria-label="Skrýt tip"
                   onClick={dismissTip}
-                  className="-m-2 shrink-0 p-2 text-accent-deep/70 transition-transform duration-150 active:scale-90"
+                  className="-m-2 shrink-0 p-2 text-ink-faint transition-transform duration-150 active:scale-90"
                 >
                   <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                     <path d="M6 6l12 12M18 6L6 18" />
@@ -690,19 +704,19 @@ export function TodayView({
       {(() => {
         const inbox = sortTasks(open.filter((t) => !effectiveDate(t))).filter(byBatch)
         if (inbox.length === 0) return null
+        // Sbalené: není to dnešní práce. Vidět je, že tam něco leží
+        // a kolik — a je to na jedno klepnutí.
         return (
-          <section className="rise" style={stagger(7)}>
-            <h2 className="section-label mb-2">bez termínu · {inbox.length}</h2>
+          <SbalenaSekce id="inbox" popisek="bez termínu" pocet={inbox.length} className="rise" style={stagger(7)}>
             <DlouhySeznam polozky={inbox} radek={(t) => row(t)} />
-          </section>
+          </SbalenaSekce>
         )
       })()}
 
       {done.length > 0 && (
-        <section className="rise" style={stagger(8)}>
-          <h2 className="section-label mb-2">hotovo · {done.length}</h2>
+        <SbalenaSekce id="hotovo" popisek="hotovo" pocet={done.length} className="rise" style={stagger(8)}>
           <DlouhySeznam polozky={done} radek={(t) => row(t)} />
-        </section>
+        </SbalenaSekce>
       )}
 
       {/* Večerní uzávěrka: od 16:00, dokud zbývá nedokončené a den není

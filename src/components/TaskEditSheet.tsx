@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Priority, Project, Subtask, Task, TodoistComment } from '../db/types'
 import {
@@ -12,6 +12,7 @@ import {
   updateTask,
 } from '../db/repo'
 import { Sheet } from './Sheet'
+import { najdiOdkazy } from '../lib/links'
 import { nabidniVraceni, ukazToast } from '../lib/toast'
 import { TaskSharing } from './TaskSharing'
 import { deleteBlockForTask } from '../sync/calendar'
@@ -78,6 +79,8 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   const [notes, setNotes] = useState(task.notes ?? '')
   const [clientId, setClientId] = useState(task.clientId ?? '')
   const [hiddenFrom, setHiddenFrom] = useState<string[]>(task.hiddenFrom ?? [])
+  // Druhé datum se rozbalí jen tomu, kdo ho má nebo si o něj řekne.
+  const [planujuJinyDen, setPlanujuJinyDen] = useState(Boolean(task.scheduledFor))
   const [ptamSeNaTodoist, setPtamSeNaTodoist] = useState(false)
   const [projectId, setProjectId] = useState(task.projectId ?? '')
   const [priority, setPriority] = useState<Priority>(task.priority)
@@ -146,6 +149,25 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
       [clientId],
     ) ?? []
 
+  // ⌘↩ uloží — na Macu se to čeká od každého formuláře. Handler visí
+  // na okně (uvnitř panelu není jeden společný prvek, který by ho nesl),
+  // a close() z renderu si půjčuje přes ref.
+  const closeRef = useRef<() => void>(() => {})
+  const saveRef = useRef<() => void>(() => {})
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return
+      e.preventDefault()
+      saveRef.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // Odkazy z názvu i poznámky — Canva, Drive, brief. Bez tohohle by je
+  // člověk z appky opisoval.
+  const odkazy = najdiOdkazy(title, notes)
+
   const save = async (close: () => void) => {
     if (!title.trim()) return
     const hasDate = Boolean(dueDate || scheduledFor)
@@ -195,7 +217,10 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
 
   return (
     <Sheet onClose={onClose} className="space-y-3">
-      {(close) => (
+      {(close) => {
+        closeRef.current = close
+        saveRef.current = () => void save(closeRef.current)
+        return (
         <>
         <header className="flex items-start justify-between gap-3">
           <h2 className="text-lg font-bold">Upravit úkol</h2>
@@ -282,6 +307,14 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           </div>
         </div>
 
+        {/* Jedno datum, ne dvě. Dvě data vedle sebe byla nejčastější zádrhel
+            celé appky — potřebovala odstavec, který vysvětluje, čím se liší.
+            Když pole potřebuje odstavec, netrefil ho model, ne uživatel.
+            Primární je Termín: to píše parser i rychlé zadávání („ve čtvrtek
+            report"), to je pro člověka „ten den". Naplánováno je vrstva
+            navrch (ranní návrh, uzávěrka) a ukáže se, jen když je vyplněné
+            nebo si o něj člověk řekne. Data se nemění, jen se přestalo
+            ptát na obojí naráz. */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={label} htmlFor="pole-termin">Termín</label>
@@ -295,24 +328,8 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
             <DenChipy value={dueDate} onChange={setDueDate} />
           </div>
           <div>
-            <label className={label} htmlFor="pole-naplanovano">Naplánováno</label>
-            <input
-              id="pole-naplanovano"
-              type="date"
-              className={field}
-              value={scheduledFor}
-              onChange={(e) => setScheduledFor(e.target.value)}
-            />
-            <DenChipy value={scheduledFor} onChange={setScheduledFor} />
-          </div>
-          <div>
-            {/* Popisek nad polem jako u všech ostatních. Dřív stál vedle
-                něj a pole bylo užší než datum nad ním, takže sloupec
-                vypadal rozsypaně. Čas patří k termínu, proto je v jeho
-                sloupci hned pod ním. */}
-            <label className={label} htmlFor="cas-terminu">
-              Čas termínu
-            </label>
+            {/* Čas patří k termínu, proto stojí vedle něj. */}
+            <label className={label} htmlFor="cas-terminu">Čas</label>
             <input
               id="cas-terminu"
               type="time"
@@ -326,13 +343,33 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
             />
           </div>
         </div>
-        {/* Dvě data vedle sebe jsou nejčastější zádrhel celé appky —
-            bez věty pod nimi si nikdo nedomyslí, čím se liší. */}
-        <p className="-mt-1 text-[12px] leading-relaxed text-ink-faint">
-          <strong className="font-medium text-ink-soft">Termín</strong> je dokdy to musí být
-          hotové. <strong className="font-medium text-ink-soft">Naplánováno</strong> je den, kdy
-          se tomu chceš věnovat — ten se ukáže na Dnes.
-        </p>
+
+        {planujuJinyDen ? (
+          <div>
+            <label className={label} htmlFor="pole-naplanovano">Naplánováno na jiný den</label>
+            <input
+              id="pole-naplanovano"
+              type="date"
+              className={field}
+              value={scheduledFor}
+              onChange={(e) => setScheduledFor(e.target.value)}
+            />
+            <DenChipy value={scheduledFor} onChange={setScheduledFor} />
+            {/* Vysvětlení jen tady, kde je o co jde — ne pod každým úkolem. */}
+            <p className="mt-1 text-[12px] leading-relaxed text-ink-faint">
+              Den, kdy se tomu chceš věnovat — ten se ukáže na Dnes. Termín zůstává
+              tím, dokdy to musí být hotové.
+            </p>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPlanujuJinyDen(true)}
+            className="-my-1 py-2 text-[13px] font-medium text-accent-deep transition-transform duration-150 active:scale-95"
+          >
+            + Naplánovat na jiný den
+          </button>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -460,6 +497,25 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
         <div>
           <label className={label} htmlFor="pole-poznamky">Poznámky</label>
           <textarea id="pole-poznamky" className={field} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          {odkazy.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2" data-odkazy>
+              {odkazy.map((o) => (
+                <a
+                  key={o.url}
+                  href={o.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full bg-well px-3 text-[13px] font-medium text-accent-deep transition-transform duration-150 active:scale-95"
+                >
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10.5 13.5a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2" />
+                    <path d="M13.5 10.5a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2" />
+                  </svg>
+                  {o.popisek}
+                </a>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Ukládá se hned při přepnutí, ne až tlačítkem: „kdo to vidí" je
@@ -573,7 +629,8 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           </div>
         </div>
         </>
-      )}
+        )
+      }}
     </Sheet>
   )
 }

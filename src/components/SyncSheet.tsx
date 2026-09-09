@@ -581,7 +581,7 @@ export function SyncButton({ onOpen }: { onOpen: () => void }) {
     <button
       aria-label="Synchronizace"
       onClick={onOpen}
-      className={`flex h-9 w-9 items-center justify-center rounded-full bg-card/80 shadow-card backdrop-blur ${PHASE_COLORS[status.phase]} ${
+      className={`flex h-9 w-9 items-center justify-center rounded-full transition-[background-color,transform] duration-150 active:scale-90 active:bg-well ${PHASE_COLORS[status.phase]} ${
         status.phase === 'syncing' ? 'animate-pulse' : ''
       }`}
     >

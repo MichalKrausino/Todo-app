@@ -76,15 +76,24 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
     T_(await page.locator('.sheet-panel').count()===0, jmeno+' se zavřelo escapem')
   }
 
+  // Odškrtnutý úkol spadl do „hotovo" — a ta sekce stojí sbalená, protože
+  // to není dnešní práce. Rozbalení se tu ověří rovnou: řádka s počtem
+  // musí jít otevřít a úkol v ní být.
+  const hotovo = page.getByRole('button', { name: /hotovo · \d+/ })
+  T_(await hotovo.count() > 0, 'sekce hotovo stojí sbalená jako řádka s počtem')
+  if (await hotovo.count()) { await hotovo.click(); await page.waitForTimeout(500) }
+  T_(await page.getByText('první úkol').count() > 0, 'rozbalená sekce hotovo ukáže odškrtnutý úkol')
+
   // detail úkolu: uložení změny (úkol s termínem „dnes“ je na Dnes)
   await page.getByText('první úkol').first().click(); await page.waitForTimeout(700)
   await page.locator('#pole-ukol').fill('druhý úkol přejmenovaný')
   await page.getByRole('button',{name:'Uložit'}).click(); await page.waitForTimeout(700)
   T_(await page.getByText('přejmenovaný').count()>0,'přejmenování v detailu se uložilo')
 
-  // přežije reload (IndexedDB)
+  // přežije reload (IndexedDB) — a s ním i rozbalení sekce hotovo, protože
+  // přejmenovaný úkol je právě v ní; kdyby se sbalila zpátky, text by chyběl.
   await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
-  T_(await page.getByText('přejmenovaný').count()>0,'data přežila znovunačtení')
+  T_(await page.getByText('přejmenovaný').count()>0,'data přežila znovunačtení (a rozbalení sekce si appka pamatuje)')
 
   T_(konzole.length===0,'nic nepadlo do konzole'+(konzole.length?' — '+konzole.slice(0,3).join(' | '):''))
   await ctx.close()
@@ -323,6 +332,58 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await page.getByRole('button',{name:'Zpět'}).click(); await page.waitForTimeout(500)
   await page.keyboard.press('Escape'); await page.waitForTimeout(700)
   T_(await poTerminu() === po, 'zpět v triáži vrátí i zahozený úkol')
+  await ctx.close()
+}
+
+// --- 9. odkazy v úkolu a klávesnice na Macu ---
+// Na MacBooku se appka ovládá z klávesnice: n → zadávání, ⌘K → hledání,
+// 1–3 → záložky, ⌘↩ → uložit detail. Zkratky nesmí sebrat písmena
+// z psaní ani zabrat s otevřeným panelem. A odkaz v poznámce (Canva,
+// Drive) musí jít otevřít z řádku i z detailu — bez opisování.
+{
+  const ctx = await b.newContext({viewport:{width:1100,height:800}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  const aktivni = () => page.evaluate(() => {
+    const el = document.activeElement
+    return el ? (el.tagName + '|' + (el.getAttribute('aria-label') || el.getAttribute('placeholder') || '')) : ''
+  })
+  await page.keyboard.press('n'); await page.waitForTimeout(400)
+  T_((await aktivni()).startsWith('INPUT|'), 'n otevře zadávání a zaostří pole (' + await aktivni() + ')')
+  // písmena zkratek se při psaní neztrácejí
+  await page.keyboard.type('nový banner // https://www.canva.com/design/abc/edit, pak 1 a 2')
+  const napsano = await page.locator('input[placeholder]').first().inputValue()
+  T_(napsano.startsWith('nový banner') && napsano.endsWith('1 a 2'), 'při psaní se n, 1 a 2 berou jako písmena')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(500)
+  await page.keyboard.press('Escape'); await page.waitForTimeout(400)
+  T_(await page.getByRole('button',{name:'Nový úkol'}).count() === 1, 'Esc složí zadávání')
+
+  const naRadku = page.locator('main a[aria-label^="Otevřít odkaz"]').first()
+  T_(await naRadku.count() === 1 && (await naRadku.getAttribute('href')) === 'https://www.canva.com/design/abc/edit', 'odkaz z poznámky je na řádku úkolu jako ťuknutí (čárka za ním nepatří do adresy)')
+  T_((await naRadku.getAttribute('aria-label')) === 'Otevřít odkaz canva.com', 'řádek odkaz popisuje doménou')
+
+  await page.getByText('nový banner').first().click(); await page.waitForTimeout(700)
+  const vDetailu = page.locator('[data-odkazy] a')
+  T_(await vDetailu.count() === 1 && (await vDetailu.textContent()).trim() === 'canva.com', 'detail ukazuje odkaz jako čip s doménou')
+  // panel je otevřený: „2" nesmí přepnout záložku
+  await page.locator('#pole-ukol').click()
+  await page.keyboard.press('End')
+  await page.keyboard.type(' 2'); await page.waitForTimeout(150)
+  T_(await page.locator('h1').first().textContent() === 'Dnes', 's otevřeným panelem zkratky mlčí')
+  await page.keyboard.press('Control+Enter'); await page.waitForTimeout(800)
+  T_(await page.locator('.sheet-panel').count() === 0 && await page.getByText('nový banner 2').count() === 1, '⌘↩ v detailu uloží a zavře')
+
+  await page.keyboard.press('2'); await page.waitForTimeout(500)
+  T_(await page.locator('h1').first().textContent() === 'Plán', '2 přepne na Plán')
+  await page.keyboard.press('3'); await page.waitForTimeout(500)
+  T_(await page.locator('h1').first().textContent() === 'Klienti', '3 přepne na Klienty')
+  await page.keyboard.press('1'); await page.waitForTimeout(500)
+  T_(await page.locator('h1').first().textContent() === 'Dnes', '1 vrátí na Dnes')
+
+  await page.keyboard.press('Control+k'); await page.waitForTimeout(700)
+  T_((await aktivni()).includes('Hledat'), '⌘K otevře hledání a zaostří pole (' + await aktivni() + ')')
+  await page.keyboard.press('Escape'); await page.waitForTimeout(600)
+  T_(await page.locator('.sheet-panel').count() === 0, 'Esc hledání zavře')
   await ctx.close()
 }
 

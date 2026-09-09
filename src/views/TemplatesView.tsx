@@ -20,6 +20,7 @@ import { parseTemplateItem } from '../lib/quickAdd'
 import { RULE_EPOCH, humanizeRule, occurrencesBetween } from '../lib/rrule'
 import { TEMPLATE_GALLERY } from '../lib/templateGallery'
 import { RecurrencePicker, buildRule } from '../components/RecurrencePicker'
+import { Titulek } from '../components/Titulek'
 
 const field = 'w-full rounded-lg border border-line bg-card px-3 py-2 text-[16px] outline-none focus:border-accent/60'
 const chip = 'rounded-full px-2.5 py-0.5 font-medium'
@@ -87,7 +88,7 @@ export function TemplatesView({ onBack }: { onBack: () => void }) {
       </button>
 
       <header className="rise">
-        <h1 className="display text-[2.1rem] font-semibold leading-tight">Šablony</h1>
+        <Titulek text="Šablony" />
         <p className="text-sm text-ink-soft">
           Balíčky pravidelných úkolů — nasadíš je klientům a úkoly se generují samy
         </p>

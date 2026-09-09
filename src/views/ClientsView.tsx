@@ -42,6 +42,7 @@ import { parseQuickAdd } from '../lib/quickAdd'
 import { neglectedDays } from '../lib/signals'
 import { TaskRow } from '../components/TaskRow'
 import { TemplatesView } from './TemplatesView'
+import { Titulek } from '../components/Titulek'
 
 export function ClientsView({
   onOpenTask,
@@ -99,10 +100,21 @@ function ClientList({
   // dřív nesl jen slovo „Klient" — u seznamu samých klientů to byl sloupec
   // téhož slova. Kdy se k němu zase dostanu, je informace, kvůli které se
   // na seznam kouká.
+  //
+  // Propadlé se počítají zvlášť a den se bere jen z toho, co teprve přijde:
+  // dřív se do „nejbližšího dne" započítal i propadlý termín, takže řádek
+  // ukazoval „čt 27. 8." — a to se čte jako plán, ne jako průšvih. Přitom
+  // „kde to hoří" je to první, kvůli čemu se na seznam klientů kouká.
+  const today = todayISO()
   const nextDay = new Map<string, string>()
+  const overdue = new Map<string, number>()
   for (const t of open) {
     const den = [t.scheduledFor, t.dueDate].filter((d): d is string => Boolean(d)).sort()[0]
     if (!t.clientId || !den) continue
+    if (den < today) {
+      overdue.set(t.clientId, (overdue.get(t.clientId) ?? 0) + 1)
+      continue
+    }
     const dosud = nextDay.get(t.clientId)
     if (!dosud || den < dosud) nextDay.set(t.clientId, den)
   }
@@ -110,18 +122,39 @@ function ClientList({
   // Samotný den, bez uvozovacího slova: to by se na každém řádku opakovalo
   // stejně jako dřív slovo „Klient", kdežto datum se liší. Pod jménem
   // klienta a vedle počtu úkolů se „dnes" čte jako „kdy" samo od sebe.
-  const podtitul = (c: Client): string => {
+  // Stavová řádka klienta — jedna, a jen s tím, co má co říct. Pořadí je
+  // pořadí důležitosti, protože na úzkém displeji se ořezává zprava:
+  // kolik hoří → kdy je další práce → přívlastky (druh, sdíleno).
+  const podtitul = (c: Client): React.ReactNode => {
     // U oblastí („Interní", „Osobní") se druh hlásí — u klienta je zbytečný.
-    const druh = c.kind === 'client' ? '' : `${KIND_LABELS[c.kind]} · `
+    const druh = c.kind === 'client' ? '' : KIND_LABELS[c.kind]
     const pocet = counts.get(c.id) ?? 0
-    // „sdíleno" jde až na konec: den je to, kvůli čemu se na seznam kouká,
-    // a na úzkém displeji se ořízne spíš přívlastek než hlavní údaj.
-    const spolu = sdilene.has(c.id) ? ' · sdíleno' : ''
-    if (pocet === 0) return `${druh}žádné úkoly${spolu}`
+    const hori = overdue.get(c.id) ?? 0
     const den = nextDay.get(c.id)
-    return den
-      ? `${druh}${formatDayLabel(den).toLowerCase()}${spolu}`
-      : `${druh}nic naplánováno${spolu}`
+    const spolu = sdilene.has(c.id) ? 'sdíleno' : ''
+
+    // Ticho bývalo samostatný odznak vpravo. Tři prvky vedle sebe (odznak,
+    // počet, šipka) ale na 320 px zmáčkly řádku tak, že se ořízlo právě
+    // „2 po termínu" — ta nejdůležitější věc na obrazovce. Je to stav
+    // klienta jako každý jiný, tak patří do stavové řádky.
+    const ticho = neglectedDays(c)
+
+    const casti: Array<{ text: string; tone?: string }> = []
+    if (hori > 0) casti.push({ text: `${hori} po termínu`, tone: 'font-medium text-danger' })
+    if (ticho !== null) casti.push({ text: `ticho ${ticho} dní`, tone: 'font-medium text-note-ink' })
+    if (pocet === 0) casti.push({ text: 'žádné úkoly' })
+    else if (den) casti.push({ text: formatDayLabel(den).toLowerCase() })
+    // „nic naplánováno" vedle propadlých je hluk — propadlé řeknou dost.
+    else if (!hori) casti.push({ text: 'nic naplánováno' })
+    if (druh) casti.push({ text: druh })
+    if (spolu) casti.push({ text: spolu })
+
+    return casti.map((cast, i) => (
+      <span key={cast.text} className={cast.tone}>
+        {i > 0 && <span className="text-ink-faint"> · </span>}
+        {cast.text}
+      </span>
+    ))
   }
 
   const item = (c: Client) => (
@@ -135,11 +168,6 @@ function ClientList({
           <span className="block truncate text-[15px] font-medium">{c.name}</span>
           <span className="block truncate text-xs text-ink-faint">{podtitul(c)}</span>
         </span>
-        {neglectedDays(c) !== null && (
-          <span className="rounded-full bg-note px-2 py-0.5 text-xs font-semibold text-note-ink">
-            ⚠ {neglectedDays(c)} dní
-          </span>
-        )}
         {(counts.get(c.id) ?? 0) > 0 && (
           <span className="rounded-full bg-well px-2 py-0.5 text-xs font-medium text-ink-soft">
             {counts.get(c.id)}
@@ -159,18 +187,18 @@ function ClientList({
           a lámal se pod „+ Nový" — vypadalo to jako popisek tlačítka.
           Akce teď stojí na vlastním řádku pod ním. */}
       <header>
-        <h1 className="display text-[2.1rem] font-semibold leading-tight">Klienti</h1>
+        <Titulek text="Klienti" />
         <p className="text-sm text-ink-soft">Klienti i oblasti jako „Interní“ nebo „Osobní“</p>
         <div className="mt-3 flex items-center gap-2">
           <button
             onClick={() => setAdding((v) => !v)}
-            className="rounded-full bg-accent px-3.5 py-2 text-sm font-medium text-card transition-transform duration-150 active:scale-95"
+            className="rounded-full bg-well px-3.5 py-2 text-sm font-medium text-ink transition-transform duration-150 active:scale-95"
           >
             {adding ? 'Zavřít' : '+ Nový'}
           </button>
           <button
             onClick={onTemplates}
-            className="rounded-full border border-line bg-card px-3.5 py-2 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-95"
+            className="rounded-full bg-well px-3.5 py-2 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-95"
           >
             Šablony
           </button>
@@ -185,9 +213,7 @@ function ClientList({
       )}
 
       {clientsRaw !== undefined && clients.length === 0 && !adding && (
-        <div className="rounded-2xl border border-dashed border-line bg-card/60 px-4 py-8 text-center text-sm text-ink-faint">
-          Zatím žádní klienti. Začni tlačítkem „+ Nový“.
-        </div>
+        <p className="px-1 py-6 text-sm text-ink-faint">Zatím žádní klienti. Začni tlačítkem „+ Nový“.</p>
       )}
 
       {/* Celá sekce až od prvního klienta: prázdný <ul> má pořád bg-card
@@ -867,9 +893,7 @@ function ClientDetail({
             {projectTasks.length > 0 ? (
               <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{projectTasks.map(row)}</ul>
             ) : (
-              <p className="rounded-2xl border border-dashed border-line px-3 py-3 text-xs text-ink-faint">
-                Zatím bez úkolů — přiřaď je úkolu v detailu.
-              </p>
+              <p className="px-1 py-2 text-xs text-ink-faint">Zatím bez úkolů — přiřaď je úkolu v detailu.</p>
             )}
           </section>
         )

@@ -39,8 +39,23 @@ instalace ani (v pozdější fázi) push notifikace.
 - Obrazovky **Dnes** (po termínu / dnes / hotovo), **Plán** (podle dnů + bez
   termínu) a **Klienti** (detail, projekty, archivace)
 - Instalace na plochu, offline režim přes service worker
+- Dnes bez zdi: propadlé ukážou pár řádků a zbytek řeší triáž, „bez
+  termínu" a „hotovo" stojí sbalené do řádky s počtem (rozbalení si appka
+  pamatuje)
+- Seznam klientů jako přehled: u každého na jedné řádce, co hoří („2 po
+  termínu"), jak dlouho je ticho a kdy je další práce
 - Triáž propadlých: nadpis „po termínu" otevře průchod jeden po druhém —
   u každého dnes / příští týden / už neplatí, se „Zpět" na poslední krok
+- Odkaz v úkolu jde otevřít ťuknutím: Canva, Drive nebo brief v poznámce
+  (i v názvu) se ukáže jako ikonka na řádku a jako čip v detailu — bez
+  opisování adresy
+- Klávesnice na Macu: ⌘K hledá, N otevře zadávání, 1 · 2 · 3 přepínají
+  záložky, ⌘↩ uloží detail, Esc zavře; při psaní se písmena berou jako
+  písmena
+- Vzhled po úklidu: karty bez obrysu na teplém papíře, oddělovače od
+  textu, priorita tečkou, kroužek postupu v hlavičce Dnes, dny v Plánu
+  jako čísla s tečkou, postupné rozostření pod dokem, titulky obrazovek
+  se skládají po písmenech.
 - Mazání se neptá, ale jde vrátit — u doku se po smazání ukáže „Vrátit"
   (u klienta se vrátí i jeho projekty a úkoly)
 - Synchronizace mezi zařízeními přes Supabase (Google login, tombstony,
