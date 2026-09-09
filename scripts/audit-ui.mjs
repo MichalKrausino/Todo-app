@@ -212,11 +212,22 @@ async function zmer(kde, root = 'main', jenKontrast = false) {
     }
 
     const okraje = new Map()
-    const sekce = jenKontrast || !oblast.children[0] ? [] : oblast.children[0].children
+    // sekce obrazovky: sestoupit přes obaly s jediným dítětem (clip obal
+    // a BlurFade v App.tsx) až ke kořeni pohledu, který má sekce pod sebou
+    let koren = oblast.children[0]
+    while (koren && koren.children.length === 1) koren = koren.children[0]
+    const sekce = jenKontrast || !koren ? [] : koren.children
     for (const el of sekce) {
       if (!videt(el)) continue
       const r = el.getBoundingClientRect()
-      const klic = Math.round(r.left) + '/' + Math.round(sirka - r.right)
+      // prvek, který nemá vyplnit šířku (tlačítko „‹ Klienti"), okraj neurčuje
+      if (r.width < sirka * 0.5) continue
+      // stejná výjimka jako u hran nad sebou: vodorovně scrollující řádka
+      // přetéká k okraji zápornou marží, měří se hrana jejího obsahu
+      const cs = getComputedStyle(el)
+      const vlevo = parseFloat(cs.marginLeft) < 0 ? r.left + parseFloat(cs.paddingLeft) : r.left
+      const vpravo = parseFloat(cs.marginRight) < 0 ? r.right - parseFloat(cs.paddingRight) : r.right
+      const klic = Math.round(vlevo) + '/' + Math.round(sirka - vpravo)
       okraje.set(klic, [...(okraje.get(klic) || []), popis(el)])
     }
     if (okraje.size > 1) {

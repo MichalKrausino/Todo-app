@@ -292,6 +292,8 @@ export default function App() {
       <main
         ref={mainRef}
         onScroll={(e) => {
+          // pojistka: obsah se nikdy nesmí odrolovat do strany
+          if (e.currentTarget.scrollLeft !== 0) e.currentTarget.scrollLeft = 0
           const top = e.currentTarget.scrollTop
           setScrolled(top > 24)
           // listování s otevřenou klávesnicí: po delším kusu ji uklidit
@@ -307,7 +309,13 @@ export default function App() {
         }}
       >
         {/* key vynutí novou instanci pohledu → BlurFade (magicui) ho vynoří
-            z rozostření ze strany, kam se v doku šlo */}
+            z rozostření ze strany, kam se v doku šlo.
+            Obal s overflow-x: clip: nájezd posouvá obsah o 14 px do strany
+            a po dobu animace tím přetéká doprava — iOS si to vzal jako
+            vodorovné rolování a obsah zůstal odrolovaný (levý okraj 2 pt,
+            pravý 30 pt). Clip přesah nepustí do rolovací plochy; záporná
+            marže drží řádky chipů s -mx-4 dál až na hraně obrazovky. */}
+        <div className="-mx-4 overflow-x-clip px-4">
         <BlurFade
           key={tab}
           direction={dir === 0 ? 'up' : dir > 0 ? 'left' : 'right'}
@@ -337,6 +345,7 @@ export default function App() {
             />
           )}
         </BlurFade>
+        </div>
       </main>
 
       {/* Spodní dok: jedna plovoucí skleněná deska, přes kterou obsah
