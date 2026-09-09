@@ -138,7 +138,10 @@ shadcn paleta (`bg-primary`, `text-muted-foreground`) se nepřebírá.
 Z motion-primitives: `ProgressiveBlur` (závoj pod dokem a pod lištou,
 šest vrstev s posunutou maskou — jedna vrstva je jen mléčný pruh),
 `TextEffect` (titulky po písmenech), `AnimatedNumber` (počty pružinou),
-`Magnetic` (plusko na Macu). Z magicui: `Dock` (zvětšování ikon pod
+`Magnetic` (plusko na Macu), `AnimatedBackground` (inkoustová pilulka
+plyne mezi chipy klientů; stejný vzor s `layoutId` dělá pilulku pod
+vybranou záložkou doku), `DisclosureContent` (sbalené sekce se rozbalují
+na výšku). Z magicui: `Dock` (zvětšování ikon pod
 kurzorem), `BlurFade` (nástup obrazovky ze strany, kam se v doku šlo),
 `BorderBeam` (jen ranní návrh — jediná karta, kterou napsal server),
 `Ripple` (prázdný stav), konfety přes `canvas-confetti` (splněný den,
@@ -157,7 +160,15 @@ pak přetekl (změřeno 391 > 390); (3) Dock reaguje jen na
 `pointerType === 'mouse'` a Magnetic jen s `(hover: hover)` — Safari při
 ťuknutí syntetizuje mousemove/mouseenter a ikona by zůstala nafouklá;
 (4) `TextEffect` dává celý text do `aria-label`, ne do sr-only kopie —
-textContent musí zůstat jeden kus, jinak testy čtou „DnesDnes".
+textContent musí zůstat jeden kus, jinak testy čtou „DnesDnes";
+(5) `DockIcon` má `transitionProperty: none` — velikost řídí pružina a
+pojistka klidového režimu (`transition-duration: 0.01ms` na `*`) by
+z každého zápisu šířky dělala běžící přechod; (6) vybraný chip klienta
+dostane vlastní `bg-ink` se zpožděním 300 ms — audit kontrastu čte
+podklad z předků, ne z létající pilulky, takže v klidu musí text stát
+na pevné barvě. Blok „Nepropadá ti něco?" je od redesignu stejná karta
+jako ostatní sekce (barvu nese jen nadpis) — oranžová plocha byla na
+obrazovce s reálnými daty nejhlasitější prvek.
 Tokeny v `src/index.css` (Tailwind v4 `@theme`) — **používat výhradně je**,
 žádné surové Tailwind barvy: `paper`/`card`/`well`/`line`, text
 `ink`/`ink-soft`/`ink-faint`, jediný akcent `accent` (klidná modrá

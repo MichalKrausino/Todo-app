@@ -33,6 +33,8 @@ import { AnimatedNumber } from '../components/ui/AnimatedNumber'
 import { BlurText } from '../components/ui/BlurText'
 import { BorderBeam } from '../components/ui/BorderBeam'
 import { Ripple } from '../components/ui/Ripple'
+import { AnimatedBackground } from '../components/ui/AnimatedBackground'
+import { Button } from '../components/ui/Button'
 
 // Nejbližší relevantní den úkolu — dřívější z „naplánováno“ a „termín“.
 const effectiveDate = (t: Task): string | undefined => {
@@ -42,6 +44,14 @@ const effectiveDate = (t: Task): string | undefined => {
 
 // Kaskáda nástupu sekcí (proměnnou čte animace .rise v index.css).
 const stagger = (i: number) => ({ '--stagger': i }) as React.CSSProperties
+
+// Chip filtru klientů: mezi chipy plyne inkoustová pilulka
+// (AnimatedBackground). Vybraný chip dostane vlastní inkoust až se
+// zpožděním, kdy pilulka dolétne — v klidu tak text stojí na pevném
+// podkladu (audit kontrastu čte podklad z předků, ne ze sourozence),
+// a během letu je vidět jen pilulka. Odznačený pouští inkoust hned.
+const CHIP =
+  'shrink-0 rounded-full bg-well px-3 py-1.5 text-[13px] font-medium text-ink-soft transition-[background-color,color,transform] duration-150 active:scale-95 data-[checked=true]:bg-ink data-[checked=true]:text-paper data-[checked=true]:[transition-delay:300ms,0ms,0ms]'
 
 const minutesOfDay = (iso: string) => {
   const d = new Date(iso)
@@ -342,8 +352,10 @@ export function TodayView({
           <section className="rise" style={stagger(1)}>
             <h2 className="section-label mb-2">ranní návrh · {pending.length}</h2>
             <ul className="relative divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
-              {/* BorderBeam (magicui): světlo obíhá kartu, kterou napsal server */}
-              <BorderBeam />
+              {/* BorderBeam (magicui): světlo obíhá kartu, kterou napsal server.
+                  Dlouhý ohon (140 px) — krátký vypadal na telefonu jako
+                  modrá čárka na hraně, ne jako světlo. */}
+              <BorderBeam size={140} duration={9} />
               {pending.map((s) => {
                 const task = taskById.get(s.taskId)!
                 const leaving = leavingSuggestions[s.taskId]
@@ -358,28 +370,26 @@ export function TodayView({
                           <div className="text-[16px] leading-snug">{task.title}</div>
                           <div className="mt-0.5 text-[13px] text-ink-soft">{s.reason}</div>
                         </button>
-                        <button
-                          // Zamítnutý úkol se nikam neposouvá — zůstává, jak
-                          // byl, takže ho ranní návrh zítra nabídne znovu.
-                          // Popisek to říká rovnou, ať „křížek" nevypadá jako
-                          // trvalé odmítnutí.
+                        {/* Zamítnutý úkol se nikam neposouvá — zůstává, jak
+                            byl, takže ho ranní návrh zítra nabídne znovu.
+                            Popisek to říká rovnou, ať „křížek" nevypadá jako
+                            trvalé odmítnutí. */}
+                        <Button
+                          variant="secondary"
+                          size="icon-sm"
+                          className="text-ink-soft"
                           aria-label="Dnes ne — nabídne se zítra znovu"
                           onClick={() => decide(s.taskId, 'rejected')}
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-well text-ink-soft transition-transform duration-150 active:scale-90"
                         >
                           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                             <path d="M6 6l12 12M18 6L6 18" />
                           </svg>
-                        </button>
-                        <button
-                          aria-label="Přijmout návrh"
-                          onClick={() => decide(s.taskId, 'accepted')}
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-card transition-transform duration-150 active:scale-90"
-                        >
+                        </Button>
+                        <Button size="icon-sm" aria-label="Přijmout návrh" onClick={() => decide(s.taskId, 'accepted')}>
                           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M5 12.5l4.5 4.5L19 7.5" />
                           </svg>
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </li>
@@ -571,26 +581,24 @@ export function TodayView({
       {/* Batching podle klienta — jeden klient v kuse, méně přepínání kontextu */}
       {batchClients.length >= 2 && (
         <div className="rise -mx-1 flex gap-1.5 overflow-x-auto px-1" style={{ scrollbarWidth: 'none' }}>
-          <button
-            onClick={() => setBatchClient(null)}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium transition-transform duration-150 active:scale-95 ${
-              batchClient === null ? 'bg-ink text-paper' : 'bg-well text-ink-soft'
-            }`}
+          {/* AnimatedBackground (motion-primitives): inkoustová pilulka mezi
+              chipy plyne, ne naskakuje. Ťuknutí na vybraného klienta ho
+              zase pustí — vrátí se „Vše". */}
+          <AnimatedBackground
+            value={batchClient ?? 'vse'}
+            onValueChange={(id) => setBatchClient(id === 'vse' || id === batchClient ? null : id)}
+            className="rounded-full bg-ink"
           >
-            Vše
-          </button>
-          {batchClients.map((c) => (
-            <button
-              key={`${c.id}:${batchClient === c.id}`}
-              onClick={() => setBatchClient(batchClient === c.id ? null : c.id)}
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-transform duration-150 active:scale-95 ${
-                batchClient === c.id ? 'pop-soft bg-ink text-paper' : 'bg-well text-ink-soft'
-              }`}
-            >
-              <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />
-              {c.name}
+            <button data-id="vse" className={CHIP}>
+              Vše
             </button>
-          ))}
+            {batchClients.map((c) => (
+              <button key={c.id} data-id={c.id} className={CHIP}>
+                <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />
+                {c.name}
+              </button>
+            ))}
+          </AnimatedBackground>
         </div>
       )}
 
