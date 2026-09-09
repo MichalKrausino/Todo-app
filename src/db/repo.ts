@@ -409,7 +409,7 @@ export const getDayPlan = (date: string) =>
 export async function decideDayPlanSuggestion(
   planId: string,
   taskId: string,
-  decision: 'accepted' | 'rejected',
+  decision: 'accepted' | 'rejected' | 'ignored', // ignored = „Zpět" v panelu návrhu
 ): Promise<void> {
   const plan = await db.dayPlans.get(planId)
   if (!plan) return

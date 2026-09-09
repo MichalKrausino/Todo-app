@@ -39,6 +39,9 @@ instalace ani (v pozdější fázi) push notifikace.
 - Obrazovky **Dnes** (po termínu / dnes / hotovo), **Plán** (podle dnů + bez
   termínu) a **Klienti** (detail, projekty, archivace)
 - Instalace na plochu, offline režim přes service worker
+- Ranní návrh jako jedna řádka s počtem; rozhoduje se po jednom v panelu
+  (přijmout na dnešek / dnes ne / přijmout zbývající / zpět). Kalendář na
+  Dnes je sbalený na nejbližší schůzku, celý den je na ťuknutí.
 - Dnes bez zdi: propadlé ukážou pár řádků a zbytek řeší triáž, „bez
   termínu" a „hotovo" stojí sbalené do řádky s počtem (rozbalení si appka
   pamatuje)

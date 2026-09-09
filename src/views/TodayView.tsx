@@ -7,14 +7,12 @@ import {
   allProjects,
   calendarEventsOn,
   completeTask,
-  decideDayPlanSuggestion,
   doneOn,
   getDayPlan,
   openTasks,
   reopenTask,
   sortTasks,
 } from '../db/repo'
-import { scheduleBlockForTask } from '../sync/calendar'
 import { isOverloaded, plannedMinutes } from '../lib/capacity'
 import { formatEventRange, formatFullDate, fromISODate, todayISO } from '../lib/dates'
 import { WORK_END, WORK_START, freeGaps, freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
@@ -34,7 +32,7 @@ import { BlurText } from '../components/ui/BlurText'
 import { BorderBeam } from '../components/ui/BorderBeam'
 import { Ripple } from '../components/ui/Ripple'
 import { AnimatedBackground } from '../components/ui/AnimatedBackground'
-import { Button } from '../components/ui/Button'
+import { NavrhSheet } from '../components/NavrhSheet'
 
 // Nejbližší relevantní den úkolu — dřívější z „naplánováno“ a „termín“.
 const effectiveDate = (t: Task): string | undefined => {
@@ -83,8 +81,6 @@ const EXAMPLES = [
   'zavolat Pepovi do 14:00',
 ]
 
-// Kolik schůzek se ukáže, než se seznam sbalí.
-const EVENTS_PREVIEW = 4
 // Kratší okno než půl hodiny nemá cenu nabízet jako volný slot.
 const MIN_GAP_MIN = 30
 
@@ -104,11 +100,8 @@ export function TodayView({
   onOpenInbox: () => void
 }) {
   const today = todayISO()
-  // Rozhodnuté ranní návrhy odplouvají do strany a řádek se složí —
-  // zápis do DB až po animaci, aby liveQuery řádek neutrhl skokem.
-  const [leavingSuggestions, setLeavingSuggestions] = useState<
-    Record<string, 'accepted' | 'rejected'>
-  >({})
+  // Panel s ranním návrhem — rozhoduje se po jednom, ne na obrazovce.
+  const [navrhOpen, setNavrhOpen] = useState(false)
   // Schůzky, ze kterých už v tomhle otevření vznikl follow-up (ukáže ✓).
   const [followedUp, setFollowedUp] = useState<Set<string>>(new Set())
   // Batching podle klienta: přepínání kontextu žere výkon — filtr drží
@@ -311,23 +304,26 @@ export function TodayView({
               · <AnimatedNumber value={done.length} /> z {planned}
             </span>
           )}
-          {unfinished.length > 0 && !overloaded && (
-            <span>
-              · práce ~{minutesToLabel(workMin)}
-              {/* stejné slovo jako v hlavičce kalendáře — jde o totéž číslo */}
-              {freeMin !== null && <> · zbývá ~{minutesToLabel(freeMin)}</>}
-            </span>
-          )}
         </div>
-        {unfinished.length > 0 && overloaded && (
-          <p className="mt-1 flex items-center gap-1.5 text-[13px] font-medium text-note-ink">
-            <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-note-ink" />
-            na den je toho moc · práce ~{minutesToLabel(workMin)}
+        {/* Odhad práce má vlastní řádku vždy — přilepený za datum se na
+            390 px zalamoval a druhá řádka začínala osamocenou tečkou. */}
+        {unfinished.length > 0 && (
+          <p
+            className={`mt-1 flex items-center gap-1.5 text-[13px] ${overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'}`}
+          >
+            <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${overloaded ? 'bg-note-ink' : 'bg-moss'}`} />
+            {overloaded && <>na den je toho moc · </>}
+            práce ~{minutesToLabel(workMin)}
+            {/* stejné slovo jako v hlavičce kalendáře — jde o totéž číslo */}
             {freeMin !== null && <> · zbývá ~{minutesToLabel(freeMin)}</>}
           </p>
         )}
       </header>
 
+      {/* Ranní návrh jako jedna řádka s počtem, rozhoduje se v panelu
+          (NavrhSheet). Dřív tu stál seznam se dvěma kolečky na řádek a tytéž
+          úkoly se o kus níž opakovaly v „po termínu" — obrazovka odpovídala
+          na „co teď?" dvakrát a pokaždé jinak. */}
       {(() => {
         if (!dayPlan) return null
         const taskById = new Map(open.map((t) => [t.id, t]))
@@ -335,67 +331,43 @@ export function TodayView({
           (s) => s.decision === 'ignored' && taskById.has(s.taskId),
         )
         if (pending.length === 0) return null
-
-        // Zápis rozhodnutí až po odplutí řádku (340 ms ≈ délka animace).
-        const decide = (taskId: string, decision: 'accepted' | 'rejected') => {
-          if (leavingSuggestions[taskId]) return
-          setLeavingSuggestions((m) => ({ ...m, [taskId]: decision }))
-          const task = taskById.get(taskId)!
-          setTimeout(() => {
-            void decideDayPlanSuggestion(dayPlan.id, taskId, decision)
-            // přijatý návrh si zabere blok v kalendáři „Todo"
-            if (decision === 'accepted') void scheduleBlockForTask({ ...task, scheduledFor: today })
-          }, 340)
-        }
-
+        const nazvy = pending.slice(0, 2).map((s) => taskById.get(s.taskId)!.title)
+        const zbytek = pending.length - nazvy.length
         return (
           <section className="rise" style={stagger(1)}>
-            <h2 className="section-label mb-2">ranní návrh · {pending.length}</h2>
-            <ul className="relative divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
-              {/* BorderBeam (magicui): světlo obíhá kartu, kterou napsal server.
-                  Dlouhý ohon (140 px) — krátký vypadal na telefonu jako
-                  modrá čárka na hraně, ne jako světlo. */}
+            <button
+              onClick={() => setNavrhOpen(true)}
+              className="relative flex w-full items-center gap-3 overflow-hidden rounded-2xl bg-card px-4 py-3 text-left shadow-card transition-transform duration-150 active:scale-[0.99]"
+            >
+              {/* BorderBeam (magicui): světlo obíhá jedinou kartu, kterou napsal server */}
               <BorderBeam size={140} duration={9} />
-              {pending.map((s) => {
-                const task = taskById.get(s.taskId)!
-                const leaving = leavingSuggestions[s.taskId]
-                return (
-                  <li
-                    key={s.taskId}
-                    className={`row-collapse ${leaving ? `leave leave-${leaving}` : ''}`}
-                  >
-                    <div>
-                      <div className="row-inner flex items-center gap-3 px-4 py-3">
-                        <button className="min-w-0 flex-1 text-left" onClick={() => onOpenTask(task)}>
-                          <div className="text-[16px] leading-snug">{task.title}</div>
-                          <div className="mt-0.5 text-[13px] text-ink-soft">{s.reason}</div>
-                        </button>
-                        {/* Zamítnutý úkol se nikam neposouvá — zůstává, jak
-                            byl, takže ho ranní návrh zítra nabídne znovu.
-                            Popisek to říká rovnou, ať „křížek" nevypadá jako
-                            trvalé odmítnutí. */}
-                        <Button
-                          variant="secondary"
-                          size="icon-sm"
-                          className="text-ink-soft"
-                          aria-label="Dnes ne — nabídne se zítra znovu"
-                          onClick={() => decide(s.taskId, 'rejected')}
-                        >
-                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                            <path d="M6 6l12 12M18 6L6 18" />
-                          </svg>
-                        </Button>
-                        <Button size="icon-sm" aria-label="Přijmout návrh" onClick={() => decide(s.taskId, 'accepted')}>
-                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M5 12.5l4.5 4.5L19 7.5" />
-                          </svg>
-                        </Button>
-                      </div>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-wash text-accent">
+                <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="currentColor">
+                  <path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z" />
+                  <path d="M18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />
+                </svg>
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px] font-semibold">
+                  Ranní návrh · {pending.length} {plural(pending.length, 'úkol', 'úkoly', 'úkolů')}
+                </span>
+                <span className="block truncate text-[13px] text-ink-soft">
+                  {nazvy.join(', ')}
+                  {zbytek > 0 && ` +${zbytek}`}
+                </span>
+              </span>
+              <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
+            {navrhOpen && (
+              <NavrhSheet
+                planId={dayPlan.id}
+                navrhy={pending.map((s) => ({ task: taskById.get(s.taskId)!, reason: s.reason }))}
+                clients={clientMap}
+                onClose={() => setNavrhOpen(false)}
+              />
+            )}
           </section>
         )
       })()}
@@ -424,7 +396,15 @@ export function TodayView({
           .filter((m) => m > nowMin)
           .sort((a, b) => a - b)[0]
 
-        const shown = allEvents ? events : events.slice(0, EVENTS_PREVIEW)
+        // Sbalený kalendář ukáže jen jednu řádku: co běží, nebo co je
+        // nejblíž; když už je po všem, poslední proběhlou. Celý den
+        // s volnými okny je na ťuknutí — plán dne stojí v seznamu úkolů,
+        // ne v rozpisu schůzek.
+        const nejblizsi =
+          events.find((e) => !e.allDay && minutesOfDay(e.start) <= nowMin && nowMin < minutesOfDay(e.end)) ??
+          events.find((e) => !e.allDay && minutesOfDay(e.start) === nextStart) ??
+          events[events.length - 1]
+        const shown = allEvents ? events : [nejblizsi]
         const hidden = events.length - shown.length
         // Dvě schůzky ve stejnou minutu by jinak vykreslily tentýž
         // řádek volna dvakrát — každé okno se ukáže nejvýš jednou.
@@ -446,7 +426,7 @@ export function TodayView({
                 const task = e.isTodoBlock ? taskByEvent.get(e.eventId) : undefined
                 const span = e.startDay !== e.endDay ? dayIndex(e.startDay, e.endDay, today) : null
                 // volné okno, které končí přesně tam, kde schůzka začíná
-                const gapBefore = e.allDay
+                const gapBefore = e.allDay || !allEvents
                   ? undefined
                   : gaps.find((g) => g.endMin === startMin && !usedGaps.has(g.startMin))
                 if (gapBefore) usedGaps.add(gapBefore.startMin)
@@ -537,7 +517,7 @@ export function TodayView({
               })}
 
               {/* volno po poslední schůzce dne */}
-              {allEvents || hidden === 0
+              {allEvents
                 ? (() => {
                     const lastEnd = Math.max(
                       restStart,
@@ -558,22 +538,33 @@ export function TodayView({
                   })()
                 : null}
 
-              {hidden > 0 && (
+              {(hidden > 0 || allEvents) && (
                 <li>
                   <button
-                    onClick={() => setAllEvents(true)}
-                    className="w-full px-4 py-2 text-left text-[13px] font-medium text-accent-deep transition-colors duration-150 active:bg-well/60"
+                    onClick={() => setAllEvents((v) => !v)}
+                    aria-expanded={allEvents}
+                    className="flex w-full items-center justify-between px-4 py-2 text-left text-[13px] font-medium text-accent-deep transition-colors duration-150 active:bg-well/60"
                   >
-                    …a další {hidden} {plural(hidden, 'schůzka', 'schůzky', 'schůzek')}
+                    <span>
+                      {allEvents
+                        ? 'Jen nejbližší'
+                        : `Celý den · ${events.length} ${plural(events.length, 'schůzka', 'schůzky', 'schůzek')}`}
+                    </span>
+                    <svg
+                      viewBox="0 0 24 24"
+                      className={`h-3.5 w-3.5 transition-transform duration-200 ${allEvents ? 'rotate-90' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
                   </button>
                 </li>
               )}
             </ul>
-            {events.some((e) => !e.isTodoBlock && !e.allDay) && (
-              <p className="mt-1.5 px-1 text-xs text-ink-faint">
-                Plusko u schůzky založí úkol „Follow-up: …" na dnešek.
-              </p>
-            )}
           </section>
         )
       })()}
