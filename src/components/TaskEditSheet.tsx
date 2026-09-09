@@ -1,4 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
+// Detail úkolu — titulek, poznámka a jedna stavová řádka.
+//
+// Dřív to byl formulář: osm polí s popisky (Úkol, Klient, Projekt,
+// Termín, Čas, Priorita, Opakování, Poznámky) v rozbalovátkách. Když
+// pole potřebuje popisek a <select>, je to nastavení, ne úkol. Teď je
+// nahoře název jako titulek a poznámka pod ním, a všechno ostatní nese
+// stejná stavová řádka slotů jako zadávání v doku (`SlotChip`): prázdný
+// slot nabízí, vyplněný ukazuje hodnotu, otevřený má pod řádkou panel
+// s výběrem. Kdo se naučil zadávat, umí i upravovat.
+//
+// Ukládá se tlačítkem (a ⌘↩), jen checklist, špendlík a „kdo úkol
+// vidí" hned — to jsou rozhodnutí o datech, ne rozepsaný text.
+
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Priority, Project, Subtask, Task, TodoistComment } from '../db/types'
 import {
@@ -13,6 +26,9 @@ import {
 } from '../db/repo'
 import { Sheet } from './Sheet'
 import { Button } from './ui/Button'
+import { MonthPicker } from './MonthPicker'
+import { SlotChip, pill } from './SlotChip'
+import { cn } from '../lib/cn'
 import { najdiOdkazy } from '../lib/links'
 import { nabidniVraceni, ukazToast } from '../lib/toast'
 import { TaskSharing } from './TaskSharing'
@@ -27,7 +43,7 @@ import {
   setTodoistSubtaskDone,
 } from '../sync/todoist'
 import { SUB_PREFIX } from '../lib/todoistMap'
-import { addDays, fromISODate, jePlatnyCas, toISODate, todayISO } from '../lib/dates'
+import { addDays, formatDayLabel, fromISODate, jePlatnyCas, nextMonday, toISODate, todayISO } from '../lib/dates'
 import { PRIORITY_LABELS } from '../lib/labels'
 import {
   PRESET_LABELS,
@@ -37,40 +53,77 @@ import {
   type RecurrencePreset,
 } from '../lib/rrule'
 
-const field = 'w-full rounded-lg border border-line bg-card px-3 py-2 text-[16px] outline-none focus:border-accent/60 disabled:bg-well disabled:text-ink-soft'
-const label = 'mb-1 block text-xs font-medium text-ink-soft'
-// py-1.5: pod třicet pixelů se pilulka na telefonu trefuje mizerně
-const dayChip = 'rounded-full px-3 py-2 text-[11px] font-medium transition-transform duration-150 active:scale-95'
+type Picker = 'date' | 'scheduled' | 'client' | 'project' | 'priority' | 'recurrence' | null
 
-// Rychlé volby pod polem s datem. Dva důvody: nejčastější posun je stejně
-// „dnes / zítra", a hlavně — nativní <input type="date"> na iPhonu nemá
-// jak vyprázdnit, takže bez křížku šel termín přidat, ale ne odebrat.
-function DenChipy({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const dnes = todayISO()
-  const zitra = toISODate(addDays(fromISODate(dnes), 1))
+const QUICK_DAYS: { label: string; day: (today: string) => string }[] = [
+  { label: 'Dnes', day: (t) => t },
+  { label: 'Zítra', day: (t) => toISODate(addDays(fromISODate(t), 1)) },
+  { label: 'Pondělí', day: (t) => toISODate(nextMonday(fromISODate(t))) },
+]
+
+// Textové pole, které roste s obsahem — titulek ani poznámka nemají mít
+// posuvník uvnitř panelu, který sám roluje.
+function AutoTextarea({ className, value, ...props }: React.ComponentProps<'textarea'>) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = '0px'
+    el.style.height = `${el.scrollHeight}px`
+  }, [value])
   return (
-    <div className="mt-1 flex items-center gap-1">
-      {([['Dnes', dnes], ['Zítra', zitra]] as const).map(([popisek, iso]) => (
-        <button
-          key={popisek}
-          type="button"
-          onClick={() => onChange(iso)}
-          aria-pressed={value === iso}
-          className={`${dayChip} ${value === iso ? 'bg-ink text-paper' : 'bg-accent-wash text-accent-deep'}`}
-        >
-          {popisek}
-        </button>
-      ))}
-      {value && (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={value}
+      className={cn('block w-full resize-none bg-transparent outline-none placeholder:text-ink-faint', className)}
+      {...props}
+    />
+  )
+}
+
+// Výběr dne: rychlé volby + kalendářík. Sdílí ho Termín i Naplánováno.
+function VyberDne({
+  value,
+  bezPopisek,
+  onChange,
+  children,
+}: {
+  value: string
+  bezPopisek: string
+  onChange: (iso: string) => void
+  children?: React.ReactNode
+}) {
+  const today = todayISO()
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5" style={{ scrollbarWidth: 'none' }}>
+        {QUICK_DAYS.map(({ label, day }) => {
+          const iso = day(today)
+          const on = value === iso
+          return (
+            <button
+              key={label}
+              type="button"
+              onClick={() => onChange(iso)}
+              aria-pressed={on}
+              className={`${pill} ${on ? 'bg-accent text-card' : 'bg-card text-ink'}`}
+            >
+              {label}
+            </button>
+          )
+        })}
         <button
           type="button"
           onClick={() => onChange('')}
-          aria-label="Vymazat datum"
-          className={`${dayChip} bg-well text-ink-soft`}
+          aria-pressed={!value}
+          className={`${pill} ${!value ? 'bg-accent text-card' : 'bg-card text-ink-soft'}`}
         >
-          ✕
+          {bezPopisek}
         </button>
-      )}
+      </div>
+      <MonthPicker value={value || undefined} onSelect={onChange} />
+      {children}
     </div>
   )
 }
@@ -80,11 +133,10 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   const [notes, setNotes] = useState(task.notes ?? '')
   const [clientId, setClientId] = useState(task.clientId ?? '')
   const [hiddenFrom, setHiddenFrom] = useState<string[]>(task.hiddenFrom ?? [])
-  // Druhé datum se rozbalí jen tomu, kdo ho má nebo si o něj řekne.
-  const [planujuJinyDen, setPlanujuJinyDen] = useState(Boolean(task.scheduledFor))
   const [ptamSeNaTodoist, setPtamSeNaTodoist] = useState(false)
   const [projectId, setProjectId] = useState(task.projectId ?? '')
   const [priority, setPriority] = useState<Priority>(task.priority)
+  const [picker, setPicker] = useState<Picker>(null)
   // Importovaný úkol se dá upravovat a změny letí zpátky do Todoistu.
   // Zamčené zůstává jen zařazení — přesouvat úkol mezi projekty klienta
   // patří do Todoistu, ne sem.
@@ -140,15 +192,15 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   }
 
   const clients = useLiveQuery(activeClients, []) ?? []
+  const client = clients.find((c) => c.id === clientId)
   // Klient s napojeným projektem — jen u něj má smysl nabízet odeslání.
-  const todoistClient = clients.find(
-    (c) => c.id === clientId && (c.todoistProjectIds?.length ?? 0) > 0,
-  )
+  const todoistClient = client && (client.todoistProjectIds?.length ?? 0) > 0 ? client : undefined
   const projects =
     useLiveQuery(
       () => (clientId ? clientProjects(clientId) : Promise.resolve<Project[]>([])),
       [clientId],
     ) ?? []
+  const project = projects.find((p) => p.id === projectId)
 
   // ⌘↩ uloží — na Macu se to čeká od každého formuláře. Handler visí
   // na okně (uvnitř panelu není jeden společný prvek, který by ho nesl),
@@ -206,8 +258,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   // očku. Mazání je tombstone, takže „Vrátit" je jen zrušení razítka.
   const del = async (close: () => void, iVTodoistu = false) => {
     // Tohle vrátit nejde — v Todoistu úkol zmizí i klientovi ve sdíleném
-    // projektu. Proto se u todoistích úkolů ptá (viz VolbaSmazani níž),
-    // a jen na tohle jediné.
+    // projektu. Proto se u todoistích úkolů ptá (viz níž), a jen na tohle.
     if (iVTodoistu) await deleteTodoistTask(task.id)
     if (task.calendarEventId) void deleteBlockForTask(task)
     const plan = await removeTask(task.id)
@@ -216,49 +267,73 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
     else nabidniVraceni('Úkol smazán', () => restoreDeleted(plan))
   }
 
+  const otevri = (kind: Picker) => setPicker((p) => (p === kind ? null : kind))
+  // Zařazení todoistího úkolu se mění v Todoistu — slot to řekne, místo
+  // aby byl jen šedý.
+  const zamceno = () => ukazToast('Zařazení úkolu z Todoistu se mění v Todoistu')
+
+  const today = todayISO()
+  const recurrenceLabel =
+    recurrence === 'custom' && task.recurrenceRule
+      ? humanizeRule(task.recurrenceRule)
+      : recurrence !== 'none'
+        ? PRESET_LABELS[recurrence as RecurrencePreset]
+        : undefined
+
   return (
-    <Sheet onClose={onClose} className="space-y-3">
+    <Sheet onClose={onClose} className="space-y-4">
       {(close) => {
         closeRef.current = close
         saveRef.current = () => void save(closeRef.current)
         return (
         <>
-        <header className="flex items-start justify-between gap-3">
-          <h2 className="text-lg font-bold">Upravit úkol</h2>
+        <header className="flex items-center justify-between gap-3">
+          <span className="text-[13px] font-medium text-ink-soft">
+            {fromTodoist ? 'Úkol z Todoistu' : task.status === 'done' ? 'Hotový úkol' : 'Úkol'}
+            {task.todoistDirty && ' · změna čeká na odeslání'}
+          </span>
           <button
             type="button"
-            aria-label={pinnedFor === todayISO() ? 'Odepnout z Top 3 dne' : 'Připnout mezi Top 3 dne'}
+            aria-label={pinnedFor === today ? 'Odepnout z Top 3 dne' : 'Připnout mezi Top 3 dne'}
             onClick={() => void pinToday()}
             className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-[background-color,color,transform] duration-150 active:scale-95 ${
-              pinnedFor === todayISO() ? 'bg-accent text-card' : 'bg-well text-ink-soft'
+              pinnedFor === today ? 'bg-accent text-card' : 'bg-well text-ink-soft'
             }`}
           >
             <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 3.5h6l-.8 5.2 3.3 3.1H6.5l3.3-3.1z" />
               <path d="M12 11.8V20.5" />
             </svg>
-            {pinnedFor === todayISO() ? 'Top 3 dne' : 'Připnout'}
+            {pinnedFor === today ? 'Top 3 dne' : 'Připnout'}
           </button>
         </header>
         {pinFull && (
-          <p className="pop rounded-lg bg-note px-3 py-2 text-[13px] text-note-ink">
+          <p className="pop rounded-2xl bg-note px-3 py-2 text-[13px] text-note-ink">
             Top {MAX_PINNED} je plná — nejdřív něco odepni. Míň priorit, víc hotovo.
           </p>
         )}
-        {fromTodoist && (
-          <p className="rounded-lg bg-well px-3 py-2 text-[13px] leading-relaxed text-ink-soft">
-            Úkol je z Todoistu — název, termín a priorita se odsud píšou i tam.
-            {task.todoistRecurring && ' Opakuje se; odškrtnutím se posune na další termín.'}
-            {task.todoistDirty && ' Poslední změna ještě čeká na odeslání.'}
-          </p>
-        )}
+
+        {/* Název jako titulek, poznámka pod ním — bez rámečků a popisků.
+            Enter v názvu nezalamuje, jde do poznámky. */}
         <div>
-          <label className={label} htmlFor="pole-ukol">Úkol</label>
-          <input id="pole-ukol" className={field} value={title} onChange={(e) => setTitle(e.target.value)} />
+          <AutoTextarea
+            id="pole-ukol"
+            aria-label="Úkol"
+            value={title}
+            placeholder="Co je potřeba udělat?"
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !(e.metaKey || e.ctrlKey)) {
+                e.preventDefault()
+                document.getElementById('pole-poznamky')?.focus()
+              }
+            }}
+            className="text-[22px] font-semibold leading-snug text-ink"
+          />
           {/* Štítky z Todoistu jsou informace, ne pole k vyplnění —
               appka s nimi nic nedělá, ale schovávat je by bylo divné. */}
           {task.todoistLabels?.length ? (
-            <div className="mt-1.5 flex flex-wrap gap-1">
+            <div className="mt-1 flex flex-wrap gap-1">
               {task.todoistLabels.map((l) => (
                 <span key={l} className="rounded-full bg-well px-2 py-0.5 text-[11px] text-ink-soft">
                   @{l}
@@ -266,238 +341,14 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
               ))}
             </div>
           ) : null}
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={label} htmlFor="pole-klient">Klient</label>
-            <select
-              id="pole-klient"
-              className={field}
-              value={clientId}
-              disabled={fromTodoist}
-              onChange={(e) => {
-                setClientId(e.target.value)
-                setProjectId('')
-              }}
-            >
-              <option value="">Bez klienta</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={label} htmlFor="pole-projekt">Projekt</label>
-            <select
-              id="pole-projekt"
-              className={field}
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              disabled={fromTodoist || !clientId}
-            >
-              <option value="">{clientId ? 'Bez projektu' : 'Nejdřív vyber klienta'}</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Jedno datum, ne dvě. Dvě data vedle sebe byla nejčastější zádrhel
-            celé appky — potřebovala odstavec, který vysvětluje, čím se liší.
-            Když pole potřebuje odstavec, netrefil ho model, ne uživatel.
-            Primární je Termín: to píše parser i rychlé zadávání („ve čtvrtek
-            report"), to je pro člověka „ten den". Naplánováno je vrstva
-            navrch (ranní návrh, uzávěrka) a ukáže se, jen když je vyplněné
-            nebo si o něj člověk řekne. Data se nemění, jen se přestalo
-            ptát na obojí naráz. */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={label} htmlFor="pole-termin">Termín</label>
-            <input
-              id="pole-termin"
-              type="date"
-              className={field}
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-            />
-            <DenChipy value={dueDate} onChange={setDueDate} />
-          </div>
-          <div>
-            {/* Čas patří k termínu, proto stojí vedle něj. */}
-            <label className={label} htmlFor="cas-terminu">Čas</label>
-            <input
-              id="cas-terminu"
-              type="time"
-              className={field}
-              value={dueTime}
-              onChange={(e) => {
-                setDueTime(e.target.value)
-                // čas na prázdném datu doplní dnešek, ať se neztratí
-                if (e.target.value && !dueDate) setDueDate(todayISO())
-              }}
-            />
-          </div>
-        </div>
-
-        {planujuJinyDen ? (
-          <div>
-            <label className={label} htmlFor="pole-naplanovano">Naplánováno na jiný den</label>
-            <input
-              id="pole-naplanovano"
-              type="date"
-              className={field}
-              value={scheduledFor}
-              onChange={(e) => setScheduledFor(e.target.value)}
-            />
-            <DenChipy value={scheduledFor} onChange={setScheduledFor} />
-            {/* Vysvětlení jen tady, kde je o co jde — ne pod každým úkolem. */}
-            <p className="mt-1 text-[12px] leading-relaxed text-ink-faint">
-              Den, kdy se tomu chceš věnovat — ten se ukáže na Dnes. Termín zůstává
-              tím, dokdy to musí být hotové.
-            </p>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setPlanujuJinyDen(true)}
-            className="-my-1 py-2 text-[13px] font-medium text-accent-deep transition-transform duration-150 active:scale-95"
-          >
-            + Naplánovat na jiný den
-          </button>
-        )}
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={label} htmlFor="pole-priorita">Priorita</label>
-            <select
-              id="pole-priorita"
-              className={field}
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as Priority)}
-            >
-              {(Object.keys(PRIORITY_LABELS) as Priority[]).map((p) => (
-                <option key={p} value={p}>
-                  {PRIORITY_LABELS[p]}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={label} htmlFor="pole-opakovani">Opakování</label>
-            <select id="pole-opakovani" className={field} value={recurrence} onChange={(e) => setRecurrence(e.target.value)}>
-              <option value="none">Neopakuje se</option>
-              {(Object.keys(PRESET_LABELS) as RecurrencePreset[]).map((p) => (
-                <option key={p} value={p}>
-                  {PRESET_LABELS[p]}
-                </option>
-              ))}
-              {initialRecurrence === 'custom' && task.recurrenceRule && (
-                <option value="custom">Vlastní ({humanizeRule(task.recurrenceRule)})</option>
-              )}
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label className={label}>
-            Podúkoly
-            {subtasks.length > 0 && ` · ${subtasks.filter((s) => s.done).length}/${subtasks.length}`}
-          </label>
-          {subtasks.length > 0 && (
-            <ul className="mb-1.5 divide-y divide-line overflow-hidden rounded-lg border border-line">
-              {subtasks.map((s) => (
-                <li key={s.id} className="flex items-center gap-2.5 bg-card px-3 py-2">
-                  <button
-                    type="button"
-                    aria-label={s.done ? `Vrátit podúkol ${s.title}` : `Dokončit podúkol ${s.title}`}
-                    onClick={() => {
-                      persistSubtasks(
-                        subtasks.map((x) => (x.id === s.id ? { ...x, done: !x.done } : x)),
-                      )
-                      // krok z Todoistu se odškrtne i tam
-                      void setTodoistSubtaskDone(s.id, !s.done)
-                    }}
-                    className="-m-1.5 shrink-0 p-1.5 transition-transform duration-150 active:scale-90"
-                  >
-                    <span
-                      key={String(s.done)}
-                      className={`pop flex h-[18px] w-[18px] items-center justify-center rounded-full border-[1.5px] transition-colors duration-200 ${
-                        s.done ? 'border-accent bg-accent text-card' : 'border-ink-faint text-transparent'
-                      }`}
-                    >
-                      <svg viewBox="0 0 20 20" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M4.5 10.5l3.8 3.8 7.2-8.6" />
-                      </svg>
-                    </span>
-                  </button>
-                  <span
-                    className={`min-w-0 flex-1 truncate text-[14px] ${
-                      s.done ? 'text-ink-faint line-through' : 'text-ink'
-                    }`}
-                  >
-                    {s.title}
-                  </span>
-                  {/* Krok z Todoistu odsud mazat nejde — smazal by se
-                      klientovi v jeho projektu a stejně by se vrátil.
-                      Odškrtnout jde, to je v pořádku. */}
-                  {s.id.startsWith(SUB_PREFIX) ? (
-                    <span className="shrink-0 text-[11px] text-ink-faint" title="Krok z Todoistu">
-                      Todoist
-                    </span>
-                  ) : (
-                  <button
-                    type="button"
-                    aria-label={`Smazat podúkol ${s.title}`}
-                    onClick={() => persistSubtasks(subtasks.filter((x) => x.id !== s.id))}
-                    className="-m-2 shrink-0 p-2 text-ink-faint transition-transform duration-150 active:scale-90"
-                  >
-                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                      <path d="M6 6l12 12M18 6L6 18" />
-                    </svg>
-                  </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex gap-1.5">
-            <input
-              className={`${field} min-w-0 flex-1`}
-              aria-label="Přidat podúkol"
-              placeholder="Přidat podúkol…"
-              value={newSub}
-              enterKeyHint="done"
-              onChange={(e) => setNewSub(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  addSubtask()
-                }
-              }}
-            />
-            <button
-              type="button"
-              aria-label="Přidat podúkol"
-              disabled={!newSub.trim()}
-              onClick={addSubtask}
-              className="flex w-10 shrink-0 items-center justify-center rounded-lg bg-well text-ink-soft transition-transform duration-150 active:scale-90 disabled:opacity-30"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <label className={label} htmlFor="pole-poznamky">Poznámky</label>
-          <textarea id="pole-poznamky" className={field} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <AutoTextarea
+            id="pole-poznamky"
+            aria-label="Poznámky"
+            value={notes}
+            placeholder="Poznámka…"
+            onChange={(e) => setNotes(e.target.value)}
+            className="mt-1.5 text-[15px] leading-relaxed text-ink-soft"
+          />
           {odkazy.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2" data-odkazy>
               {odkazy.map((o) => (
@@ -519,6 +370,295 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           )}
         </div>
 
+        {/* Stavová řádka: stejné sloty jako v doku. Nezalamuje se, přetéká
+            k okraji panelu. Naplánováno je vrstva navrch termínu (ranní
+            návrh, uzávěrka) — proto stojí až na konci a vysvětluje se jen
+            v otevřeném panelu, ne pod každým úkolem. */}
+        <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4" style={{ scrollbarWidth: 'none' }}>
+          <SlotChip
+            slot="date"
+            label="Termín"
+            value={dueDate ? formatDayLabel(dueDate) + (dueTime ? ` ${dueTime}` : '') : undefined}
+            open={picker === 'date'}
+            onTap={() => otevri('date')}
+            icon={<path d="M4.5 6.5h15v13h-15zM4.5 10h15M8.5 4v4M15.5 4v4" />}
+          />
+          <SlotChip
+            slot="client"
+            label="Klient"
+            value={client?.name}
+            dot={client?.color}
+            open={picker === 'client'}
+            onTap={fromTodoist ? zamceno : () => otevri('client')}
+            icon={<><circle cx="12" cy="8.5" r="3.5" /><path d="M5.5 19.5c.8-3.4 3.4-5.25 6.5-5.25s5.7 1.85 6.5 5.25" /></>}
+          />
+          <SlotChip
+            slot="project"
+            label="Projekt"
+            value={project?.name}
+            open={picker === 'project'}
+            onTap={fromTodoist ? zamceno : () => otevri('project')}
+            icon={<path d="M4 7.5a2 2 0 012-2h4l2 2.5h6a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2z" />}
+          />
+          <SlotChip
+            slot="priority"
+            label="Priorita"
+            value={priority !== 'normal' ? PRIORITY_LABELS[priority] : undefined}
+            open={picker === 'priority'}
+            onTap={() => otevri('priority')}
+            icon={<path d="M12 5v9M12 17.5v1" />}
+          />
+          <SlotChip
+            slot="recurrence"
+            label="Opakování"
+            value={recurrenceLabel}
+            open={picker === 'recurrence'}
+            onTap={() => otevri('recurrence')}
+            icon={<path d="M4 12a8 8 0 0 1 13.7-5.6L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 0 1-13.7 5.6L4 15.5M4 20v-4.5h4.5" />}
+          />
+          <SlotChip
+            slot="scheduled"
+            label="Naplánovat na jiný den"
+            value={scheduledFor ? `Plán ${formatDayLabel(scheduledFor)}` : undefined}
+            open={picker === 'scheduled'}
+            onTap={() => otevri('scheduled')}
+            icon={<path d="M12 6v6l3.5 2M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18z" />}
+          />
+        </div>
+
+        {/* Jediné místo, kde se cokoli rozbaluje — pod řádkou slotů. */}
+        {picker && (
+          <div className="rise rounded-2xl bg-well p-3">
+            {picker === 'date' && (
+              <VyberDne value={dueDate} bezPopisek="Bez termínu" onChange={setDueDate}>
+                {dueDate && (
+                  <div className="rise flex items-center gap-2 pt-1">
+                    <span className="shrink-0 text-[13px] font-medium text-ink-soft">Čas</span>
+                    <input
+                      type="time"
+                      aria-label="Čas termínu"
+                      value={dueTime}
+                      onChange={(e) => setDueTime(e.target.value)}
+                      className="min-w-0 flex-1 rounded-full border border-transparent bg-card px-3 py-2 text-[15px] font-medium text-ink outline-none focus:border-accent/50"
+                    />
+                    {dueTime && (
+                      <button type="button" onClick={() => setDueTime('')} className={`${pill} bg-card text-ink-soft`}>
+                        Bez času
+                      </button>
+                    )}
+                  </div>
+                )}
+              </VyberDne>
+            )}
+            {picker === 'scheduled' && (
+              <VyberDne value={scheduledFor} bezPopisek="Bez plánu" onChange={setScheduledFor}>
+                <p className="pt-1 text-[12px] leading-relaxed text-ink-faint">
+                  Den, kdy se tomu chceš věnovat — ten se ukáže na Dnes. Termín zůstává tím,
+                  dokdy to musí být hotové.
+                </p>
+              </VyberDne>
+            )}
+            {picker === 'client' && (
+              <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                {clients.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    aria-pressed={clientId === c.id}
+                    onClick={() => {
+                      setClientId(c.id)
+                      if (project && project.clientId !== c.id) setProjectId('')
+                      setPicker(null)
+                    }}
+                    className={`${pill} inline-flex items-center gap-1.5 ${clientId === c.id ? 'bg-accent text-card' : 'bg-card text-ink'}`}
+                  >
+                    <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />
+                    {c.name}
+                  </button>
+                ))}
+                {clientId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setClientId('')
+                      setProjectId('')
+                      setPicker(null)
+                    }}
+                    className={`${pill} bg-card text-ink-soft`}
+                  >
+                    Bez klienta
+                  </button>
+                )}
+                {clients.length === 0 && (
+                  <span className="px-1 py-1.5 text-[13px] text-ink-faint">Zatím žádní klienti — založ je v záložce Klienti.</span>
+                )}
+              </div>
+            )}
+            {picker === 'project' && (
+              <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                {projects.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    aria-pressed={projectId === p.id}
+                    onClick={() => {
+                      setProjectId(p.id)
+                      setPicker(null)
+                    }}
+                    className={`${pill} ${projectId === p.id ? 'bg-accent text-card' : 'bg-card text-ink'}`}
+                  >
+                    ▸ {p.name}
+                  </button>
+                ))}
+                {projectId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProjectId('')
+                      setPicker(null)
+                    }}
+                    className={`${pill} bg-card text-ink-soft`}
+                  >
+                    Bez projektu
+                  </button>
+                )}
+                {projects.length === 0 && (
+                  <span className="px-1 py-1.5 text-[13px] text-ink-faint">
+                    {client ? `${client.name} nemá projekty.` : 'Nejdřív vyber klienta.'}
+                  </span>
+                )}
+              </div>
+            )}
+            {picker === 'priority' && (
+              <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                {(Object.keys(PRIORITY_LABELS) as Priority[]).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    aria-pressed={priority === p}
+                    onClick={() => {
+                      setPriority(p)
+                      setPicker(null)
+                    }}
+                    className={`${pill} ${priority === p ? 'bg-accent text-card' : 'bg-card text-ink'}`}
+                  >
+                    {PRIORITY_LABELS[p]}
+                  </button>
+                ))}
+              </div>
+            )}
+            {picker === 'recurrence' && (
+              <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                {[
+                  ['none', 'Neopakuje se'],
+                  ...(Object.keys(PRESET_LABELS) as RecurrencePreset[]).map((p) => [p, PRESET_LABELS[p]]),
+                  ...(initialRecurrence === 'custom' && task.recurrenceRule
+                    ? [['custom', `Vlastní (${humanizeRule(task.recurrenceRule)})`]]
+                    : []),
+                ].map(([id, text]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={recurrence === id}
+                    onClick={() => {
+                      setRecurrence(id)
+                      setPicker(null)
+                    }}
+                    className={`${pill} ${recurrence === id ? 'bg-accent text-card' : 'bg-card text-ink'}`}
+                  >
+                    {text}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Checklist — jedna karta, kroky a pole pro další v ní. */}
+        <section>
+          <h3 className="section-label mb-1.5">
+            podúkoly
+            {subtasks.length > 0 && ` · ${subtasks.filter((s) => s.done).length}/${subtasks.length}`}
+          </h3>
+          <div className="divide-y divide-line overflow-hidden rounded-2xl bg-well">
+            {subtasks.map((s) => (
+              <div key={s.id} className="flex items-center gap-2.5 px-3 py-2">
+                <button
+                  type="button"
+                  aria-label={s.done ? `Vrátit podúkol ${s.title}` : `Dokončit podúkol ${s.title}`}
+                  onClick={() => {
+                    persistSubtasks(subtasks.map((x) => (x.id === s.id ? { ...x, done: !x.done } : x)))
+                    // krok z Todoistu se odškrtne i tam
+                    void setTodoistSubtaskDone(s.id, !s.done)
+                  }}
+                  className="-m-1.5 shrink-0 p-1.5 transition-transform duration-150 active:scale-90"
+                >
+                  <span
+                    key={String(s.done)}
+                    className={`pop flex h-[18px] w-[18px] items-center justify-center rounded-full border-[1.5px] transition-colors duration-200 ${
+                      s.done ? 'border-accent bg-accent text-card' : 'border-edge text-transparent'
+                    }`}
+                  >
+                    <svg viewBox="0 0 20 20" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4.5 10.5l3.8 3.8 7.2-8.6" />
+                    </svg>
+                  </span>
+                </button>
+                <span className={`min-w-0 flex-1 truncate text-[15px] ${s.done ? 'text-ink-faint line-through' : 'text-ink'}`}>
+                  {s.title}
+                </span>
+                {/* Krok z Todoistu odsud mazat nejde — smazal by se
+                    klientovi v jeho projektu a stejně by se vrátil. */}
+                {s.id.startsWith(SUB_PREFIX) ? (
+                  <span className="shrink-0 text-[11px] text-ink-faint" title="Krok z Todoistu">
+                    Todoist
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    aria-label={`Smazat podúkol ${s.title}`}
+                    onClick={() => persistSubtasks(subtasks.filter((x) => x.id !== s.id))}
+                    className="-m-2 shrink-0 p-2 text-ink-faint transition-transform duration-150 active:scale-90"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            ))}
+            <div className="flex items-center gap-2.5 px-3 py-1">
+              <span className="h-[18px] w-[18px] shrink-0 rounded-full border-[1.5px] border-dashed border-edge" />
+              <input
+                className="min-w-0 flex-1 bg-transparent py-1.5 text-[15px] text-ink outline-none placeholder:text-ink-faint"
+                aria-label="Přidat podúkol"
+                placeholder="Přidat krok…"
+                value={newSub}
+                enterKeyHint="done"
+                onChange={(e) => setNewSub(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void addSubtask()
+                  }
+                }}
+              />
+              {newSub.trim() && (
+                <button
+                  type="button"
+                  aria-label="Přidat podúkol"
+                  onClick={() => void addSubtask()}
+                  className="pop flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-card transition-transform duration-150 active:scale-90"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+
         {/* Ukládá se hned při přepnutí, ne až tlačítkem: „kdo to vidí" je
             rozhodnutí o datech, ne rozepsaný text, a nemá čekat na Uložit. */}
         <TaskSharing
@@ -529,26 +669,32 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
         />
 
         {fromTodoist && (
-          <a
-            href={`https://app.todoist.com/app/task/${task.todoistId}`}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1.5 text-[13px] font-medium text-accent-deep"
-          >
-            Otevřít v Todoistu
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 5h5v5M19 5l-8 8M18 13.5V19H5V6h5.5" />
-            </svg>
-          </a>
+          <section className="space-y-2">
+            <p className="text-[13px] leading-relaxed text-ink-soft">
+              Název, termín a priorita se odsud píšou i do Todoistu.
+              {task.todoistRecurring && ' Opakuje se; odškrtnutím se posune na další termín.'}
+            </p>
+            <a
+              href={`https://app.todoist.com/app/task/${task.todoistId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent-deep"
+            >
+              Otevřít v Todoistu
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 5h5v5M19 5l-8 8M18 13.5V19H5V6h5.5" />
+              </svg>
+            </a>
+            <TodoistTalk task={task} />
+          </section>
         )}
-
-        {fromTodoist && <TodoistTalk task={task} />}
 
         {/* Lokální úkol u klienta s napojeným Todoistem — jedním ťuknutím
             ho uvidí i klient. Nikdy se to nestane samo bez zapnutí. */}
         {!fromTodoist && todoistClient && (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            className="w-full justify-start"
             disabled={sendState === 'sending' || sendState === 'sent'}
             onClick={async () => {
               setSendState('sending')
@@ -562,7 +708,6 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
               const err = await sendTaskToTodoist(task.id)
               setSendState(err ?? 'sent')
             }}
-            className="w-full rounded-lg border border-line px-3 py-2.5 text-left text-sm font-medium text-accent-deep transition-transform duration-150 active:scale-[0.99] disabled:opacity-50"
           >
             {sendState === 'sending'
               ? 'Posílám…'
@@ -571,48 +716,40 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
                 : sendState === 'idle'
                   ? `Poslat do Todoistu (${todoistClient.name})`
                   : sendState}
-          </button>
+          </Button>
         )}
 
         {/* Jediná otázka, která zbyla: smazání v Todoistu vzít zpět nejde,
             protože úkol zmizí i klientovi ve sdíleném projektu. Ptá se
             přímo v panelu, ne systémovým dialogem. */}
         {ptamSeNaTodoist && (
-          <div className="rise rounded-xl border border-line p-3">
+          <div className="rise rounded-2xl bg-well p-3">
             <p className="text-[13px] text-ink-soft">
               Smazat úkol i v Todoistu? Tam zmizí i klientovi ve sdíleném projektu
               a zpátky ho nevrátíš.
             </p>
             <div className="mt-2 flex flex-wrap justify-end gap-2">
-              <button
-                className="rounded-lg px-3 py-2 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-95"
-                onClick={() => setPtamSeNaTodoist(false)}
-              >
+              <Button variant="ghost" size="sm" onClick={() => setPtamSeNaTodoist(false)}>
                 Zrušit
-              </button>
-              <button
-                className="rounded-lg bg-well px-3 py-2 text-sm font-medium text-ink transition-transform duration-150 active:scale-95"
-                onClick={() => void del(close)}
-              >
+              </Button>
+              <Button variant="secondary" size="sm" className="bg-card" onClick={() => void del(close)}>
                 Jen tady
-              </button>
-              <button
-                className="rounded-lg bg-danger px-3 py-2 text-sm font-medium text-card transition-transform duration-150 active:scale-95"
-                onClick={() => void del(close, true)}
-              >
+              </Button>
+              <Button size="sm" className="bg-danger" onClick={() => void del(close, true)}>
                 I v Todoistu
-              </button>
+              </Button>
             </div>
           </div>
         )}
 
         <div className="flex items-center justify-between pt-1">
-          <button
-            className="px-2 py-2 text-sm font-medium text-danger transition-transform duration-150 active:scale-95"
+          <Button
+            variant="destructive"
+            className="-ml-2"
             onClick={() => (fromTodoist ? setPtamSeNaTodoist(true) : void del(close))}
           >
             Smazat
-          </button>
+          </Button>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={close}>
               Zrušit
@@ -676,11 +813,11 @@ function TodoistTalk({ task }: { task: Task }) {
 
   return (
     <div>
-      <label className={label}>Konverzace v Todoistu</label>
+      <h3 className="section-label mb-1.5">konverzace v Todoistu</h3>
       {comments.length > 0 && (
         <ul className="mb-1.5 space-y-1.5">
           {comments.map((c) => (
-            <li key={c.id} className="rounded-lg bg-well px-3 py-2">
+            <li key={c.id} className="rounded-2xl bg-well px-3 py-2">
               <p className="text-[11px] text-ink-faint">
                 {c.author || 'někdo'}
                 {/* datum komentáře je z Todoistu, tedy cizí vstup —
@@ -696,11 +833,11 @@ function TodoistTalk({ task }: { task: Task }) {
         </ul>
       )}
       {comments.length === 0 && (
-        <p className="mb-1.5 text-[13px] text-ink-faint">Zatím nic. Napiš první.</p>
+        <p className="mb-1.5 px-1 text-[13px] text-ink-faint">Zatím nic. Napiš první.</p>
       )}
-      <div className="flex gap-1.5">
+      <div className="flex items-center gap-2 rounded-full bg-well pl-4 pr-1">
         <input
-          className={`${field} min-w-0 flex-1`}
+          className="min-w-0 flex-1 bg-transparent py-2.5 text-[16px] text-ink outline-none placeholder:text-ink-faint"
           aria-label="Odpověď na komentář"
           placeholder="Odpovědět…"
           value={text}
@@ -718,7 +855,7 @@ function TodoistTalk({ task }: { task: Task }) {
           aria-label="Odeslat komentář"
           disabled={busy || !text.trim()}
           onClick={() => void send()}
-          className="flex w-10 shrink-0 items-center justify-center rounded-lg bg-well text-ink-soft transition-transform duration-150 active:scale-90 disabled:opacity-30"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-card transition-transform duration-150 active:scale-90 disabled:opacity-30"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 12h14M13 6l6 6-6 6" />

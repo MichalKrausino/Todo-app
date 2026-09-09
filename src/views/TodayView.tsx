@@ -17,7 +17,7 @@ import { formatFullDate, todayISO } from '../lib/dates'
 import { WORK_END, WORK_START, freeGaps, freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { computeSignals } from '../lib/signals'
 import { plural } from '../lib/labels'
-import { cn } from '../lib/cn'
+import { Chip } from '../components/Chip'
 import { HelpSheet } from '../components/HelpSheet'
 import { ShutdownSheet } from '../components/ShutdownSheet'
 import { TriageSheet } from '../components/TriageSheet'
@@ -72,30 +72,6 @@ interface Polozka {
 }
 
 // Kontextový chip: jedna řádka nad seznamem, každý chip otevře panel.
-const CHIP =
-  'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-transform duration-150 active:scale-95'
-
-function Chip({
-  tone = 'card',
-  className,
-  ...props
-}: React.ComponentProps<'button'> & { tone?: 'card' | 'accent' | 'note' | 'moss' }) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        CHIP,
-        tone === 'card' && 'bg-card text-ink shadow-card',
-        tone === 'accent' && 'bg-accent-wash text-accent-deep',
-        tone === 'note' && 'bg-card text-note-ink shadow-card',
-        tone === 'moss' && 'bg-card text-moss shadow-card',
-        className,
-      )}
-      {...props}
-    />
-  )
-}
-
 export function TodayView({
   onOpenTask,
   onOpenClient,

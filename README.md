@@ -49,6 +49,15 @@ instalace ani (v pozdější fázi) push notifikace.
   pamatuje)
 - Seznam klientů jako přehled: u každého na jedné řádce, co hoří („2 po
   termínu"), jak dlouho je ticho a kdy je další práce
+- Detail klienta je práce, ne nastavení: hlavička s touž stavovou řádkou,
+  řádka chipů („Upravit" otevře panel nastavení — jméno, barva, druh,
+  kontrola, hlídání, šablony, Todoist, sdílení, archivace, smazání), tiché
+  pole pro nový úkol a jeden seznam v jedné kartě: úkoly bez projektu, pak
+  projekty jako skupinové řádky (ťuknutí otevře panel projektu), hotovo
+  sbalené dole
+- Detail úkolu bez formuláře: název jako titulek, poznámka pod ním a jedna
+  stavová řádka slotů (Termín, Klient, Projekt, Priorita, Opakování,
+  Naplánovat) — stejná jako při zadávání v doku
 - Triáž propadlých: nadpis „po termínu" otevře průchod jeden po druhém —
   u každého dnes / příští týden / už neplatí, se „Zpět" na poslední krok
 - Odkaz v úkolu jde otevřít ťuknutím: Canva, Drive nebo brief v poznámce
@@ -84,7 +93,7 @@ instalace ani (v pozdější fázi) push notifikace.
   plán vs. realita, co odkládáš, u koho byl tichý týden, výhled na 7 dní
 - Pravidelná připomínka kontroly klienta (týdně / každé 2 týdny / měsíčně):
   úkol „Zkontrolovat klienta“ se po odškrtnutí sám vrací — zapíná se při
-  vytváření klienta nebo v jeho detailu
+  vytváření klienta nebo v jeho nastavení
 - Ranní návrh dne: server každé ráno vybere 3–6 úkolů (termíny, priority,
   odklady, zanedbaní klienti), pošle push notifikaci a v appce se návrhy
   přijímají/zamítají jedním klepnutím. Zapíná se v panelu synchronizace

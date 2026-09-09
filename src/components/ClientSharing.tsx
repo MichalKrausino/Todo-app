@@ -115,12 +115,12 @@ export function ClientSharing({ clientId }: { clientId: string }) {
               placeholder="e-mail kolegy"
               autoCapitalize="off"
               autoCorrect="off"
-              className="min-w-0 flex-1 rounded-lg border border-line px-2 py-1.5 text-[15px] outline-none focus:border-accent/60"
+              className="min-w-0 flex-1 rounded-full bg-well px-3 py-2 text-[16px] text-ink outline-none placeholder:text-ink-faint focus-visible:ring-2 focus-visible:ring-accent/60"
             />
             <button
               type="submit"
               disabled={busy || !email.trim()}
-              className="shrink-0 text-sm font-medium text-accent disabled:opacity-40"
+              className="shrink-0 text-sm font-medium text-accent-deep disabled:opacity-40"
             >
               Sdílet
             </button>
