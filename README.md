@@ -39,6 +39,11 @@ instalace ani (v pozdější fázi) push notifikace.
 - Obrazovky **Dnes** (po termínu / dnes / hotovo), **Plán** (podle dnů + bez
   termínu) a **Klienti** (detail, projekty, archivace)
 - Instalace na plochu, offline režim přes service worker
+- Dnes je jedna odpověď: hlavička, jedna řádka kontextu (ranní návrh,
+  nejbližší schůzka, uzávěrka, signály, bez termínu — každé chip a panel)
+  a jeden seznam v jedné kartě: triáž propadlých nahoře, připnuté,
+  propadlé, dnešní, hotovo sbalené dole. Přepínač Priorita / Klient
+  seskupí seznam po klientech.
 - Dnes bez zdi: propadlé ukážou pár řádků a zbytek řeší triáž, „bez
   termínu" a „hotovo" stojí sbalené do řádky s počtem (rozbalení si appka
   pamatuje)
