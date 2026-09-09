@@ -56,7 +56,10 @@ export function DockIcon({ children, className }: { children: React.ReactNode; c
   return (
     <motion.div
       ref={ref}
-      style={{ width: velikost, height: velikost }}
+      // Velikost řídí pružina, CSS přechod tu nemá co dělat — a v klidovém
+      // režimu by pojistka `transition-duration: 0.01ms` z každého zápisu
+      // šířky dělala „běžící" přechod, který audit chování napočítá.
+      style={{ width: velikost, height: velikost, transitionProperty: 'none' }}
       className={cn('flex shrink-0 items-center justify-center', className)}
     >
       {children}

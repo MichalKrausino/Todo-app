@@ -9,6 +9,7 @@
 // zařízení: `todo.…`). Kdo si sekci otevře, nechce ji zítra hledat znovu.
 
 import { useState } from 'react'
+import { DisclosureContent } from './ui/Disclosure'
 
 const KLIC = 'todo.dnes.rozbaleno'
 
@@ -76,7 +77,10 @@ export function SbalenaSekce({
           <path d="M9 6l6 6-6 6" />
         </svg>
       </button>
-      {otevreno && <div className="rise mt-1.5">{children}</div>}
+      {/* Disclosure (motion-primitives): obsah se rozbalí na výšku, ne skokem */}
+      <DisclosureContent open={otevreno}>
+        <div className="pt-1.5">{children}</div>
+      </DisclosureContent>
     </section>
   )
 }

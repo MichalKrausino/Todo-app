@@ -8,7 +8,7 @@ import { SyncButton, SyncSheet } from './components/SyncSheet'
 import { TaskEditSheet } from './components/TaskEditSheet'
 import { jeOtevrenyPanel } from './components/Sheet'
 import { jeMac, zkratkaZKlavesy } from './lib/shortcuts'
-import { MotionConfig } from 'motion/react'
+import { MotionConfig, motion } from 'motion/react'
 import { BlurFade } from './components/ui/BlurFade'
 import { ClickSpark } from './components/ui/ClickSpark'
 import { Dock, DockIcon } from './components/ui/Dock'
@@ -392,11 +392,18 @@ export default function App() {
                     }`}
                   >
                     {/* nový element při vybrání → ikona poskočí (tab-bounce) */}
-                    <DockIcon
-                      className={`rounded-full transition-colors duration-200 ${tab === t.id ? 'tab-on' : ''}`}
-                    >
+                    <DockIcon className="relative rounded-full">
+                      {/* Pilulka pod vybranou ikonou plyne mezi záložkami
+                          (layoutId, vzor AnimatedBackground z motion-primitives) */}
+                      {tab === t.id && (
+                        <motion.span
+                          layoutId="dok-pilulka"
+                          className="tab-on absolute inset-0 rounded-full"
+                          transition={{ type: 'spring', bounce: 0.25, duration: 0.5 }}
+                        />
+                      )}
                       {/* ikona bere 60 % pilulky, takže se zvětšuje s ní */}
-                      <span key={tab === t.id ? 'on' : 'off'} className={`h-[60%] w-[60%] ${tab === t.id ? 'tab-bounce block' : 'block'}`}>
+                      <span key={tab === t.id ? 'on' : 'off'} className={`relative h-[60%] w-[60%] ${tab === t.id ? 'tab-bounce block' : 'block'}`}>
                         {t.icon}
                       </span>
                     </DockIcon>
