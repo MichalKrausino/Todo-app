@@ -42,7 +42,8 @@ import { parseQuickAdd } from '../lib/quickAdd'
 import { neglectedDays } from '../lib/signals'
 import { TaskRow } from '../components/TaskRow'
 import { TemplatesView } from './TemplatesView'
-import { Titulek } from '../components/Titulek'
+import { TextEffect } from '../components/ui/TextEffect'
+import { Button } from '../components/ui/Button'
 
 export function ClientsView({
   onOpenTask,
@@ -187,21 +188,15 @@ function ClientList({
           a lámal se pod „+ Nový" — vypadalo to jako popisek tlačítka.
           Akce teď stojí na vlastním řádku pod ním. */}
       <header>
-        <Titulek text="Klienti" />
+        <TextEffect as="h1" per="char" preset="blur" className="display text-[2.1rem] font-semibold leading-tight">Klienti</TextEffect>
         <p className="text-sm text-ink-soft">Klienti i oblasti jako „Interní“ nebo „Osobní“</p>
         <div className="mt-3 flex items-center gap-2">
-          <button
-            onClick={() => setAdding((v) => !v)}
-            className="rounded-full bg-well px-3.5 py-2 text-sm font-medium text-ink transition-transform duration-150 active:scale-95"
-          >
+          <Button variant="secondary" size="sm" onClick={() => setAdding((v) => !v)}>
             {adding ? 'Zavřít' : '+ Nový'}
-          </button>
-          <button
-            onClick={onTemplates}
-            className="rounded-full bg-well px-3.5 py-2 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-95"
-          >
+          </Button>
+          <Button variant="secondary" size="sm" className="text-ink-soft" onClick={onTemplates}>
             Šablony
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -512,13 +507,9 @@ function NewClientForm({ usedColors, onDone }: { usedColors: Array<string | unde
         )}
       </div>
 
-      <button
-        type="submit"
-        disabled={!name.trim()}
-        className="w-full rounded-lg bg-accent py-2 text-sm font-medium text-card disabled:opacity-30"
-      >
+      <Button type="submit" disabled={!name.trim()} className="w-full">
         Vytvořit
-      </button>
+      </Button>
     </form>
   )
 }

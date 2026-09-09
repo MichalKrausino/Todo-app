@@ -4,16 +4,21 @@ import type { Task } from '../db/types'
 import { allClients, allProjects, allTasks } from '../db/repo'
 import { formatDayLabel } from '../lib/dates'
 import { Sheet } from './Sheet'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandShortcut } from './ui/Command'
+import { Kbd } from './ui/Kbd'
 
-// Globální vyhledávání: úkoly (i hotové), klienti a projekty na jednom
-// místě, bez ohledu na diakritiku. Úkol se otevře v detailu (panel se
-// vrství nad vyhledávání, kontext hledání zůstává), klient/projekt
-// naviguje na záložku Klienti a vyhledávání zavře.
+// Hledání jako příkazová paleta (cmdk ze shadcn/ui): úkoly (i hotové),
+// klienti a projekty na jednom místě, bez ohledu na diakritiku, a než
+// člověk začne psát, nabídne rychlé akce — na Macu je to ⌘K jako
+// v Linearu, na iPhonu totéž hledání s lupou. Šipky a Enter obstará
+// cmdk, filtr si appka dělá sama (cmdk diakritiku neskládá). Úkol se
+// otevře v detailu (panel se vrství nad paletu, kontext hledání zůstává),
+// klient/projekt naviguje na záložku Klienti a paletu zavře.
 
 const fold = (s: string) =>
   s
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
 
 // Nejbližší relevantní den úkolu — dřívější z „naplánováno“ a „termín“.
@@ -22,14 +27,27 @@ const effDate = (t: Task) =>
 
 const LIMIT_TASKS = 20
 
+export type RychlaAkce = 'novy' | 'dnes' | 'plan' | 'klienti' | 'ohlednuti' | 'sync'
+
+const AKCE: Array<{ id: RychlaAkce; popisek: string; klavesa?: string }> = [
+  { id: 'novy', popisek: 'Nový úkol', klavesa: 'N' },
+  { id: 'dnes', popisek: 'Dnes', klavesa: '1' },
+  { id: 'plan', popisek: 'Plán', klavesa: '2' },
+  { id: 'klienti', popisek: 'Klienti', klavesa: '3' },
+  { id: 'ohlednuti', popisek: 'Týdenní ohlédnutí' },
+  { id: 'sync', popisek: 'Synchronizace a nastavení' },
+]
+
 export function SearchSheet({
   onClose,
   onOpenTask,
   onOpenClient,
+  onAkce,
 }: {
   onClose: () => void
   onOpenTask: (t: Task) => void
   onOpenClient: (clientId: string) => void
+  onAkce?: (akce: RychlaAkce) => void
 }) {
   const [q, setQ] = useState('')
   const tasks = useLiveQuery(allTasks, []) ?? []
@@ -56,20 +74,23 @@ export function SearchSheet({
     return { tasks: hitTasks, clients: hitClients, projects: hitProjects }
   }, [needle, tasks, clients, projects])
 
+  // Rychlé akce se filtrují taky — „ohl" najde ohlédnutí i s jedním písmenem.
+  const akce = AKCE.filter((a) => !needle || fold(a.popisek).includes(needle))
+
   const empty =
-    results && results.tasks.length === 0 && results.clients.length === 0 && results.projects.length === 0
+    results && results.tasks.length === 0 && results.clients.length === 0 && results.projects.length === 0 && akce.length === 0
 
   return (
-    <Sheet onClose={onClose} tone="paper" className="min-h-[70dvh] space-y-4">
+    <Sheet onClose={onClose} tone="paper" className="min-h-[70dvh]">
       {(close) => (
-        <>
-          <input
-          aria-label="Hledat v úkolech, klientech a projektech"
+        <Command label="Hledání a rychlé akce" className="space-y-4">
+          <CommandInput
+            aria-label="Hledat v úkolech, klientech a projektech"
             autoFocus
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onValueChange={setQ}
             placeholder="Hledat úkoly, klienty, projekty…"
-            className="mt-2 w-full rounded-full border border-transparent bg-well px-4 py-2.5 text-[16px] text-ink outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus:bg-card"
+            className="mt-2"
           />
 
           {!results && (
@@ -77,107 +98,116 @@ export function SearchSheet({
               Prohledává názvy i poznámky, bez ohledu na diakritiku. Napiš aspoň dvě písmena.
             </p>
           )}
-          {empty && <p className="px-1 text-[13px] text-ink-faint">Nic nenalezeno.</p>}
 
-          {results && results.clients.length > 0 && (
-            <section className="rise">
-              <h2 className="section-label mb-2">klienti</h2>
-              <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
-                {results.clients.map((c) => (
-                  <li key={c.id}>
-                    <button
-                      className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors duration-150 active:bg-well/60"
-                      onClick={() => {
-                        close()
-                        onOpenClient(c.id)
-                      }}
-                    >
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: c.color }} />
-                      <span className="min-w-0 flex-1 truncate text-[16px] text-ink">{c.name}</span>
-                      {c.status !== 'active' && (
-                        <span className="text-[12px] text-ink-faint">
-                          {c.status === 'archived' ? 'archiv' : 'pauza'}
-                        </span>
-                      )}
-                    </button>
-                  </li>
+          <CommandList className="max-h-[calc(var(--vvh,100dvh)-12rem)]">
+            {empty && <CommandEmpty>Nic nenalezeno.</CommandEmpty>}
+
+            {onAkce && akce.length > 0 && (
+              <CommandGroup heading="rychlé akce">
+                {akce.map((a) => (
+                  <CommandItem
+                    key={a.id}
+                    value={`akce-${a.id}`}
+                    onSelect={() => {
+                      close()
+                      onAkce(a.id)
+                    }}
+                  >
+                    <span className="min-w-0 flex-1 truncate text-[16px] text-ink">{a.popisek}</span>
+                    {a.klavesa && (
+                      <CommandShortcut className="hidden [@media(pointer:fine)]:inline-flex">
+                        <Kbd>{a.klavesa}</Kbd>
+                      </CommandShortcut>
+                    )}
+                  </CommandItem>
                 ))}
-              </ul>
-            </section>
-          )}
+              </CommandGroup>
+            )}
 
-          {results && results.projects.length > 0 && (
-            <section className="rise">
-              <h2 className="section-label mb-2">projekty</h2>
-              <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
+            {results && results.clients.length > 0 && (
+              <CommandGroup heading="klienti">
+                {results.clients.map((c) => (
+                  <CommandItem
+                    key={c.id}
+                    value={`klient-${c.id}`}
+                    onSelect={() => {
+                      close()
+                      onOpenClient(c.id)
+                    }}
+                  >
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: c.color }} />
+                    <span className="min-w-0 flex-1 truncate text-[16px] text-ink">{c.name}</span>
+                    {c.status !== 'active' && (
+                      <span className="text-[12px] text-ink-faint">
+                        {c.status === 'archived' ? 'archiv' : 'pauza'}
+                      </span>
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            {results && results.projects.length > 0 && (
+              <CommandGroup heading="projekty">
                 {results.projects.map((p) => {
                   const c = clientMap.get(p.clientId)
                   return (
-                    <li key={p.id}>
-                      <button
-                        className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors duration-150 active:bg-well/60"
-                        onClick={() => {
-                          close()
-                          onOpenClient(p.clientId)
-                        }}
-                      >
-                        <span className="text-ink-faint">▸</span>
-                        <span className="min-w-0 flex-1 truncate text-[16px] text-ink">{p.name}</span>
-                        {c && (
-                          <span className="inline-flex max-w-32 items-center gap-1.5 truncate text-[12px] text-ink-soft">
-                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: c.color }} />
-                            {c.name}
-                          </span>
-                        )}
-                      </button>
-                    </li>
+                    <CommandItem
+                      key={p.id}
+                      value={`projekt-${p.id}`}
+                      onSelect={() => {
+                        close()
+                        onOpenClient(p.clientId)
+                      }}
+                    >
+                      <span className="text-ink-faint">▸</span>
+                      <span className="min-w-0 flex-1 truncate text-[16px] text-ink">{p.name}</span>
+                      {c && (
+                        <span className="inline-flex max-w-32 items-center gap-1.5 truncate text-[12px] text-ink-soft">
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: c.color }} />
+                          {c.name}
+                        </span>
+                      )}
+                    </CommandItem>
                   )
                 })}
-              </ul>
-            </section>
-          )}
+              </CommandGroup>
+            )}
 
-          {results && results.tasks.length > 0 && (
-            <section className="rise">
-              <h2 className="section-label mb-2">úkoly · {results.tasks.length}</h2>
-              <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
+            {results && results.tasks.length > 0 && (
+              <CommandGroup heading={`úkoly · ${results.tasks.length}`}>
                 {results.tasks.slice(0, LIMIT_TASKS).map((t) => {
                   const c = t.clientId ? clientMap.get(t.clientId) : undefined
                   const done = t.status === 'done'
                   const day = effDate(t)
                   return (
-                    <li key={t.id}>
-                      <button
-                        className="w-full px-4 py-3 text-left transition-colors duration-150 active:bg-well/60"
-                        onClick={() => onOpenTask(t)}
-                      >
-                        <div className={`text-[16px] leading-snug ${done ? 'text-ink-faint line-through' : 'text-ink'}`}>
-                          {t.title}
-                        </div>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13px]">
-                          {done && <span className="text-moss">✓ hotovo</span>}
-                          {c && (
-                            <span className="inline-flex items-center gap-1.5 text-ink-soft">
-                              <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />
-                              {c.name}
-                            </span>
-                          )}
-                          {!done && day && <span className="text-ink-soft">{formatDayLabel(day)}</span>}
-                          {!done && t.dueTime && <span className="text-ink-soft">do {t.dueTime}</span>}
-                        </div>
-                      </button>
-                    </li>
+                    <CommandItem key={t.id} value={`ukol-${t.id}`} onSelect={() => onOpenTask(t)} className="block">
+                      <div className={`text-[16px] leading-snug ${done ? 'text-ink-faint line-through' : 'text-ink'}`}>
+                        {t.title}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13px]">
+                        {done && <span className="text-moss">✓ hotovo</span>}
+                        {c && (
+                          <span className="inline-flex items-center gap-1.5 text-ink-soft">
+                            <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />
+                            {c.name}
+                          </span>
+                        )}
+                        {!done && day && <span className="text-ink-soft">{formatDayLabel(day)}</span>}
+                        {!done && t.dueTime && <span className="text-ink-soft">do {t.dueTime}</span>}
+                      </div>
+                    </CommandItem>
                   )
                 })}
-              </ul>
-              {results.tasks.length > LIMIT_TASKS && (
-                <p className="mt-1.5 px-1 text-[12px] text-ink-faint">
-                  Zobrazeno prvních {LIMIT_TASKS} — upřesni hledání.
-                </p>
-              )}
-            </section>
-          )}
-        </>
+                {results.tasks.length > LIMIT_TASKS && (
+                  <p className="px-4 py-2 text-[12px] text-ink-faint">
+                    Zobrazeno prvních {LIMIT_TASKS} — upřesni hledání.
+                  </p>
+                )}
+              </CommandGroup>
+            )}
+          </CommandList>
+        </Command>
       )}
     </Sheet>
   )

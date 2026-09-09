@@ -16,7 +16,7 @@ import { minutesToLabel } from '../lib/freeSlot'
 import { TaskRow } from '../components/TaskRow'
 import { DlouhySeznam } from '../components/DlouhySeznam'
 import { plural } from '../lib/labels'
-import { Titulek } from '../components/Titulek'
+import { TextEffect } from '../components/ui/TextEffect'
 
 
 const effectiveDate = (t: Task): string | undefined => {
@@ -138,7 +138,7 @@ export function UpcomingView({
   return (
     <div className="space-y-6">
       <header className="rise">
-        <Titulek text="Plán" />
+        <TextEffect as="h1" per="char" preset="blur" className="display text-[2.1rem] font-semibold leading-tight">Plán</TextEffect>
         <p className="text-sm text-ink-soft">Co je přede mnou</p>
       </header>
 

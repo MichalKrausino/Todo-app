@@ -29,6 +29,7 @@ import {
 } from '../lib/theme'
 import { getTodoistStatus, subscribeTodoistStatus } from '../sync/todoist'
 import { HelpSheet } from './HelpSheet'
+import { Switch } from './ui/Switch'
 import { SharingSheet } from './SharingSheet'
 import { sharedClientIds } from '../sync/shares'
 import { Sheet } from './Sheet'
@@ -450,21 +451,12 @@ function PushToggle() {
           <div className="font-medium">Ranní návrh dne</div>
           <div className="text-xs text-ink-soft">Notifikace každý den v 7:00</div>
         </div>
-        <button
-          onClick={() => void toggle()}
+        <Switch
+          checked={enabled}
           disabled={busy}
-          role="switch"
-          aria-checked={enabled}
-          className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200 ${
-            enabled ? 'bg-moss' : 'bg-ink-faint/40'
-          } disabled:opacity-50`}
-        >
-          <span
-            className={`absolute top-0.5 h-6 w-6 rounded-full bg-card shadow-card transition-[left] duration-300 ease-spring ${
-              enabled ? 'left-[22px]' : 'left-0.5'
-            }`}
-          />
-        </button>
+          onCheckedChange={() => void toggle()}
+          aria-label="Ranní návrh dne"
+        />
       </div>
       {error && <p className="rounded-2xl bg-danger-wash px-3 py-2 text-xs text-danger">{error}</p>}
     </div>

@@ -12,6 +12,7 @@ import {
   updateTask,
 } from '../db/repo'
 import { Sheet } from './Sheet'
+import { Button } from './ui/Button'
 import { najdiOdkazy } from '../lib/links'
 import { nabidniVraceni, ukazToast } from '../lib/toast'
 import { TaskSharing } from './TaskSharing'
@@ -613,19 +614,12 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
             Smazat
           </button>
           <div className="flex gap-2">
-            <button
-              className="rounded-lg px-4 py-2 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-95"
-              onClick={close}
-            >
+            <Button variant="ghost" onClick={close}>
               Zrušit
-            </button>
-            <button
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-card transition-transform duration-150 active:scale-95 disabled:opacity-30"
-              disabled={!title.trim()}
-              onClick={() => void save(close)}
-            >
+            </Button>
+            <Button disabled={!title.trim()} onClick={() => void save(close)}>
               Uložit
-            </button>
+            </Button>
           </div>
         </div>
         </>

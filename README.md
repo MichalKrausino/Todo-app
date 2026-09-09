@@ -54,8 +54,14 @@ instalace ani (v pozdější fázi) push notifikace.
   písmena
 - Vzhled po úklidu: karty bez obrysu na teplém papíře, oddělovače od
   textu, priorita tečkou, kroužek postupu v hlavičce Dnes, dny v Plánu
-  jako čísla s tečkou, postupné rozostření pod dokem, titulky obrazovek
-  se skládají po písmenech.
+  jako čísla s tečkou.
+- Pohyb z knihoven motion-primitives, magicui, react-bits a shadcn/ui
+  (motor `motion`): titulky se skládají po písmenech, obrazovky
+  nastupují z rozostření, hrany pod dokem a lištou se rozpouštějí
+  postupným rozostřením, čísla dojíždějí pružinou, splněný den slaví
+  konfety, ranní návrh obíhá světlo, dok na Macu zvětšuje ikony pod
+  kurzorem a ukazuje zkratky v tooltipech, hledání je paleta s rychlými
+  akcemi (⌘K).
 - Mazání se neptá, ale jde vrátit — u doku se po smazání ukáže „Vrátit"
   (u klienta se vrátí i jeho projekty a úkoly)
 - Synchronizace mezi zařízeními přes Supabase (Google login, tombstony,
