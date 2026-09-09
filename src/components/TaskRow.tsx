@@ -5,17 +5,13 @@ import { deleteBlockForTask } from '../sync/calendar'
 import { addDays, formatDayLabel, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { najdiOdkazy } from '../lib/links'
 
-// Priorita jako barevná pilulka — čitelnější než prostý text.
-const PRIO_BADGE: Partial<Record<Priority, { label: string; cls: string }>> = {
-  critical: {
-    label: 'kritická',
-    cls: 'rounded-full bg-danger-wash px-2 py-px text-[11px] font-semibold text-danger',
-  },
-  high: {
-    label: 'vysoká',
-    cls: 'rounded-full bg-note px-2 py-px text-[11px] font-medium text-note-ink',
-  },
-  low: { label: 'nízká', cls: 'rounded-full bg-well px-2 py-px text-[11px] text-ink-faint' },
+// Priorita jako tečka před názvem, ne barevná pilulka v metadatech:
+// pilulka byla na každém druhém řádku a seznam s ní vypadal jako
+// formulář. Tečka nese totéž (červená kritická, oranžová vysoká), jméno
+// priority zůstává pro čtečku. Nízká priorita se říká tiše slovem.
+const PRIO_DOT: Partial<Record<Priority, { label: string; cls: string }>> = {
+  critical: { label: 'kritická priorita', cls: 'bg-danger' },
+  high: { label: 'vysoká priorita', cls: 'bg-amber' },
 }
 
 // Prodleva mezi ťuknutím a skutečným dokončením (jako iOS Připomínky):
@@ -158,7 +154,7 @@ export function TaskRow({
     !!task.dueDate &&
     (task.dueDate < todayISO() ||
       (task.dueDate === todayISO() && !!task.dueTime && task.dueTime <= nowHM))
-  const prio = PRIO_BADGE[task.priority]
+  const prio = PRIO_DOT[task.priority]
   // První odkaz z názvu nebo poznámky jde otevřít rovnou z řádku —
   // „schválit banner" je jedno ťuknutí od Canvy, ne detail + kopírování.
   const odkaz = najdiOdkazy(task.title, task.notes)[0]
@@ -167,7 +163,7 @@ export function TaskRow({
   const fullPull = dragging && dx < -SWIPE_FULL // Zítra expanduje přes celou šířku
 
   return (
-    <li className="rise relative overflow-hidden bg-card" style={{ touchAction: 'pan-y' }}>
+    <li className="task-li rise relative overflow-hidden bg-card" style={{ touchAction: 'pan-y' }}>
       {/* podklad swipe doprava — fajfka roste s jistotou gesta */}
       {dx > 0 && (
         <div className="absolute inset-0 flex items-center bg-moss px-5 text-card">
@@ -233,10 +229,10 @@ export function TaskRow({
           className="-m-2 shrink-0 p-2 transition-transform duration-150 active:scale-90"
         >
           <span
-            className={`relative flex h-[22px] w-[22px] items-center justify-center rounded-full border-[1.5px] transition-colors duration-200 ${
+            className={`relative flex h-6 w-6 items-center justify-center rounded-full border-[1.25px] transition-colors duration-200 ${
               visualDone
                 ? 'check-drawn pop border-accent bg-accent text-card'
-                : 'border-ink-faint text-transparent'
+                : 'border-edge text-transparent'
             }`}
           >
             {/* záblesk prstence při dokončení (nový element na každé odškrtnutí) */}
@@ -261,9 +257,17 @@ export function TaskRow({
                 <path d="M12 11.8V20.5" />
               </svg>
             )}
+            {prio && !visualDone && (
+              <span
+                className={`mr-2 inline-block h-[7px] w-[7px] -translate-y-px rounded-full align-middle ${prio.cls}`}
+                title={prio.label}
+              >
+                <span className="sr-only">{prio.label}: </span>
+              </span>
+            )}
             {task.title}
           </div>
-          {(client || project || (showDate && task.dueDate) || task.dueTime || subs.length > 0 || prio || task.recurrenceRule || task.sourceTemplateItemId || task.todoistId || task.todoistUnread) && (
+          {(client || project || (showDate && task.dueDate) || task.dueTime || subs.length > 0 || task.priority === 'low' || task.recurrenceRule || task.sourceTemplateItemId || task.todoistId || task.todoistUnread) && (
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
               {client && (
                 <span className="inline-flex items-center gap-1.5 text-ink-soft">
@@ -319,7 +323,7 @@ export function TaskRow({
                   nový komentář
                 </span>
               )}
-              {prio && <span className={prio.cls}>{prio.label}</span>}
+              {task.priority === 'low' && !visualDone && <span className="text-ink-faint">nízká</span>}
             </div>
           )}
         </button>

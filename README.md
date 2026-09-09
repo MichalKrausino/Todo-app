@@ -52,6 +52,10 @@ instalace ani (v pozdější fázi) push notifikace.
 - Klávesnice na Macu: ⌘K hledá, N otevře zadávání, 1 · 2 · 3 přepínají
   záložky, ⌘↩ uloží detail, Esc zavře; při psaní se písmena berou jako
   písmena
+- Vzhled po úklidu: karty bez obrysu na teplém papíře, oddělovače od
+  textu, priorita tečkou, kroužek postupu v hlavičce Dnes, dny v Plánu
+  jako čísla s tečkou, postupné rozostření pod dokem, titulky obrazovek
+  se skládají po písmenech.
 - Mazání se neptá, ale jde vrátit — u doku se po smazání ukáže „Vrátit"
   (u klienta se vrátí i jeho projekty a úkoly)
 - Synchronizace mezi zařízeními přes Supabase (Google login, tombstony,

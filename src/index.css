@@ -1,10 +1,10 @@
 @import 'tailwindcss';
 
 /* ---------------------------------------------------------------------------
-   Design systém „iOS minimal“
+   Design systém „tichý minimalismus“
    Vzhled nativní Apple aplikace: systémový font (na iPhonu SF Pro),
-   seskupené bílé karty na světlém podkladu, hairline oddělovače,
-   frosted-glass panely, jediný modrý akcent, plný tmavý režim.
+   seskupené karty bez obrysu na teplém papíře, oddělovače od textu,
+   sklo jen tam, kde něco plave, jediný modrý akcent, plný tmavý režim.
    Komponenty používají výhradně tokeny níže — žádné surové barvy.
 --------------------------------------------------------------------------- */
 
@@ -14,10 +14,11 @@
 
   /* Plochy a text (světlý režim). Podklad je záměrně teplý, ne studená
      iOS šeď — papír působí klidněji a bílé karty na něm líp vyniknou. */
-  --color-paper: #f6f6f4; /* pozadí appky */
+  --color-paper: #f4f4f1; /* pozadí appky — o odstín hlubší než dřív, karty bez prstence potřebují kontrast */
   --color-card: #ffffff; /* karty a plochy */
   --color-well: #eeedea; /* zapuštěné plochy (inputy, pilulky) */
   --color-line: #e6e4df; /* hairline oddělovače */
+  --color-edge: #c6c6cc; /* obrys ovládacích prvků v klidu (zaškrtávátko) */
   --color-ink: #16161a; /* hlavní text — měkčí než čerň */
   /* Tiché tóny mají zůstat tiché, ale čitelné. Pod 4,5 : 1 je jedenácti-
      pixelový popisek na slunci k nepřečtení, takže tichost dělá velikost
@@ -40,11 +41,17 @@
   --color-amber: #ff9500; /* plná iOS oranžová (heatmapa, akcenty varování) */
   --color-moss: #1e7a35; /* ok / synchronizováno */
 
-  /* Hloubku dělá ostrý hairline, ne rozmazaný stín — kresba zůstane
-     čistá i na malém displeji a karta nevypadá „nalepená". */
-  --shadow-card: 0 0 0 1px rgb(22 22 26 / 0.05), 0 1px 3px rgb(22 22 26 / 0.035);
+  /* Karty nemají prstenec. Hloubku dělá kontrast papír × karta; stín
+     pod kartou je tak slabý, že ho oko nevidí jako stín — jen karta
+     nevypadá nalepená. Dřív měl prstenec každý prvek (karty, tlačítka,
+     dok) a když má obrys všechno, nezvedá se nic. Jediný opravdový stín
+     mají plovoucí věci (plusko, toast). */
+  --shadow-card: 0 1px 2px rgb(22 22 26 / 0.04);
   --shadow-sheet: 0 -8px 40px -12px rgb(22 22 26 / 0.22);
-  --shadow-float: 0 0 0 1px rgb(22 22 26 / 0.05), 0 4px 14px -4px rgb(22 22 26 / 0.14);
+  --shadow-float: 0 8px 24px -10px rgb(22 22 26 / 0.28);
+
+  /* Zaoblení karet: 20 px místo 16 — o krok měkčí, blíž dnešnímu iOS. */
+  --radius-2xl: 1.25rem;
 
   /* pohybový systém — křivky jako v iOS (generují utility ease-*) */
   --ease-ios: cubic-bezier(0.32, 0.72, 0, 1); /* Apple sheet/navigace */
@@ -66,6 +73,7 @@
   --color-card: #17171b;
   --color-well: #212127;
   --color-line: #2c2c33;
+  --color-edge: #4a4a53;
   --color-ink: #f2f2f4;
   --color-ink-soft: #9a9aa2;
   --color-ink-faint: #8a8a91;
@@ -81,10 +89,11 @@
   --color-amber: #ff9f0a;
   --color-moss: #30d158;
 
-  /* v tmavém režimu dělá hloubku jemný světlý prstenec místo stínu */
-  --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.07), 0 6px 18px -12px rgb(0 0 0 / 0.8);
+  /* V tmavém režimu dělá hloubku samotný rozdíl ploch (card × paper);
+     stín se na černi neztratí, tak zůstává jen měkký pod plovoucími. */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
   --shadow-sheet: 0 -8px 40px -8px rgb(0 0 0 / 0.7);
-  --shadow-float: 0 2px 12px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.08);
+  --shadow-float: 0 8px 24px -8px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.06);
 }
 
 :root {
@@ -152,13 +161,32 @@ body {
    v kódu mohly zůstat psané malými (uppercase je nedělá „Dnes · 3"). */
 .section-label {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.005em;
   color: var(--color-ink-soft);
   padding-inline: 4px;
 }
 .section-label::first-letter {
   text-transform: uppercase;
+}
+
+/* Řádek úkolu v seskupeném seznamu: oddělovač vede od textu, ne od
+   kraje karty — pod zaškrtávátky zůstane čistý sloupec. Rodič dává
+   divide-y (1px spodní okraj); tady se jen zprůhlední a linka se
+   nakreslí od sloupce textu (16 px okraj + 24 px kolečko + 14 px mezera). */
+.task-li {
+  position: relative;
+  border-bottom-color: transparent;
+}
+.task-li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 54px;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--color-line);
+  pointer-events: none;
 }
 
 :focus-visible {
@@ -293,15 +321,120 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
   from {
     opacity: 0;
     transform: translate(var(--vx, 0px), 8px) scale(0.985);
+    filter: blur(6px);
   }
   to {
     opacity: 1;
     transform: none;
+    filter: blur(0);
   }
 }
 
 .view-enter {
   animation: view-in 0.36s var(--ease-ios) both;
+}
+
+/* Titulek obrazovky se skládá po písmenech: každý znak se vynoří z lehkého
+   rozostření o pár desítek ms po předchozím (vzor: TextEffect z
+   motion-primitives). Čtyři až sedm znaků, jednou za přepnutí — víc by
+   z toho byla estráda. Rozostření tu jde, protože jde o pár malých boxů;
+   na řádcích seznamu by filter při 120 Hz nestíhal. */
+@keyframes glyph-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.18em);
+    filter: blur(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+.glyph-in {
+  display: inline-block;
+  animation: glyph-in 0.55s var(--ease-glide) both;
+  animation-delay: calc(60ms + var(--stagger, 0) * 32ms);
+}
+
+/* Postupné rozostření na hranách rolovací plochy (vzor: ProgressiveBlur
+   z motion-primitives). Obsah se pod dokem a pod horní lištou nesekne
+   o hranu, ale rozpustí — tři vrstvy se stále silnějším rozostřením a
+   posunutou maskou dělají plynulý přechod, jedna vrstva by udělala jen
+   mléčný pruh. Vlastní vrstva mimo dok, protože dok je sklo a to má
+   svoje vlastní rozostření. */
+.veil {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+.veil,
+.veil::before,
+.veil::after {
+  -webkit-backdrop-filter: blur(var(--b));
+  backdrop-filter: blur(var(--b));
+}
+.veil::before,
+.veil::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.veil-bottom {
+  --b: 2px;
+  background: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--color-paper) 75%, transparent) 85%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 45%);
+  mask-image: linear-gradient(to bottom, transparent, #000 45%);
+}
+.veil-bottom::before {
+  --b: 6px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 30%, #000 70%);
+  mask-image: linear-gradient(to bottom, transparent 30%, #000 70%);
+}
+.veil-bottom::after {
+  --b: 14px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 55%, #000 92%);
+  mask-image: linear-gradient(to bottom, transparent 55%, #000 92%);
+}
+.veil-top {
+  --b: 2px;
+  background: linear-gradient(to top, transparent, color-mix(in oklab, var(--color-paper) 82%, transparent) 70%);
+  -webkit-mask-image: linear-gradient(to top, transparent, #000 45%);
+  mask-image: linear-gradient(to top, transparent, #000 45%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.veil-top.is-on {
+  opacity: 1;
+}
+.veil-top::before {
+  --b: 6px;
+  -webkit-mask-image: linear-gradient(to top, transparent 30%, #000 70%);
+  mask-image: linear-gradient(to top, transparent 30%, #000 70%);
+}
+.veil-top::after {
+  --b: 14px;
+  -webkit-mask-image: linear-gradient(to top, transparent 55%, #000 92%);
+  mask-image: linear-gradient(to top, transparent 55%, #000 92%);
+}
+
+/* „Omezit průhlednost" a prohlížeče bez backdrop-filter: závoj se
+   změní v obyčejný přechod do papíru, ať obsah pod dokem nesvítí. */
+@media (prefers-reduced-transparency: reduce) {
+  .veil,
+  .veil::before,
+  .veil::after {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .veil-bottom {
+    background: linear-gradient(to bottom, transparent, var(--color-paper) 70%);
+  }
+  .veil-top {
+    background: linear-gradient(to top, transparent, var(--color-paper) 60%);
+  }
 }
 
 /* Ťuknutí do řádku seznamu: krátké dosednutí místo prostého podbarvení.
@@ -744,6 +877,7 @@ body:has(.sheet-backdrop:not(.closing)) .app-shell {
 
 @media (prefers-reduced-motion: reduce) {
   .rise,
+  .glyph-in,
   .pop,
   .pop-soft,
   .roll-in,

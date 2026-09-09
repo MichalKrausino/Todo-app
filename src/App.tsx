@@ -234,10 +234,16 @@ export default function App() {
           svítí sám), po odscrollování se zamlží a obsah pod ni podjede —
           jinak by ikony seděly přímo na textu úkolů. Průchozí na dotyk,
           klikají jen samotná tlačítka. */}
+      {/* Závoj pod lištou: po odscrollování se obsah nahoře postupně
+          rozostří a rozpustí do papíru, místo aby se sekl o hranu
+          zamlžené lišty (dřív border-b + backdrop-blur na celé liště). */}
       <div
-        className={`pointer-events-none absolute inset-x-0 top-0 z-40 flex items-center justify-end gap-2 border-b px-4 pb-2.5 transition-colors duration-200 ${
-          scrolled ? 'border-line/70 bg-paper/80 backdrop-blur-xl' : 'border-transparent'
-        }`}
+        aria-hidden="true"
+        className={`veil veil-top top-0 z-30 ${scrolled ? 'is-on' : ''}`}
+        style={{ height: 'calc(4.4rem + env(safe-area-inset-top))' }}
+      />
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-40 flex items-center justify-end gap-2 px-4 pb-2.5"
         style={{ paddingTop: 'calc(0.85rem + env(safe-area-inset-top))' }}
       >
         <span
@@ -250,7 +256,7 @@ export default function App() {
         <button
           aria-label="Hledat"
           onClick={() => setSearchOpen(true)}
-          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-card/80 text-ink-soft shadow-card backdrop-blur transition-transform duration-150 active:scale-90"
+          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-[background-color,transform] duration-150 active:scale-90 active:bg-well"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="6.5" />
@@ -312,6 +318,12 @@ export default function App() {
       {/* Spodní dok: jedna plovoucí skleněná deska, přes kterou obsah
           prosvítá rozmazaný. Obal je průchozí na dotyk, klikatelná je
           jen samotná deska — u okrajů tak jde dál scrollovat obsah. */}
+      {/* Závoj pod dokem: seznam se pod sklem nezařízne, ale rozpustí. */}
+      <div
+        aria-hidden="true"
+        className="veil veil-bottom bottom-0 z-20"
+        style={{ height: 'calc(var(--dock-h, 9rem) + 1.25rem)' }}
+      />
       <footer
         ref={dockRef}
         className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-3"

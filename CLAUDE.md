@@ -119,8 +119,24 @@ zapisovala; (2) gesto stojí na **pointer events a pointer capture**, ne na
 rolovací ploše si prohlížeč vezme svislé gesto jako rolování a pošle
 `pointercancel` po dvou pohybech (změřeno). Vzor: vaul od E. Kowalského.
 
-Hloubku dělá **ostrý hairline v `--shadow-card`**, ne rozmazaný stín.
-Tokeny v `src/index.css` (Tailwind v4 `@theme`) — **používat výhradně je**,
+**Karty nemají prstenec.** `--shadow-card` je jen dotek, který kartu
+nenechá vypadat nalepenou; hloubku dělá kontrast papír × karta a jediný
+opravdový stín má to, co plave (`--shadow-float`: plusko, toast). Dřív měl
+obrys každý prvek — karty, kulatá tlačítka nahoře, dok — a když má obrys
+všechno, nezvedá se nic. Stejně tak: oddělovače v seznamu úkolů vedou
+**od textu, ne od kraje** (`.task-li` v `index.css`, rodič dál dává
+`divide-y`), priorita je **tečka před názvem** (červená kritická, oranžová
+vysoká; jméno zůstává pro čtečku), zaškrtávátko má 24 px a obrys `edge`,
+hlavička Dnes je titulek + **jedna řádka** s kroužkem postupu (SVG, animuje
+`stroke-dashoffset`), pás dnů v Plánu jsou čísla s tečkou, ne dlaždice,
+primární akce mimo dok jsou tiché pilulky `well`, prázdné stavy prostý
+text bez tečkovaného rámečku. Pohyb navíc, vzory z motion-primitives a
+magicui: titulky obrazovek skládá `Titulek` po písmenech (`.glyph-in`),
+obrazovka nastupuje s blur-fade (`view-in`) a hrany rolovací plochy pod
+dokem i pod horní lištou rozpouští **postupné rozostření** (`.veil`, tři
+vrstvy s posunutou maskou — jedna vrstva je jen mléčný pruh). Záměrně
+**bez** border beamů, gradientových textů a spotlight karet: na todo
+appce křičí. Tokeny v `src/index.css` (Tailwind v4 `@theme`) — **používat výhradně je**,
 žádné surové Tailwind barvy: `paper`/`card`/`well`/`line`, text
 `ink`/`ink-soft`/`ink-faint`, jediný akcent `accent` (klidná modrá
 `#3a6df0`, ne systémová iOS) + `accent-deep`/`accent-wash`, sémantické

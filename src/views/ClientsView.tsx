@@ -42,6 +42,7 @@ import { parseQuickAdd } from '../lib/quickAdd'
 import { neglectedDays } from '../lib/signals'
 import { TaskRow } from '../components/TaskRow'
 import { TemplatesView } from './TemplatesView'
+import { Titulek } from '../components/Titulek'
 
 export function ClientsView({
   onOpenTask,
@@ -186,18 +187,18 @@ function ClientList({
           a lámal se pod „+ Nový" — vypadalo to jako popisek tlačítka.
           Akce teď stojí na vlastním řádku pod ním. */}
       <header>
-        <h1 className="display text-[2.1rem] font-semibold leading-tight">Klienti</h1>
+        <Titulek text="Klienti" />
         <p className="text-sm text-ink-soft">Klienti i oblasti jako „Interní“ nebo „Osobní“</p>
         <div className="mt-3 flex items-center gap-2">
           <button
             onClick={() => setAdding((v) => !v)}
-            className="rounded-full bg-accent px-3.5 py-2 text-sm font-medium text-card transition-transform duration-150 active:scale-95"
+            className="rounded-full bg-well px-3.5 py-2 text-sm font-medium text-ink transition-transform duration-150 active:scale-95"
           >
             {adding ? 'Zavřít' : '+ Nový'}
           </button>
           <button
             onClick={onTemplates}
-            className="rounded-full border border-line bg-card px-3.5 py-2 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-95"
+            className="rounded-full bg-well px-3.5 py-2 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-95"
           >
             Šablony
           </button>
@@ -212,9 +213,7 @@ function ClientList({
       )}
 
       {clientsRaw !== undefined && clients.length === 0 && !adding && (
-        <div className="rounded-2xl border border-dashed border-line bg-card/60 px-4 py-8 text-center text-sm text-ink-faint">
-          Zatím žádní klienti. Začni tlačítkem „+ Nový“.
-        </div>
+        <p className="px-1 py-6 text-sm text-ink-faint">Zatím žádní klienti. Začni tlačítkem „+ Nový“.</p>
       )}
 
       {/* Celá sekce až od prvního klienta: prázdný <ul> má pořád bg-card
@@ -894,9 +893,7 @@ function ClientDetail({
             {projectTasks.length > 0 ? (
               <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{projectTasks.map(row)}</ul>
             ) : (
-              <p className="rounded-2xl border border-dashed border-line px-3 py-3 text-xs text-ink-faint">
-                Zatím bez úkolů — přiřaď je úkolu v detailu.
-              </p>
+              <p className="px-1 py-2 text-xs text-ink-faint">Zatím bez úkolů — přiřaď je úkolu v detailu.</p>
             )}
           </section>
         )
