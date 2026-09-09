@@ -215,7 +215,9 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   const ukolKlienta = () => page.locator('main').getByText('úkol pod klientem').count()
   T_(await ukolKlienta() > 0, 'úkol pod klientem se založil')
 
-  await page.getByRole('button',{name:'Smazat klienta'}).click(); await page.waitForTimeout(700)
+  // mazání bydlí v panelu nastavení klienta, ne na obrazovce
+  await page.getByRole('button',{name:'Upravit'}).click(); await page.waitForTimeout(600)
+  await page.getByRole('button',{name:'Smazat klienta'}).click(); await page.waitForTimeout(900)
   T_(await page.locator('main button').filter({hasText:'Pokusný'}).count() === 0, 'klient se smazal bez potvrzování')
   const vratitKlienta = page.getByRole('button',{name:'Vrátit'})
   T_(await vratitKlienta.count() > 0, 'po smazání klienta se nabídne vrácení')

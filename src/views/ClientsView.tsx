@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ClientSharing } from '../components/ClientSharing'
 import { sharedClientIds } from '../sync/shares'
-import type { Client, ClientKind, Task } from '../db/types'
+import type { Client, ClientKind, Project, Task } from '../db/types'
 import {
   activeClients,
   addClient,
@@ -18,15 +17,9 @@ import {
   ensureAreaClient,
   getClient,
   openTasks,
-  removeClient,
-  removeProject,
-  restoreDeleted,
   reopenTask,
   sortTasks,
-  updateClient,
-  updateProject,
 } from '../db/repo'
-import { activeTemplates, deployTemplate, undeployTemplate } from '../db/templates'
 import {
   CHECK_FREQUENCY_LABELS,
   checkFrequencyOf,
@@ -34,12 +27,16 @@ import {
   setClientCheck,
   type CheckFrequency,
 } from '../db/clientCheck'
-import { COLOR_NAMES, KIND_LABELS, firstFreeColor, plural } from '../lib/labels'
-import { nabidniVraceni } from '../lib/toast'
+import { COLOR_NAMES, KIND_LABELS, firstFreeColor } from '../lib/labels'
+import { stavKlienta } from '../lib/clientStatus'
 import { ColorPicker } from '../components/ColorPicker'
-import { formatDayLabel, formatDaysAgo, todayISO } from '../lib/dates'
+import { formatDayLabel, todayISO } from '../lib/dates'
 import { parseQuickAdd } from '../lib/quickAdd'
-import { neglectedDays } from '../lib/signals'
+import { Chip } from '../components/Chip'
+import { KlientSheet } from '../components/KlientSheet'
+import { ProjektSheet } from '../components/ProjektSheet'
+import { useRozbaleno } from '../components/SbalenaSekce'
+import { DisclosureContent } from '../components/ui/Disclosure'
 import { TaskRow } from '../components/TaskRow'
 import { TemplatesView } from './TemplatesView'
 import { TextEffect } from '../components/ui/TextEffect'
@@ -97,66 +94,25 @@ function ClientList({
     if (t.clientId) counts.set(t.clientId, (counts.get(t.clientId) ?? 0) + 1)
   }
 
-  // Nejbližší den, na který u klienta něco leží. Druhý řádek u klienta
-  // dřív nesl jen slovo „Klient" — u seznamu samých klientů to byl sloupec
-  // téhož slova. Kdy se k němu zase dostanu, je informace, kvůli které se
-  // na seznam kouká.
-  //
-  // Propadlé se počítají zvlášť a den se bere jen z toho, co teprve přijde:
-  // dřív se do „nejbližšího dne" započítal i propadlý termín, takže řádek
-  // ukazoval „čt 27. 8." — a to se čte jako plán, ne jako průšvih. Přitom
-  // „kde to hoří" je to první, kvůli čemu se na seznam klientů kouká.
+  // Stavová řádka klienta (`stavKlienta`): kolik hoří → ticho → kdy je
+  // další práce → druh, sdíleno. Pořadí je pořadí důležitosti, protože
+  // na úzkém displeji se ořezává zprava.
   const today = todayISO()
-  const nextDay = new Map<string, string>()
-  const overdue = new Map<string, number>()
+  const podleKlienta = new Map<string, Task[]>()
   for (const t of open) {
-    const den = [t.scheduledFor, t.dueDate].filter((d): d is string => Boolean(d)).sort()[0]
-    if (!t.clientId || !den) continue
-    if (den < today) {
-      overdue.set(t.clientId, (overdue.get(t.clientId) ?? 0) + 1)
-      continue
-    }
-    const dosud = nextDay.get(t.clientId)
-    if (!dosud || den < dosud) nextDay.set(t.clientId, den)
+    if (!t.clientId) continue
+    podleKlienta.set(t.clientId, [...(podleKlienta.get(t.clientId) ?? []), t])
   }
-
-  // Samotný den, bez uvozovacího slova: to by se na každém řádku opakovalo
-  // stejně jako dřív slovo „Klient", kdežto datum se liší. Pod jménem
-  // klienta a vedle počtu úkolů se „dnes" čte jako „kdy" samo od sebe.
-  // Stavová řádka klienta — jedna, a jen s tím, co má co říct. Pořadí je
-  // pořadí důležitosti, protože na úzkém displeji se ořezává zprava:
-  // kolik hoří → kdy je další práce → přívlastky (druh, sdíleno).
-  const podtitul = (c: Client): React.ReactNode => {
-    // U oblastí („Interní", „Osobní") se druh hlásí — u klienta je zbytečný.
-    const druh = c.kind === 'client' ? '' : KIND_LABELS[c.kind]
-    const pocet = counts.get(c.id) ?? 0
-    const hori = overdue.get(c.id) ?? 0
-    const den = nextDay.get(c.id)
-    const spolu = sdilene.has(c.id) ? 'sdíleno' : ''
-
-    // Ticho bývalo samostatný odznak vpravo. Tři prvky vedle sebe (odznak,
-    // počet, šipka) ale na 320 px zmáčkly řádku tak, že se ořízlo právě
-    // „2 po termínu" — ta nejdůležitější věc na obrazovce. Je to stav
-    // klienta jako každý jiný, tak patří do stavové řádky.
-    const ticho = neglectedDays(c)
-
-    const casti: Array<{ text: string; tone?: string }> = []
-    if (hori > 0) casti.push({ text: `${hori} po termínu`, tone: 'font-medium text-danger' })
-    if (ticho !== null) casti.push({ text: `ticho ${ticho} dní`, tone: 'font-medium text-note-ink' })
-    if (pocet === 0) casti.push({ text: 'žádné úkoly' })
-    else if (den) casti.push({ text: formatDayLabel(den).toLowerCase() })
-    // „nic naplánováno" vedle propadlých je hluk — propadlé řeknou dost.
-    else if (!hori) casti.push({ text: 'nic naplánováno' })
-    if (druh) casti.push({ text: druh })
-    if (spolu) casti.push({ text: spolu })
-
-    return casti.map((cast, i) => (
-      <span key={cast.text} className={cast.tone}>
+  const podtitul = (c: Client): React.ReactNode =>
+    stavKlienta(c, podleKlienta.get(c.id) ?? [], { sdileno: sdilene.has(c.id) }, today).map((cast, i) => (
+      <span
+        key={cast.text}
+        className={cast.tone === 'danger' ? 'font-medium text-danger' : cast.tone === 'note' ? 'font-medium text-note-ink' : undefined}
+      >
         {i > 0 && <span className="text-ink-faint"> · </span>}
         {cast.text}
       </span>
     ))
-  }
 
   const item = (c: Client) => (
     <li key={c.id}>
@@ -526,62 +482,49 @@ function ClientDetail({
   const client = useLiveQuery(() => getClient(id), [id])
   const projects = useLiveQuery(() => clientProjects(id), [id]) ?? []
   const tasks = useLiveQuery(() => clientOpenTasks(id), [id]) ?? []
-  // hotové úkoly jen kvůli postupu projektů („3 z 8 hotovo")
+  // hotové úkoly kvůli postupu projektů („3 z 8") a sbalené historii
   const everyTask = useLiveQuery(() => clientAllTasks(id), [id]) ?? []
-  const templates = useLiveQuery(activeTemplates, []) ?? []
   const checkTask = useLiveQuery(() => getClientCheckTask(id), [id])
+  const sdilene = useLiveQuery(sharedClientIds, [], new Set<string>())
   const [taskText, setTaskText] = useState('')
   const [projName, setProjName] = useState('')
   const [addingProject, setAddingProject] = useState(false)
-  // Přejmenování klienta: dřív šlo klienta jen smazat — i s projekty
-  // a úkoly. Překlep ve jméně tak stál celou historii.
-  const [renaming, setRenaming] = useState(false)
-  const [draftName, setDraftName] = useState('')
-  const [editProject, setEditProject] = useState<string | null>(null)
-  const [draftProject, setDraftProject] = useState('')
-  const [draftGoal, setDraftGoal] = useState('')
-  const [draftDue, setDraftDue] = useState('')
+  const [nastaveni, setNastaveni] = useState(false)
+  const [projekt, setProjekt] = useState<string | null>(null)
+  const [hotovoOtevreno, prepniHotovo] = useRozbaleno(`klient-hotovo`)
 
-  const todoistCount = everyTask.filter((t) => t.todoistId && !t.deletedAt).length
+  const todoistCount = everyTask.filter((t) => t.todoistId).length
 
   if (!client || client.deletedAt) return null
-
-  const startRename = () => {
-    setDraftName(client.name)
-    setRenaming(true)
-  }
-
-  const saveRename = () => {
-    const name = draftName.trim()
-    if (name && name !== client.name) void updateClient(id, { name })
-    setRenaming(false)
-  }
-
-  const toggleTemplate = (templateId: string) => {
-    void (client.templateIds.includes(templateId)
-      ? undeployTemplate(id, templateId)
-      : deployTemplate(id, templateId))
-  }
-
-  const setWatch = (value: string) => {
-    const n = Number(value)
-    void updateClient(id, { checkIntervalDays: n > 0 ? n : undefined })
-  }
 
   // Úkoly uzavřeného (archivovaného) projektu by jinak zmizely úplně —
   // sekce projektu se nevykreslí a mezi „bez projektu" nespadnou. Padají
   // proto do obecných úkolů klienta.
   const visibleProjects = new Set(projects.map((p) => p.id))
-  const noProject = sortTasks(
-    tasks.filter((t) => !t.projectId || !visibleProjects.has(t.projectId)),
+  // Šablona generuje instance 30 dní dopředu a detail je ukazoval čtyřikrát
+  // pod sebou („Kontrola kampaní" po 14. 9., po 21. 9., …). Tady stojí jen
+  // nejbližší výskyt každé pravidelné položky — zbytek je v Plánu.
+  const prvniVyskyt = new Map<string, Task>()
+  for (const t of tasks) {
+    if (!t.sourceTemplateItemId) continue
+    const dosud = prvniVyskyt.get(t.sourceTemplateItemId)
+    if (!dosud || (t.dueDate ?? '9999') < (dosud.dueDate ?? '9999')) prvniVyskyt.set(t.sourceTemplateItemId, t)
+  }
+  const otevrene = tasks.filter(
+    (t) => !t.sourceTemplateItemId || prvniVyskyt.get(t.sourceTemplateItemId) === t,
   )
+  const noProject = sortTasks(otevrene.filter((t) => !t.projectId || !visibleProjects.has(t.projectId)))
+  const hotove = everyTask
+    .filter((t) => t.status === 'done')
+    .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))
+    .slice(0, 30)
 
   const toggle = (t: Task) => {
     void (t.status === 'done' ? reopenTask(t.id) : completeTask(t.id))
   }
 
   const row = (t: Task) => (
-    <TaskRow key={t.id} task={t} onToggle={toggle} onOpen={onOpenTask} />
+    <TaskRow key={t.id} task={t} project={projects.find((p) => p.id === t.projectId)} onToggle={toggle} onOpen={onOpenTask} />
   )
 
   const submitTask = async (e: React.FormEvent) => {
@@ -611,46 +554,61 @@ function ClientDetail({
     setAddingProject(false)
   }
 
-  const archiveToggle = () => {
-    void updateClient(id, { status: client.status === 'archived' ? 'active' : 'archived' })
+  const today = todayISO()
+  const stav = stavKlienta(client, tasks, { sdileno: sdilene.has(id), todoist: todoistCount > 0 }, today)
+  const kontrola = checkFrequencyOf(checkTask)
+  const sablon = client.templateIds.length
+  const otevreny = projekt ? projects.find((p) => p.id === projekt) : undefined
+  const postup = (projectId: string) => {
+    const all = everyTask.filter((t) => t.projectId === projectId)
+    return { hotovo: all.filter((t) => t.status === 'done').length, celkem: all.length }
   }
 
-  // Bez ptaní, ale vratně. Systémový `confirm()` rozbíjel dojem nativní
-  // appky a stejně nechrání — kdo ho vidí pokaždé, odklepne ho po očku.
-  const del = async () => {
-    const jmeno = client.name
-    const plan = await removeClient(id)
-    onBack()
-    const pocet = (plan.tasks?.length ?? 0)
-    nabidniVraceni(
-      pocet
-        ? `Smazán „${jmeno}" a ${pocet} ${plural(pocet, 'úkol', 'úkoly', 'úkolů')}`
-        : `Smazán „${jmeno}"`,
-      () => restoreDeleted(plan),
+  // Jeden seznam v jedné kartě: úkoly bez projektu nahoře, pak každý
+  // projekt jako skupina s řádkou v hlavičce. Řádka projektu je odkaz
+  // do jeho panelu — na obrazovce nezůstává žádné tlačítko, které by
+  // něco uzavíralo nebo mazalo.
+  const skupinaHlavicka = (p: Project) => {
+    const { hotovo, celkem } = postup(p.id)
+    const late = Boolean(p.dueDate && p.dueDate < today && hotovo < celkem)
+    const zbyva = otevrene.filter((t) => t.projectId === p.id).length
+    return (
+      <li key={`p:${p.id}`} className="bg-well/50">
+        <button
+          type="button"
+          onClick={() => setProjekt(p.id)}
+          aria-label={`Projekt ${p.name}`}
+          className="flex w-full items-center gap-2 px-4 py-2 text-left"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-medium text-ink-soft first-letter:uppercase">{p.name}</span>
+            {(p.goal || p.dueDate || zbyva === 0) && (
+              <span className="flex flex-wrap items-center gap-x-2 text-[12px] text-ink-faint">
+                {p.goal && <span className="truncate">{p.goal}</span>}
+                {p.dueDate && (
+                  <span className={late ? 'font-medium text-danger' : ''}>do {formatDayLabel(p.dueDate)}</span>
+                )}
+                {zbyva === 0 && <span>{celkem > 0 ? 'všechno hotovo' : 'zatím bez úkolů'}</span>}
+              </span>
+            )}
+          </span>
+          {celkem > 0 && (
+            <span className="shrink-0 text-[12px] tabular-nums text-ink-faint">
+              {hotovo} z {celkem}
+            </span>
+          )}
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-faint/70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
+      </li>
     )
   }
 
-  const saveProject = (projectId: string) => {
-    const name = draftProject.trim()
-    if (!name) {
-      setEditProject(null)
-      return
-    }
-    void updateProject(projectId, {
-      name,
-      goal: draftGoal.trim() || undefined,
-      dueDate: draftDue || undefined,
-    })
-    setEditProject(null)
-  }
-
-  const delProject = async (projectId: string, name: string) => {
-    const plan = await removeProject(projectId)
-    nabidniVraceni(`Projekt „${name}" smazán`, () => restoreDeleted(plan))
-  }
+  const nic = tasks.length === 0 && hotove.length === 0 && projects.length === 0
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <button onClick={onBack} className="-my-2 -ml-1 flex items-center gap-1 py-2 pl-1 pr-2 text-sm font-medium text-accent-deep">
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M15 6l-6 6 6 6" />
@@ -658,327 +616,171 @@ function ClientDetail({
         Klienti
       </button>
 
-      {/* Hlavička se v klidu uhýbá plovoucím ikonám vpravo nahoře (pr-24),
-          aby jméno neběželo pod lupu a obláček. Při přejmenování ale panel
-          tu uhnutou šířku nechce — v 64 % šířky se paleta ořízne v půlce
-          a tlačítka se zlomí do dvou řádek. Sjede proto pod lištu ikon
-          (pt-14) a dostane celou šířku. */}
-      <header className={renaming ? 'pt-14' : 'pr-24'}>
-        {renaming ? (
-          <div className="rise space-y-2 rounded-2xl bg-card p-3 shadow-card">
-            <input
-              autoFocus
-              value={draftName}
-              aria-label="Jméno klienta"
-              onChange={(e) => setDraftName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') saveRename()
-                if (e.key === 'Escape') setRenaming(false)
-              }}
-              className="w-full rounded-lg border border-line bg-card px-3 py-2 text-[16px] outline-none focus:border-accent/60"
-            />
-            <ColorPicker value={client.color} onPick={(c) => void updateClient(id, { color: c })} />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setRenaming(false)}
-                className="rounded-lg px-3 py-1.5 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-95"
-              >
-                Hotovo
-              </button>
-              <button
-                onClick={saveRename}
-                disabled={!draftName.trim()}
-                className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-card transition-transform duration-150 active:scale-95 disabled:opacity-30"
-              >
-                Uložit název
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button onClick={startRename} className="flex w-full items-center gap-3 text-left">
-            <span className="h-4 w-4 shrink-0 rounded-full" style={{ background: client.color }} />
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate display text-[2.1rem] font-semibold leading-tight">{client.name}</h1>
-              <p className="text-sm text-ink-soft">
-                {KIND_LABELS[client.kind]}
-                {client.status === 'archived' && ' · archivovaný'}
-                <span className="text-ink-faint"> · ťukni pro úpravu</span>
-              </p>
-            </div>
-          </button>
-        )}
+      {/* Hlavička se uhýbá plovoucím ikonám vpravo nahoře (pr-24), aby
+          jméno neběželo pod lupu a obláček. Pod jménem je jedna stavová
+          řádka — táž, co v seznamu — a jedna řádka chipů: „Upravit" vede
+          do nastavení, ostatní jen říkají, co je zapnuté, a vedou tamtéž. */}
+      <header className="pr-24">
+        <div className="flex items-center gap-3">
+          <span className="h-4 w-4 shrink-0 rounded-full" style={{ background: client.color }} />
+          <h1 className="min-w-0 truncate display text-[2.1rem] font-semibold leading-tight">{client.name}</h1>
+        </div>
+        <p className="mt-0.5 truncate text-sm text-ink-soft">
+          {stav.map((cast, i) => (
+            <span
+              key={cast.text}
+              className={cast.tone === 'danger' ? 'font-medium text-danger' : cast.tone === 'note' ? 'font-medium text-note-ink' : ''}
+            >
+              {i > 0 && <span className="text-ink-faint"> · </span>}
+              {cast.text}
+            </span>
+          ))}
+          {client.status === 'archived' && <span className="text-ink-faint"> · archivovaný</span>}
+        </p>
       </header>
 
-      {/* Napojení na Todoist patří i sem — do nastavení kvůli jednomu
-          klientovi nikdo lézt nebude. */}
-      {(client.todoistProjectIds?.length ?? 0) > 0 && (
-        <div className="space-y-1.5 rounded-2xl bg-well px-3 py-2.5">
-          <p className="text-[13px] text-ink-soft">
-            Napojeno na Todoist
-            {todoistCount > 0 &&
-              ` · ${todoistCount} ${plural(todoistCount, 'úkol', 'úkoly', 'úkolů')} odtamtud`}
-          </p>
-          <label className="flex items-start gap-2 text-[12px] leading-snug text-ink-soft">
-            <input
-              type="checkbox"
-              checked={Boolean(client.todoistPushSince)}
-              onChange={(e) =>
-                void updateClient(id, {
-                  todoistPushSince: e.target.checked ? new Date().toISOString() : undefined,
-                })
-              }
-              className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
-            />
-            <span>
-              Nové úkoly zakládat i v Todoistu
-              <span className="block text-ink-faint">Klient je pak uvidí ve sdíleném projektu.</span>
-            </span>
-          </label>
-        </div>
-      )}
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 py-1" style={{ scrollbarWidth: 'none' }}>
+        <Chip onClick={() => setNastaveni(true)}>
+          <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-soft" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z" />
+            <path d="M13.5 8.5l2 2" />
+          </svg>
+          Upravit
+        </Chip>
+        {kontrola && (
+          <Chip onClick={() => setNastaveni(true)}>
+            <span className="text-ink-soft">Kontrola</span> {CHECK_FREQUENCY_LABELS[kontrola].toLowerCase()}
+          </Chip>
+        )}
+        {sablon > 0 && (
+          <Chip onClick={() => setNastaveni(true)}>
+            <span className="text-ink-soft">Šablony</span> {sablon}
+          </Chip>
+        )}
+        {todoistCount > 0 && (
+          <Chip tone="accent" onClick={() => setNastaveni(true)}>
+            Todoist · {todoistCount}
+          </Chip>
+        )}
+      </div>
 
-      <form onSubmit={submitTask} className="flex gap-2">
+      {/* Nový úkol jako v doku: tiché pole, plusko se vynoří až s textem
+          — modré „Přidat" na 30 % svítilo přes celou šířku, i když
+          nebylo co přidat. */}
+      <form onSubmit={submitTask} className="relative">
         <input
           value={taskText}
           onChange={(e) => setTaskText(e.target.value)}
           aria-label="Nový úkol pro klienta"
-          placeholder="Nový úkol (např. „zítra kontrola kampaní“)"
-          className="min-w-0 flex-1 rounded-lg border border-line bg-card px-3 py-2 text-[15px] outline-none focus:border-accent/60"
+          placeholder={`Nový úkol pro ${client.name}…`}
+          enterKeyHint="done"
+          className="w-full appearance-none rounded-full border border-transparent bg-card py-2.5 pl-4 pr-12 text-[16px] text-ink shadow-card outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus-visible:outline-none"
         />
         <button
           type="submit"
+          aria-label="Přidat úkol"
           disabled={!taskText.trim()}
-          className="rounded-lg bg-accent px-3 text-sm font-medium text-card disabled:opacity-30"
+          className={`absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-accent text-card transition-[opacity,transform] duration-200 active:scale-90 ${
+            taskText.trim() ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
         >
-          Přidat
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
         </button>
       </form>
 
-      {templates.length > 0 && (
-        <section>
-          <h2 className="mb-2 section-label">Šablony</h2>
-          <div className="flex flex-wrap gap-2">
-            {templates.map((t) => {
-              const deployed = client.templateIds.includes(t.id)
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => toggleTemplate(t.id)}
-                  className={`rounded-full px-3 py-1.5 text-sm font-medium ${
-                    deployed
-                      ? 'bg-accent text-card'
-                      : 'border border-line bg-card text-ink-soft'
-                  }`}
-                >
-                  {deployed ? '✓ ' : '+ '}
-                  {t.name}
-                </button>
-              )
-            })}
-          </div>
-        </section>
-      )}
-
-      {noProject.length > 0 && (
-        <section>
-          <h2 className="mb-2 section-label">Úkoly</h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{noProject.map(row)}</ul>
-        </section>
-      )}
-
-      {projects.map((p) => {
-        const projectTasks = sortTasks(tasks.filter((t) => t.projectId === p.id))
-        // postup počítá i hotové úkoly — jinak by projekt ke konci
-        // vypadal jako prázdný místo jako dotažený
-        const allOfProject = everyTask.filter((t) => t.projectId === p.id)
-        const projectDone = allOfProject.filter((t) => t.status === 'done').length
-        const projectTotal = allOfProject.length
-        const projectLate = Boolean(p.dueDate && p.dueDate < todayISO() && projectDone < projectTotal)
-        return (
-          <section key={p.id}>
-            <div className="mb-2 flex items-baseline justify-between gap-2">
-              {editProject === p.id ? (
-                // projekt šel dřív jen založit a smazat — překlep v názvu
-                // znamenal rozpad vazby na úkoly
-                <div className="min-w-0 flex-1 space-y-1.5">
-                  <input
-                    autoFocus
-                    aria-label="Název projektu"
-                    value={draftProject}
-                    onChange={(e) => setDraftProject(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') saveProject(p.id)
-                      if (e.key === 'Escape') setEditProject(null)
-                    }}
-                    className="w-full rounded-lg border border-line bg-card px-2.5 py-1.5 text-[16px] outline-none focus:border-accent/60"
-                  />
-                  <input
-                    aria-label="Cíl projektu"
-                    placeholder="Cíl — čeho chceš dosáhnout"
-                    value={draftGoal}
-                    onChange={(e) => setDraftGoal(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') saveProject(p.id)
-                      if (e.key === 'Escape') setEditProject(null)
-                    }}
-                    className="w-full rounded-lg border border-line bg-card px-2.5 py-1.5 text-[16px] outline-none focus:border-accent/60"
-                  />
-                  <div className="flex items-center gap-2">
-                    <span className="shrink-0 text-xs font-medium text-ink-soft">Termín</span>
-                    <input
-                      type="date"
-                      aria-label="Termín projektu"
-                      value={draftDue}
-                      onChange={(e) => setDraftDue(e.target.value)}
-                      className="min-w-0 flex-1 rounded-lg border border-line bg-card px-2.5 py-1.5 text-[16px] outline-none focus:border-accent/60"
-                    />
-                    <button
-                      onClick={() => saveProject(p.id)}
-                      className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-card transition-transform duration-150 active:scale-95"
-                    >
-                      Uložit
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  className="min-w-0 flex-1 text-left"
-                  onClick={() => {
-                    setDraftProject(p.name)
-                    setDraftGoal(p.goal ?? '')
-                    setDraftDue(p.dueDate ?? '')
-                    setEditProject(p.id)
-                  }}
-                >
-                  <h2 className="section-label truncate">{p.name}</h2>
-                  {(p.goal || p.dueDate || projectTasks.length > 0 || projectDone > 0) && (
-                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] normal-case">
-                      {p.goal && <span className="text-ink-soft">{p.goal}</span>}
-                      {p.dueDate && (
-                        <span className={projectLate ? 'font-medium text-danger' : 'text-ink-soft'}>
-                          do {formatDayLabel(p.dueDate)}
-                        </span>
-                      )}
-                      {projectTotal > 0 && (
-                        <span className="text-ink-faint">
-                          {projectDone} z {projectTotal} hotovo
-                        </span>
-                      )}
-                    </span>
-                  )}
-                </button>
-              )}
-              <div className="flex shrink-0 gap-2.5">
-                {/* uzavření projektu — hotová věc nemá zabírat místo */}
-                <button
-                  className="-my-2 px-1.5 py-2 text-xs text-ink-faint"
-                  onClick={() => void updateProject(p.id, { status: 'archived' })}
-                >
-                  Uzavřít
-                </button>
-                <button className="-my-2 px-1.5 py-2 text-xs text-ink-faint" onClick={() => void delProject(p.id, p.name)}>
-                  Smazat
-                </button>
-              </div>
-            </div>
-            {projectTasks.length > 0 ? (
-              <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">{projectTasks.map(row)}</ul>
-            ) : (
-              <p className="px-1 py-2 text-xs text-ink-faint">Zatím bez úkolů — přiřaď je úkolu v detailu.</p>
-            )}
-          </section>
-        )
-      })}
-
-      {addingProject ? (
-        <form onSubmit={submitProject} className="flex gap-2">
-          <input
-            autoFocus
-            value={projName}
-            onChange={(e) => setProjName(e.target.value)}
-            placeholder="Název projektu"
-            className="min-w-0 flex-1 rounded-lg border border-line bg-card px-3 py-2 text-[15px] outline-none focus:border-accent/60"
-          />
-          <button
-            type="submit"
-            disabled={!projName.trim()}
-            className="rounded-lg bg-accent px-3 text-sm font-medium text-card disabled:opacity-30"
-          >
-            OK
-          </button>
-        </form>
-      ) : (
-        <button onClick={() => setAddingProject(true)} className="py-1.5 text-sm font-medium text-accent-deep">
-          {projects.length === 0 ? '+ Rozdělit práci do projektu' : '+ Nový projekt'}
-        </button>
-      )}
-
-      {/* Hlídání klienta patří dolů: nastaví se jednou a pak se na něj
-          nesahá, kdežto úkoly jsou to, kvůli čemu sem člověk chodí. Dřív
-          stálo mezi polem pro nový úkol a seznamem, do kterého úkol padá. */}
       <section>
-        <h2 className="mb-2 section-label">hlídání klienta</h2>
-      <section className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
-        <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-          <div className="text-sm">
-            <div className="font-medium">Pravidelná kontrola</div>
-            <div className="text-xs text-ink-faint">
-              {checkTask?.dueDate
-                ? `Příště ${formatDayLabel(checkTask.dueDate).toLowerCase()}`
-                : 'Připomínka se vrací sama na Dnes'}
-            </div>
-          </div>
-          <select
-            value={checkFrequencyOf(checkTask) ?? ''}
-            onChange={(e) =>
-              void setClientCheck(client, (e.target.value || null) as CheckFrequency | null)
-            }
-            className="rounded-lg border border-line bg-card px-2 py-1.5 text-sm outline-none focus:border-accent/60"
+        <div className="mb-2 flex items-baseline justify-between gap-2">
+          <h2 className="section-label">úkoly · {otevrene.length}</h2>
+          <button
+            type="button"
+            onClick={() => setAddingProject((v) => !v)}
+            className="-my-1.5 px-1 py-1.5 text-[13px] font-medium text-accent-deep"
           >
-            <option value="">Vypnuto</option>
-            {(Object.keys(CHECK_FREQUENCY_LABELS) as CheckFrequency[]).map((f) => (
-              <option key={f} value={f}>
-                {CHECK_FREQUENCY_LABELS[f]}
-              </option>
-            ))}
-          </select>
+            {addingProject ? 'Zavřít' : '+ Projekt'}
+          </button>
         </div>
-        <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-          <div className="text-sm">
-            <div className="font-medium">Hlídat zanedbání</div>
-            <div className="text-xs text-ink-faint">
-              {client.lastActivityAt
-                ? `Poslední aktivita ${formatDaysAgo(client.lastActivityAt)}`
-                : 'Zatím žádná aktivita'}
-            </div>
-          </div>
-          <label className="flex items-center gap-1.5 text-sm text-ink-soft">
-            po
+
+        {addingProject && (
+          <form onSubmit={submitProject} className="rise mb-2 flex gap-2">
             <input
-              type="number"
-              min="0"
-              inputMode="numeric"
-              defaultValue={client.checkIntervalDays ?? ''}
-              placeholder="14"
-              onBlur={(e) => setWatch(e.target.value)}
-              className="w-16 rounded-lg border border-line px-2 py-1.5 text-center text-[15px] outline-none focus:border-accent/60"
+              autoFocus
+              value={projName}
+              onChange={(e) => setProjName(e.target.value)}
+              aria-label="Název nového projektu"
+              placeholder="Název projektu"
+              className="min-w-0 flex-1 rounded-full bg-card px-4 py-2 text-[16px] shadow-card outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
             />
-            dnech
-          </label>
+            <Button type="submit" disabled={!projName.trim()}>
+              Založit
+            </Button>
+          </form>
+        )}
+
+        <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+          {nic ? (
+            <p className="px-4 py-5 text-sm text-ink-faint">Zatím nic. Napiš první úkol nahoře — rozumí i „zítra" a „v pátek".</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {noProject.length > 0 && projects.length > 0 && (
+                <li className="bg-well/50 px-4 py-2 text-[13px] font-medium text-ink-soft">Bez projektu</li>
+              )}
+              {noProject.map(row)}
+              {projects.map((p) => [
+                skupinaHlavicka(p),
+                ...sortTasks(otevrene.filter((t) => t.projectId === p.id)).map(row),
+              ])}
+            </ul>
+          )}
+
+          {/* Hotovo sbalené na konci karty — historie, ne práce. */}
+          {hotove.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={prepniHotovo}
+                aria-expanded={hotovoOtevreno}
+                className="flex w-full items-center justify-between border-t border-line px-4 py-2.5 text-left"
+              >
+                <span className="section-label !px-0">hotovo · {hotove.length}</span>
+                <svg
+                  viewBox="0 0 24 24"
+                  className={`h-4 w-4 shrink-0 text-ink-faint/70 transition-transform duration-200 ${hotovoOtevreno ? 'rotate-90' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 6l6 6-6 6" />
+                </svg>
+              </button>
+              <DisclosureContent open={hotovoOtevreno}>
+                <ul className="divide-y divide-line border-t border-line">{hotove.map(row)}</ul>
+              </DisclosureContent>
+            </>
+          )}
         </div>
       </section>
-      </section>
 
-      <ClientSharing clientId={client.id} />
-
-      <footer className="flex gap-4 border-t border-line pt-4">
-        <button onClick={archiveToggle} className="-my-2 py-2 text-sm font-medium text-ink-soft">
-          {client.status === 'archived' ? 'Obnovit' : 'Archivovat'}
-        </button>
-        <button onClick={() => void del()} className="-my-2 py-2 text-sm font-medium text-danger">
-          Smazat klienta
-        </button>
-      </footer>
+      {nastaveni && (
+        <KlientSheet
+          client={client}
+          checkTask={checkTask}
+          todoistCount={todoistCount}
+          onClose={() => setNastaveni(false)}
+          onDeleted={onBack}
+        />
+      )}
+      {otevreny && (
+        <ProjektSheet
+          project={otevreny}
+          hotovo={postup(otevreny.id).hotovo}
+          celkem={postup(otevreny.id).celkem}
+          onClose={() => setProjekt(null)}
+        />
+      )}
     </div>
   )
 }

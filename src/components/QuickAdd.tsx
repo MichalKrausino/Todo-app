@@ -10,6 +10,7 @@ import { humanizeRule } from '../lib/rrule'
 import { ukazToast, type ToastAkce } from '../lib/toast'
 import { FETCH_WINDOW_DAYS } from '../sync/calendar'
 import { MonthPicker } from './MonthPicker'
+import { SlotChip, pill, slotBase } from './SlotChip'
 
 
 
@@ -37,13 +38,6 @@ const QUICK_DAYS: { label: string; day: (today: string) => string }[] = [
   // řádka rychlých dnů ořezávala uprostřed slova „Bez termínu".
   { label: 'Pondělí', day: (t) => toISODate(nextMonday(fromISODate(t))) },
 ]
-
-const pill = 'shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium transition-transform duration-150 active:scale-95'
-// Jeden tvar pro celou stavovou řádku — sloty i to, co vyčetl parser.
-// py-1.5 drží slot na 32 px — hlavní ovládání zadávání se musí trefovat
-// palcem na první pokus.
-const slotBase =
-  'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[12px] font-medium'
 
 // defaultToToday: na obrazovce Dnes jde úkol bez data na dnešek (scheduledFor)
 // — kdo píše na Dnes, myslí „udělám to dnes". Jinde bez data → inbox.
@@ -575,52 +569,5 @@ export function QuickAdd({
         </button>
       </form>
     </div>
-  )
-}
-
-// Slot stavu úkolu. Tři stavy, aby bylo na první pohled jasné, co platí:
-// prázdný (tichý, jen nabízí), vyplněný (akcentní, ukazuje hodnotu)
-// a otevřený (plný akcent — patří k němu panel nad polem).
-function SlotChip({
-  slot,
-  label,
-  value,
-  dot,
-  open,
-  onTap,
-  icon,
-}: {
-  slot: string
-  label: string
-  value?: string
-  dot?: string
-  open: boolean
-  onTap: () => void
-  icon: React.ReactNode
-}) {
-  const tone = open
-    ? 'bg-accent text-card'
-    : value
-      ? 'bg-accent-wash text-accent-deep'
-      : 'bg-well/60 text-ink-soft'
-  return (
-    <button
-      type="button"
-      data-slot={slot}
-      onPointerDown={(e) => e.preventDefault()}
-      onClick={onTap}
-      aria-label={value ? `${label}: ${value}` : label}
-      aria-pressed={open}
-      className={`${slotBase} ${tone} transition-[background-color,color,transform] duration-150 active:scale-95`}
-    >
-      {dot ? (
-        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: dot }} />
-      ) : (
-        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          {icon}
-        </svg>
-      )}
-      <span className="max-w-32 truncate">{value ?? label}</span>
-    </button>
   )
 }

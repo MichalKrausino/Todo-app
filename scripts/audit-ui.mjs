@@ -254,11 +254,14 @@ const obrazovky = [
     if (await zavrit.count()) { await zavrit.click(); await page.waitForTimeout(400) }
     await page.getByText('V Bílém').first().click(); await page.waitForTimeout(500)
   }],
-  // Přejmenování klienta: druhé místo, kde se vybírá barva.
-  ['Prejmenovani', async () => {
-    await page.locator('header button').first().click(); await page.waitForTimeout(500)
-  }],
 ]
+
+// Panely otevírané z detailu klienta: nastavení (druhé místo, kde se
+// vybírá barva — paleta se schválně otevírá) a projekt.
+const otevriKlienta = async () => {
+  await page.getByRole('button', { name: 'Klienti' }).click(); await page.waitForTimeout(450)
+  await page.getByText('V Bílém').first().click(); await page.waitForTimeout(500)
+}
 
 const otevriNastaveni = () => page.getByRole('button', { name: /synchronizace|sync|nastaven/i }).first().click()
 const panely = [
@@ -276,6 +279,15 @@ const panely = [
   ['Detail ukolu (druhy den)', async () => {
     await page.getByText('Zavolat Ondrovi').first().click(); await page.waitForTimeout(500)
     await page.getByRole('button', { name: /Naplánovat na jiný den/ }).click()
+  }, 1],
+  ['Nastaveni klienta', async () => {
+    await otevriKlienta()
+    await page.getByRole('button', { name: 'Upravit' }).click(); await page.waitForTimeout(500)
+    await page.getByRole('button', { name: /^Barva klienta:/ }).click(); await page.waitForTimeout(450)
+  }, 1],
+  ['Projekt', async () => {
+    await otevriKlienta()
+    await page.getByRole('button', { name: 'Projekt Meta Ads' }).click()
   }, 1],
   ['Sablony', async () => { await page.getByRole('button', { name: 'Klienti' }).click(); await page.waitForTimeout(450); await page.getByRole('button', { name: /Šablony/ }).click() }, 1],
 ]
