@@ -1,5 +1,6 @@
 import { Sheet } from './Sheet'
 import { zkratkyProNapovedu } from '../lib/shortcuts'
+import { Kbd } from './ui/Kbd'
 
 // Nápověda: appka umí spoustu věcí gestem nebo psaním, ale nic z toho
 // není vidět. Tohle je jediné místo, kde se to dá přečíst — otevírá se
@@ -101,9 +102,7 @@ export function HelpSheet({ onClose }: { onClose: () => void }) {
                 {zkratky.map((z) => (
                   <li key={z.klavesy} className="flex items-center justify-between gap-3 px-4 py-2.5">
                     <span className="text-[15px] text-ink">{z.co}</span>
-                    <kbd className="shrink-0 rounded-md bg-well px-2 py-0.5 font-sans text-[13px] font-medium text-ink-soft">
-                      {z.klavesy}
-                    </kbd>
+                    <Kbd className="h-6 shrink-0 px-2 text-[12px]">{z.klavesy}</Kbd>
                   </li>
                 ))}
               </ul>

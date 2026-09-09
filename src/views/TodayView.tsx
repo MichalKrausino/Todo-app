@@ -27,7 +27,12 @@ import { TaskRow } from '../components/TaskRow'
 import { DlouhySeznam } from '../components/DlouhySeznam'
 import { SbalenaSekce } from '../components/SbalenaSekce'
 import { plural } from '../lib/labels'
-import { Titulek } from '../components/Titulek'
+import { TextEffect } from '../components/ui/TextEffect'
+import confetti from 'canvas-confetti'
+import { AnimatedNumber } from '../components/ui/AnimatedNumber'
+import { BlurText } from '../components/ui/BlurText'
+import { BorderBeam } from '../components/ui/BorderBeam'
+import { Ripple } from '../components/ui/Ripple'
 
 // Nejbližší relevantní den úkolu — dřívější z „naplánováno“ a „termín“.
 const effectiveDate = (t: Task): string | undefined => {
@@ -78,14 +83,6 @@ const MIN_GAP_MIN = 30
 // obvod kroužku postupu (r = 7,5 ve viewBoxu 20)
 const RING = 2 * Math.PI * 7.5
 
-const CONFETTI = [
-  { left: '12%', cx: '-14px', cy: '-30px', color: 'var(--color-accent)' },
-  { left: '28%', cx: '10px', cy: '-38px', color: 'var(--color-moss)' },
-  { left: '44%', cx: '-8px', cy: '-26px', color: 'var(--color-note-ink)' },
-  { left: '58%', cx: '14px', cy: '-34px', color: 'var(--color-accent)' },
-  { left: '72%', cx: '-12px', cy: '-40px', color: 'var(--color-moss)' },
-  { left: '86%', cx: '8px', cy: '-28px', color: 'var(--color-accent-deep)' },
-]
 
 export function TodayView({
   onOpenTask,
@@ -218,6 +215,28 @@ export function TodayView({
   const visOverdue = overdue.filter((t) => !isPinned(t)).filter(byBatch)
   const visTodays = todays.filter((t) => !isPinned(t)).filter(byBatch)
 
+  // Splněný den slaví konfety přes celou obrazovku (canvas-confetti, jak
+  // ho zapojuje magicui) — jednou za den, ne při každém překreslení, a v
+  // klidovém režimu vůbec (disableForReducedMotion).
+  useEffect(() => {
+    if (!allDone) return
+    if (localStorage.getItem('todo.konfety') === today) return
+    localStorage.setItem('todo.konfety', today)
+    const css = getComputedStyle(document.documentElement)
+    const barvy = ['--color-accent', '--color-moss', '--color-amber', '--color-accent-deep'].map((t) => css.getPropertyValue(t).trim())
+    void confetti({
+      particleCount: 90,
+      spread: 70,
+      startVelocity: 32,
+      gravity: 0.9,
+      ticks: 180,
+      origin: { x: 0.5, y: 0.35 },
+      colors: barvy,
+      disableForReducedMotion: true,
+      zIndex: 60,
+    })
+  }, [allDone, today])
+
   const isEvening = new Date().getHours() >= 16
   const closeDay = () => {
     localStorage.setItem('todo.dayClosed', today)
@@ -246,7 +265,7 @@ export function TodayView({
   return (
     <div className="space-y-6">
       <header className="rise">
-        <Titulek text="Dnes" />
+        <TextEffect as="h1" per="char" preset="blur" className="display text-[2.1rem] font-semibold leading-tight">Dnes</TextEffect>
         {/* Jedna tichá řádka pod titulkem místo tří pater metadat. Postup
             dne nese kroužek (dřív pruh přes celou šířku), datum, počet a
             odhad práce stojí za ním jako text. Přetížení dne má vlastní
@@ -254,15 +273,6 @@ export function TodayView({
         <div className="relative mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-ink-soft">
           {planned > 0 && (
             <>
-              {/* tichá oslava: pár teček vyletí, když je den splněný */}
-              {allDone &&
-                CONFETTI.map((c, i) => (
-                  <span
-                    key={i}
-                    className="confetti"
-                    style={{ left: c.left, background: c.color, '--cx': c.cx, '--cy': c.cy, '--stagger': i } as React.CSSProperties}
-                  />
-                ))}
               <svg
                 key={done.length}
                 viewBox="0 0 20 20"
@@ -288,7 +298,7 @@ export function TodayView({
           <span className="inline-block first-letter:uppercase">{formatFullDate(new Date())}</span>
           {planned > 0 && (
             <span className="font-medium">
-              · <span key={done.length} className="roll-in">{done.length}</span> z {planned}
+              · <AnimatedNumber value={done.length} /> z {planned}
             </span>
           )}
           {unfinished.length > 0 && !overloaded && (
@@ -331,7 +341,9 @@ export function TodayView({
         return (
           <section className="rise" style={stagger(1)}>
             <h2 className="section-label mb-2">ranní návrh · {pending.length}</h2>
-            <ul className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
+            <ul className="relative divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
+              {/* BorderBeam (magicui): světlo obíhá kartu, kterou napsal server */}
+              <BorderBeam />
               {pending.map((s) => {
                 const task = taskById.get(s.taskId)!
                 const leaving = leavingSuggestions[s.taskId]
@@ -660,12 +672,14 @@ export function TodayView({
           nacteno &&
           overdue.length === 0 &&
           pinned.length === 0 && (
-            <div className="rounded-2xl bg-card px-5 py-8 text-center shadow-card">
-              <svg viewBox="0 0 48 48" className="breathe mx-auto h-12 w-12 text-accent/70" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <div className="relative overflow-hidden rounded-2xl bg-card px-5 py-8 text-center shadow-card">
+              {/* Ripple (magicui): klidná hladina za sluníčkem */}
+              <Ripple className="-translate-y-6" />
+              <svg viewBox="0 0 48 48" className="breathe relative mx-auto h-12 w-12 text-accent/70" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="24" cy="24" r="15" />
                 <path d="M24 4v5M24 39v5M4 24h5M39 24h5M9.9 9.9l3.5 3.5M34.6 34.6l3.5 3.5M9.9 38.1l3.5-3.5M34.6 13.4l3.5-3.5" />
               </svg>
-              <p className="display mt-3 text-lg font-medium">Čistý stůl</p>
+              <BlurText text="Čistý stůl" className="display relative mt-3 text-lg font-medium" />
               <p className="mt-1 text-sm text-ink-soft">Na dnešek nic neplánuješ.</p>
 
               {/* Učící prázdný stav: příklady se ťuknutím vloží do pole,

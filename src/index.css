@@ -315,128 +315,6 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
   animation: pop-soft 0.32s var(--ease-spring) both;
 }
 
-/* přechod mezi záložkami — směrový: nový pohled přijíždí ze strany,
-   kterou uživatel v tab baru zvolil (--vx nastavuje App) */
-@keyframes view-in {
-  from {
-    opacity: 0;
-    transform: translate(var(--vx, 0px), 8px) scale(0.985);
-    filter: blur(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-    filter: blur(0);
-  }
-}
-
-.view-enter {
-  animation: view-in 0.36s var(--ease-ios) both;
-}
-
-/* Titulek obrazovky se skládá po písmenech: každý znak se vynoří z lehkého
-   rozostření o pár desítek ms po předchozím (vzor: TextEffect z
-   motion-primitives). Čtyři až sedm znaků, jednou za přepnutí — víc by
-   z toho byla estráda. Rozostření tu jde, protože jde o pár malých boxů;
-   na řádcích seznamu by filter při 120 Hz nestíhal. */
-@keyframes glyph-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.18em);
-    filter: blur(5px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-    filter: blur(0);
-  }
-}
-
-.glyph-in {
-  display: inline-block;
-  animation: glyph-in 0.55s var(--ease-glide) both;
-  animation-delay: calc(60ms + var(--stagger, 0) * 32ms);
-}
-
-/* Postupné rozostření na hranách rolovací plochy (vzor: ProgressiveBlur
-   z motion-primitives). Obsah se pod dokem a pod horní lištou nesekne
-   o hranu, ale rozpustí — tři vrstvy se stále silnějším rozostřením a
-   posunutou maskou dělají plynulý přechod, jedna vrstva by udělala jen
-   mléčný pruh. Vlastní vrstva mimo dok, protože dok je sklo a to má
-   svoje vlastní rozostření. */
-.veil {
-  position: absolute;
-  left: 0;
-  right: 0;
-  pointer-events: none;
-}
-.veil,
-.veil::before,
-.veil::after {
-  -webkit-backdrop-filter: blur(var(--b));
-  backdrop-filter: blur(var(--b));
-}
-.veil::before,
-.veil::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-}
-.veil-bottom {
-  --b: 2px;
-  background: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--color-paper) 75%, transparent) 85%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 45%);
-  mask-image: linear-gradient(to bottom, transparent, #000 45%);
-}
-.veil-bottom::before {
-  --b: 6px;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 30%, #000 70%);
-  mask-image: linear-gradient(to bottom, transparent 30%, #000 70%);
-}
-.veil-bottom::after {
-  --b: 14px;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 55%, #000 92%);
-  mask-image: linear-gradient(to bottom, transparent 55%, #000 92%);
-}
-.veil-top {
-  --b: 2px;
-  background: linear-gradient(to top, transparent, color-mix(in oklab, var(--color-paper) 82%, transparent) 70%);
-  -webkit-mask-image: linear-gradient(to top, transparent, #000 45%);
-  mask-image: linear-gradient(to top, transparent, #000 45%);
-  opacity: 0;
-  transition: opacity 0.25s ease;
-}
-.veil-top.is-on {
-  opacity: 1;
-}
-.veil-top::before {
-  --b: 6px;
-  -webkit-mask-image: linear-gradient(to top, transparent 30%, #000 70%);
-  mask-image: linear-gradient(to top, transparent 30%, #000 70%);
-}
-.veil-top::after {
-  --b: 14px;
-  -webkit-mask-image: linear-gradient(to top, transparent 55%, #000 92%);
-  mask-image: linear-gradient(to top, transparent 55%, #000 92%);
-}
-
-/* „Omezit průhlednost" a prohlížeče bez backdrop-filter: závoj se
-   změní v obyčejný přechod do papíru, ať obsah pod dokem nesvítí. */
-@media (prefers-reduced-transparency: reduce) {
-  .veil,
-  .veil::before,
-  .veil::after {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-  .veil-bottom {
-    background: linear-gradient(to bottom, transparent, var(--color-paper) 70%);
-  }
-  .veil-top {
-    background: linear-gradient(to top, transparent, var(--color-paper) 60%);
-  }
-}
-
 /* Ťuknutí do řádku seznamu: krátké dosednutí místo prostého podbarvení.
    Transform jen na sobě, takže sousední řádky zůstanou v klidu. */
 .press-row {
@@ -750,29 +628,6 @@ body:has(.sheet-backdrop:not(.closing)) .app-shell {
   animation: ring-burst 0.5s var(--ease-glide) both;
 }
 
-/* tichá oslava splněného dne — pár teček vyletí z progress baru */
-@keyframes confetti {
-  0% {
-    transform: translate(0, 0) scale(1);
-    opacity: 1;
-  }
-  100% {
-    transform: translate(var(--cx, 0px), var(--cy, -24px)) scale(0.3);
-    opacity: 0;
-  }
-}
-
-.confetti {
-  position: absolute;
-  top: 0;
-  width: 5px;
-  height: 5px;
-  border-radius: 9999px;
-  pointer-events: none;
-  animation: confetti 0.9s var(--ease-glide) both;
-  animation-delay: calc(var(--stagger, 0) * 40ms);
-}
-
 /* odchod toastu — sklouzne dolů a prolne se */
 @keyframes toast-down {
   from {
@@ -877,18 +732,17 @@ body:has(.sheet-backdrop:not(.closing)) .app-shell {
 
 @media (prefers-reduced-motion: reduce) {
   .rise,
-  .glyph-in,
+  .ripple,
+  .tip,
   .pop,
   .pop-soft,
   .roll-in,
   .bar-pulse,
-  .view-enter,
   .tab-bounce,
   .shimmer,
   .breathe,
   .bar-grow,
   .ring-burst,
-  .confetti,
   .toast-out,
   .sheet-backdrop,
   .sheet-backdrop.closing {

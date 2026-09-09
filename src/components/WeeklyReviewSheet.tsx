@@ -4,6 +4,7 @@ import { fromISODate, todayISO } from '../lib/dates'
 import { computeWeekStats } from '../lib/weekReview'
 import { Sheet } from './Sheet'
 import { plural } from '../lib/labels'
+import { AnimatedNumber } from './ui/AnimatedNumber'
 
 const stagger = (i: number) => ({ '--stagger': i }) as React.CSSProperties
 
@@ -35,13 +36,19 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
         <div className="grid grid-cols-2 gap-3">
           <div className="rise rounded-2xl bg-card px-4 py-3 shadow-card" style={stagger(1)}>
             <div className="text-3xl font-bold tracking-tight">
-              <span className="pop-soft inline-block">{stats.completedCount}</span>
+              <AnimatedNumber value={stats.completedCount} from={0} className="inline-block" />
             </div>
             <div className="mt-0.5 text-[13px] text-ink-soft">hotových úkolů</div>
           </div>
           <div className="rise rounded-2xl bg-card px-4 py-3 shadow-card" style={stagger(2)}>
             <div className="text-3xl font-bold tracking-tight">
-              <span className="pop-soft inline-block">{rate === null ? '—' : `${rate} %`}</span>
+              {rate === null ? (
+                <span className="inline-block">—</span>
+              ) : (
+                <>
+                  <AnimatedNumber value={rate} from={0} className="inline-block" /> %
+                </>
+              )}
             </div>
             <div className="mt-0.5 text-[13px] text-ink-soft">
               plánu splněno{stats.plannedCount > 0 && ` (${stats.plannedDoneCount} z ${stats.plannedCount})`}

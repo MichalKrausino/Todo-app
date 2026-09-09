@@ -7,7 +7,15 @@ import { ToastHost } from './components/ToastHost'
 import { SyncButton, SyncSheet } from './components/SyncSheet'
 import { TaskEditSheet } from './components/TaskEditSheet'
 import { jeOtevrenyPanel } from './components/Sheet'
-import { zkratkaZKlavesy } from './lib/shortcuts'
+import { jeMac, zkratkaZKlavesy } from './lib/shortcuts'
+import { MotionConfig } from 'motion/react'
+import { BlurFade } from './components/ui/BlurFade'
+import { ClickSpark } from './components/ui/ClickSpark'
+import { Dock, DockIcon } from './components/ui/Dock'
+import { Kbd } from './components/ui/Kbd'
+import { Magnetic } from './components/ui/Magnetic'
+import { ProgressiveBlur } from './components/ui/ProgressiveBlur'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './components/ui/Tooltip'
 import { TodayView } from './views/TodayView'
 import { UpcomingView } from './views/UpcomingView'
 import { ClientsView } from './views/ClientsView'
@@ -20,7 +28,7 @@ const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
     id: 'today',
     label: 'Dnes',
     icon: (
-      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="9" />
         <path d="M8.5 12.2l2.4 2.4 4.8-5.2" />
       </svg>
@@ -30,7 +38,7 @@ const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
     id: 'upcoming',
     label: 'Plán',
     icon: (
-      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
         <path d="M3.5 9.5h17M8 3v4M16 3v4" />
       </svg>
@@ -40,7 +48,7 @@ const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
     id: 'clients',
     label: 'Klienti',
     icon: (
-      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="9" cy="8.5" r="3.25" />
         <path d="M3.5 19c.6-3 2.8-4.75 5.5-4.75S13.9 16 14.5 19" />
         <circle cx="17" cy="9.5" r="2.5" />
@@ -228,7 +236,13 @@ export default function App() {
     return () => window.removeEventListener('hashchange', check)
   }, [])
 
+  const modifikator = jeMac() ? '⌘' : 'Ctrl'
+
   return (
+    // reducedMotion="user": motion vypne transformace v klidovém režimu;
+    // průhlednost a filtry si komponenty hlídají samy (src/lib/motion.ts).
+    <MotionConfig reducedMotion="user">
+    <TooltipProvider>
     <div className="app-shell fixed inset-x-0 mx-auto flex max-w-lg flex-col bg-paper text-ink antialiased">
       {/* Horní lišta ve stylu iOS: v klidu průhledná (velký titulek si
           svítí sám), po odscrollování se zamlží a obsah pod ni podjede —
@@ -237,9 +251,9 @@ export default function App() {
       {/* Závoj pod lištou: po odscrollování se obsah nahoře postupně
           rozostří a rozpustí do papíru, místo aby se sekl o hranu
           zamlžené lišty (dřív border-b + backdrop-blur na celé liště). */}
-      <div
-        aria-hidden="true"
-        className={`veil veil-top top-0 z-30 ${scrolled ? 'is-on' : ''}`}
+      <ProgressiveBlur
+        direction="top"
+        className={`absolute inset-x-0 top-0 z-30 bg-linear-to-b from-paper/85 to-transparent transition-opacity duration-250 ${scrolled ? 'opacity-100' : 'opacity-0'}`}
         style={{ height: 'calc(4.4rem + env(safe-area-inset-top))' }}
       />
       <div
@@ -253,16 +267,23 @@ export default function App() {
         >
           {TABS.find((t) => t.id === tab)?.label}
         </span>
-        <button
-          aria-label="Hledat"
-          onClick={() => setSearchOpen(true)}
-          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-[background-color,transform] duration-150 active:scale-90 active:bg-well"
-        >
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="6.5" />
-            <path d="M15.8 15.8L20 20" />
-          </svg>
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              aria-label="Hledat"
+              onClick={() => setSearchOpen(true)}
+              className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-[background-color,transform] duration-150 active:scale-90 active:bg-well"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="6.5" />
+                <path d="M15.8 15.8L20 20" />
+              </svg>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            Hledat <Kbd>{modifikator} K</Kbd>
+          </TooltipContent>
+        </Tooltip>
         <span className="pointer-events-auto">
           <SyncButton onOpen={() => setSyncOpen(true)} />
         </span>
@@ -285,11 +306,14 @@ export default function App() {
           paddingBottom: 'calc(var(--dock-h, 9rem) + 0.75rem)',
         }}
       >
-        {/* key vynutí novou instanci pohledu → směrová nástupní animace */}
-        <div
+        {/* key vynutí novou instanci pohledu → BlurFade (magicui) ho vynoří
+            z rozostření ze strany, kam se v doku šlo */}
+        <BlurFade
           key={tab}
-          className="view-enter"
-          style={{ '--vx': dir === 0 ? '0px' : dir > 0 ? '16px' : '-16px' } as React.CSSProperties}
+          direction={dir === 0 ? 'up' : dir > 0 ? 'left' : 'right'}
+          offset={14}
+          blur="6px"
+          duration={0.36}
         >
           {tab === 'today' && (
             <TodayView
@@ -312,16 +336,16 @@ export default function App() {
               onFocusConsumed={() => setClientFocus(null)}
             />
           )}
-        </div>
+        </BlurFade>
       </main>
 
       {/* Spodní dok: jedna plovoucí skleněná deska, přes kterou obsah
           prosvítá rozmazaný. Obal je průchozí na dotyk, klikatelná je
           jen samotná deska — u okrajů tak jde dál scrollovat obsah. */}
       {/* Závoj pod dokem: seznam se pod sklem nezařízne, ale rozpustí. */}
-      <div
-        aria-hidden="true"
-        className="veil veil-bottom bottom-0 z-20"
+      <ProgressiveBlur
+        direction="bottom"
+        className="absolute inset-x-0 bottom-0 z-20 bg-linear-to-t from-paper/80 to-transparent"
         style={{ height: 'calc(var(--dock-h, 9rem) + 1.25rem)' }}
       />
       <footer
@@ -350,53 +374,76 @@ export default function App() {
 
           {/* Samé ikony, bez popisků — název sekce drží horní lišta.
               Který list je vybraný, říká pilulka pod ikonou. */}
-          <nav className="flex items-center gap-1 px-2.5 py-2">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                aria-label={t.label}
-                aria-current={tab === t.id ? 'page' : undefined}
-                className={`flex flex-1 items-center justify-center transition-colors duration-200 active:scale-95 ${
-                  tab === t.id ? 'text-ink' : 'text-ink-soft'
-                }`}
-              >
-                {/* nový element při vybrání → ikona poskočí (tab-bounce) */}
-                <span
-                  className={`flex h-10 w-full max-w-[5.5rem] items-center justify-center rounded-[18px] transition-colors duration-200 ${
-                    tab === t.id ? 'tab-on' : ''
-                  }`}
-                >
-                  <span key={tab === t.id ? 'on' : 'off'} className={tab === t.id ? 'tab-bounce block' : 'block'}>
-                    {t.icon}
-                  </span>
-                </span>
-              </button>
+          {/* ClickSpark (react-bits): z místa ťuknutí vyletí jiskry —
+              hmatová odezva bez haptiky. Dock (magicui): pod kurzorem se
+              ikony zvětšují jako v macOS doku; prst nechá velikost být. */}
+          <ClickSpark className="relative">
+          <nav className="flex h-14 items-center px-2.5">
+            <Dock className="flex-1 gap-1">
+            {TABS.map((t, i) => (
+              <Tooltip key={t.id}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setTab(t.id)}
+                    aria-label={t.label}
+                    aria-current={tab === t.id ? 'page' : undefined}
+                    className={`flex flex-1 items-center justify-center transition-colors duration-200 active:scale-95 ${
+                      tab === t.id ? 'text-ink' : 'text-ink-soft'
+                    }`}
+                  >
+                    {/* nový element při vybrání → ikona poskočí (tab-bounce) */}
+                    <DockIcon
+                      className={`rounded-full transition-colors duration-200 ${tab === t.id ? 'tab-on' : ''}`}
+                    >
+                      {/* ikona bere 60 % pilulky, takže se zvětšuje s ní */}
+                      <span key={tab === t.id ? 'on' : 'off'} className={`h-[60%] w-[60%] ${tab === t.id ? 'tab-bounce block' : 'block'}`}>
+                        {t.icon}
+                      </span>
+                    </DockIcon>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {t.label} <Kbd>{i + 1}</Kbd>
+                </TooltipContent>
+              </Tooltip>
             ))}
+            </Dock>
             {/* Otevřené zadávání má vlastní modré kolečko pro odeslání.
                 Když bylo modré i tohle, stály pod sebou dva skoro stejné
                 kruhy s opačným významem — a ten zavírací byl větší a níž,
                 tedy blíž palci. Zavření je druhotná akce, tak i vypadá. */}
-            <button
-              aria-label={addOpen ? 'Zavřít zadávání' : 'Nový úkol'}
-              aria-expanded={addOpen}
-              onClick={() => setAddOpen((v) => !v)}
-              className={`ml-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-[background-color,transform] duration-150 active:scale-90 ${
-                addOpen ? 'bg-well text-ink-soft' : 'bg-accent text-card shadow-float'
-              }`}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                className={`h-[22px] w-[22px] transition-transform duration-300 ease-spring ${addOpen ? 'rotate-45' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-              >
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
+            {/* Magnetic (motion-primitives): na Macu se plusko lehce
+                přitáhne ke kurzoru; na dotyku se neděje nic. */}
+            <Magnetic intensity={0.35} range={70}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    aria-label={addOpen ? 'Zavřít zadávání' : 'Nový úkol'}
+                    aria-expanded={addOpen}
+                    onClick={() => setAddOpen((v) => !v)}
+                    className={`ml-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-[background-color,transform] duration-150 active:scale-90 ${
+                      addOpen ? 'bg-well text-ink-soft' : 'bg-accent text-card shadow-float'
+                    }`}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      className={`h-[22px] w-[22px] transition-transform duration-300 ease-spring ${addOpen ? 'rotate-45' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                    >
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {addOpen ? 'Zavřít' : 'Nový úkol'} <Kbd>{addOpen ? 'Esc' : 'N'}</Kbd>
+                </TooltipContent>
+              </Tooltip>
+            </Magnetic>
           </nav>
+          </ClickSpark>
         </div>
       </footer>
 
@@ -405,6 +452,14 @@ export default function App() {
           onClose={() => setSearchOpen(false)}
           onOpenTask={setEditing}
           onOpenClient={openClient}
+          onAkce={(a) => {
+            if (a === 'novy') {
+              setAddOpen(true)
+              dockRef.current?.querySelector('input')?.focus()
+            } else if (a === 'ohlednuti') setReviewOpen(true)
+            else if (a === 'sync') setSyncOpen(true)
+            else setTab(a === 'dnes' ? 'today' : a === 'plan' ? 'upcoming' : 'clients')
+          }}
         />
       )}
       {editing && <TaskEditSheet task={editing} onClose={() => setEditing(null)} />}
@@ -414,5 +469,7 @@ export default function App() {
           appku, ať se dvě nepřekrývají. */}
       <ToastHost />
     </div>
+    </TooltipProvider>
+    </MotionConfig>
   )
 }

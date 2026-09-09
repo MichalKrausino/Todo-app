@@ -130,13 +130,35 @@ vysoká; jméno zůstává pro čtečku), zaškrtávátko má 24 px a obrys `edg
 hlavička Dnes je titulek + **jedna řádka** s kroužkem postupu (SVG, animuje
 `stroke-dashoffset`), pás dnů v Plánu jsou čísla s tečkou, ne dlaždice,
 primární akce mimo dok jsou tiché pilulky `well`, prázdné stavy prostý
-text bez tečkovaného rámečku. Pohyb navíc, vzory z motion-primitives a
-magicui: titulky obrazovek skládá `Titulek` po písmenech (`.glyph-in`),
-obrazovka nastupuje s blur-fade (`view-in`) a hrany rolovací plochy pod
-dokem i pod horní lištou rozpouští **postupné rozostření** (`.veil`, tři
-vrstvy s posunutou maskou — jedna vrstva je jen mléčný pruh). Záměrně
-**bez** border beamů, gradientových textů a spotlight karet: na todo
-appce křičí. Tokeny v `src/index.css` (Tailwind v4 `@theme`) — **používat výhradně je**,
+text bez tečkovaného rámečku.
+
+**Knihovny pohybu a prvků** (`src/components/ui/`, motor `motion` 13):
+každá komponenta nese v hlavičce původ a je přepsaná do tokenů appky —
+shadcn paleta (`bg-primary`, `text-muted-foreground`) se nepřebírá.
+Z motion-primitives: `ProgressiveBlur` (závoj pod dokem a pod lištou,
+šest vrstev s posunutou maskou — jedna vrstva je jen mléčný pruh),
+`TextEffect` (titulky po písmenech), `AnimatedNumber` (počty pružinou),
+`Magnetic` (plusko na Macu). Z magicui: `Dock` (zvětšování ikon pod
+kurzorem), `BlurFade` (nástup obrazovky ze strany, kam se v doku šlo),
+`BorderBeam` (jen ranní návrh — jediná karta, kterou napsal server),
+`Ripple` (prázdný stav), konfety přes `canvas-confetti` (splněný den,
+jednou denně, `todo.konfety`). Z react-bits: `ClickSpark` (jiskry z místa
+ťuknutí v doku), `BlurText` (nadpis prázdného stavu). Ze shadcn/ui nad
+Radix a cmdk: `Button` (cva varianty: default akcent, secondary well,
+ghost, destructive, link), `Switch`, `Tooltip` + `Kbd` (na Macu zkratky
+u ikon), `Command` (hledání jako paleta s rychlými akcemi, filtr bez
+diakritiky si dělá appka, `shouldFilter=false`). Čtyři věci, které se tu
+dají rozbít: (1) **klidový režim** řeší `src/lib/motion.ts` — motion
+v režimu `user` nechá běžet průhlednost a filtry a audit chování by je
+napočítal jako běžící, komponenty proto v klidu kreslí rovnou konečný
+stav; (2) po dojetí animace se **maže `filter`** — `blur(0px)` je pro
+Chromium pořád filtr a box dostane o pixel širší přesah, obsah s `-mx-4`
+pak přetekl (změřeno 391 > 390); (3) Dock reaguje jen na
+`pointerType === 'mouse'` a Magnetic jen s `(hover: hover)` — Safari při
+ťuknutí syntetizuje mousemove/mouseenter a ikona by zůstala nafouklá;
+(4) `TextEffect` dává celý text do `aria-label`, ne do sr-only kopie —
+textContent musí zůstat jeden kus, jinak testy čtou „DnesDnes".
+Tokeny v `src/index.css` (Tailwind v4 `@theme`) — **používat výhradně je**,
 žádné surové Tailwind barvy: `paper`/`card`/`well`/`line`, text
 `ink`/`ink-soft`/`ink-faint`, jediný akcent `accent` (klidná modrá
 `#3a6df0`, ne systémová iOS) + `accent-deep`/`accent-wash`, sémantické
