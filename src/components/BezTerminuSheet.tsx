@@ -8,7 +8,15 @@
 import { useState } from 'react'
 import type { Client, Task } from '../db/types'
 import { updateTask } from '../db/repo'
-import { formatDayLabel } from '../lib/dates'
+import { formatDayLabel, formatFullDateNa, fromISODate } from '../lib/dates'
+
+// „na zítra", „na dnešek", jinak „na sobotu 12. září" — 4. pád.
+const naDen = (iso: string): string => {
+  const l = formatDayLabel(iso)
+  if (l === 'Dnes') return 'dnešek'
+  if (l === 'Zítra' || l === 'Včera') return l.toLowerCase()
+  return formatFullDateNa(fromISODate(iso))
+}
 import { plural } from '../lib/labels'
 import { ukazToast } from '../lib/toast'
 import { Sheet } from './Sheet'
@@ -57,7 +65,7 @@ export function BezTerminuSheet({
         <>
           <header>
             <h2 className="text-lg font-bold">
-              {cilovyDen ? `Naplánovat na ${formatDayLabel(cilovyDen).toLowerCase()}` : 'Bez termínu'}
+              {cilovyDen ? `Naplánovat na ${naDen(cilovyDen)}` : 'Bez termínu'}
             </h2>
             <p className="text-sm text-ink-soft">
               {seznam.length} {plural(seznam.length, 'úkol', 'úkoly', 'úkolů')} bez termínu

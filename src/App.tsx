@@ -12,6 +12,8 @@ import { MotionConfig, motion } from 'motion/react'
 import { BlurFade } from './components/ui/BlurFade'
 import { ClickSpark } from './components/ui/ClickSpark'
 import { Dock, DockIcon } from './components/ui/Dock'
+import { klidovyRezim } from './lib/motion'
+import { DokZalozka, DokZalozky } from './components/DokZalozky'
 import { Kbd } from './components/ui/Kbd'
 import { Magnetic } from './components/ui/Magnetic'
 import { ProgressiveBlur } from './components/ui/ProgressiveBlur'
@@ -23,36 +25,52 @@ import { WeeklyReviewSheet } from './components/WeeklyReviewSheet'
 
 type Tab = 'today' | 'upcoming' | 'clients'
 
-const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
+// Podpis ikony (fajfka, linka data, druhá postava) se při vybrání
+// dokreslí tahem — pathLength z motion; obrys stojí. V klidu jen stojí.
+function Tah({ d, on }: { d: string; on: boolean }) {
+  if (klidovyRezim() || !on) return <path d={d} />
+  return (
+    <motion.path
+      key="on"
+      d={d}
+      initial={{ pathLength: 0, opacity: 0.3 }}
+      animate={{ pathLength: 1, opacity: 1 }}
+      transition={{ duration: 0.5, ease: [0.2, 0, 0, 1], delay: 0.06 }}
+    />
+  )
+}
+
+const TABS: Array<{ id: Tab; label: string; icon: (on: boolean) => React.ReactNode }> = [
   {
     id: 'today',
     label: 'Dnes',
-    icon: (
+    icon: (on) => (
       <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="9" />
-        <path d="M8.5 12.2l2.4 2.4 4.8-5.2" />
+        <Tah d="M8.5 12.2l2.4 2.4 4.8-5.2" on={on} />
       </svg>
     ),
   },
   {
     id: 'upcoming',
     label: 'Plán',
-    icon: (
+    icon: (on) => (
       <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
-        <path d="M3.5 9.5h17M8 3v4M16 3v4" />
+        <path d="M8 3v4M16 3v4" />
+        <Tah d="M3.5 9.5h17" on={on} />
       </svg>
     ),
   },
   {
     id: 'clients',
     label: 'Klienti',
-    icon: (
+    icon: (on) => (
       <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="9" cy="8.5" r="3.25" />
         <path d="M3.5 19c.6-3 2.8-4.75 5.5-4.75S13.9 16 14.5 19" />
         <circle cx="17" cy="9.5" r="2.5" />
-        <path d="M15.5 14.6c2.3.2 4.1 1.7 4.7 4.4" />
+        <Tah d="M15.5 14.6c2.3.2 4.1 1.7 4.7 4.4" on={on} />
       </svg>
     ),
   },
@@ -361,7 +379,12 @@ export default function App() {
         className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-3"
         style={{ paddingBottom: 'calc(var(--dock-safe, env(safe-area-inset-bottom)) + 0.5rem)' }}
       >
-        <div
+        {/* Dok při startu vyjede zespoda pružinou — jediná věc na
+            obrazovce, která přijíždí proti směru obsahu. V klidu stojí. */}
+        <motion.div
+          initial={klidovyRezim() ? false : { y: 36, opacity: 0, scale: 0.94 }}
+          animate={{ y: 0, opacity: 1, scale: 1 }}
+          transition={{ type: 'spring', bounce: 0.28, duration: 0.75, delay: 0.12 }}
           className={`dock pointer-events-auto overflow-hidden transition-[border-radius] duration-300 ease-ios ${
             addOpen ? 'rounded-[28px]' : 'rounded-full'
           }`}
@@ -387,6 +410,10 @@ export default function App() {
               ikony zvětšují jako v macOS doku; prst nechá velikost být. */}
           <ClickSpark className="relative">
           <nav className="flex h-14 items-center px-2.5">
+            {/* DokZalozky (vlastní, po vzoru tab baru iOS 26): pilulka pod
+                ikonou letí pružinou, a když prst na doku zůstane a táhne,
+                jede s ním jako želé a puštění vybere nejbližší záložku. */}
+            <DokZalozky value={tab} onChange={(id) => setTab(id as Tab)} className="flex flex-1 items-center">
             <Dock className="flex-1 gap-1">
             {TABS.map((t, i) => (
               <Tooltip key={t.id}>
@@ -395,25 +422,16 @@ export default function App() {
                     onClick={() => setTab(t.id)}
                     aria-label={t.label}
                     aria-current={tab === t.id ? 'page' : undefined}
-                    className={`flex flex-1 items-center justify-center transition-colors duration-200 active:scale-95 ${
+                    className={`relative flex flex-1 items-center justify-center transition-colors duration-200 ${
                       tab === t.id ? 'text-ink' : 'text-ink-soft'
                     }`}
                   >
-                    {/* nový element při vybrání → ikona poskočí (tab-bounce) */}
                     <DockIcon className="relative rounded-full">
-                      {/* Pilulka pod vybranou ikonou plyne mezi záložkami
-                          (layoutId, vzor AnimatedBackground z motion-primitives) */}
-                      {tab === t.id && (
-                        <motion.span
-                          layoutId="dok-pilulka"
-                          className="tab-on absolute inset-0 rounded-full"
-                          transition={{ type: 'spring', bounce: 0.25, duration: 0.5 }}
-                        />
-                      )}
-                      {/* ikona bere 60 % pilulky, takže se zvětšuje s ní */}
-                      <span key={tab === t.id ? 'on' : 'off'} className={`relative h-[60%] w-[60%] ${tab === t.id ? 'tab-bounce block' : 'block'}`}>
-                        {t.icon}
-                      </span>
+                      {/* ikona bere 60 % pilulky, takže se zvětšuje s ní;
+                          podpis ikony se při vybrání dokreslí tahem */}
+                      <DokZalozka id={t.id} on={tab === t.id}>
+                        {t.icon(tab === t.id)}
+                      </DokZalozka>
                     </DockIcon>
                   </button>
                 </TooltipTrigger>
@@ -423,6 +441,7 @@ export default function App() {
               </Tooltip>
             ))}
             </Dock>
+            </DokZalozky>
             {/* Otevřené zadávání má vlastní modré kolečko pro odeslání.
                 Když bylo modré i tohle, stály pod sebou dva skoro stejné
                 kruhy s opačným významem — a ten zavírací byl větší a níž,
@@ -459,7 +478,7 @@ export default function App() {
             </Magnetic>
           </nav>
           </ClickSpark>
-        </div>
+        </motion.div>
       </footer>
 
       {searchOpen && (
