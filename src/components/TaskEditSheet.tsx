@@ -46,11 +46,16 @@ import { SUB_PREFIX } from '../lib/todoistMap'
 import { addDays, formatDayLabel, fromISODate, jePlatnyCas, nextMonday, toISODate, todayISO } from '../lib/dates'
 import { PRIORITY_LABELS } from '../lib/labels'
 import {
+  MONTHS,
   PRESET_LABELS,
+  WEEKDAYS,
+  alignDueDate,
   humanizeRule,
-  presetFromRule,
+  partsFromRule,
+  ruleFromParts,
   ruleFromPreset,
   type RecurrencePreset,
+  type RuleParts,
 } from '../lib/rrule'
 
 type Picker = 'date' | 'scheduled' | 'client' | 'project' | 'priority' | 'recurrence' | null
@@ -60,6 +65,8 @@ const QUICK_DAYS: { label: string; day: (today: string) => string }[] = [
   { label: 'Zítra', day: (t) => toISODate(addDays(fromISODate(t), 1)) },
   { label: 'Pondělí', day: (t) => toISODate(nextMonday(fromISODate(t))) },
 ]
+
+const velkePismeno = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
 
 // Textové pole, které roste s obsahem — titulek ani poznámka nemají mít
 // posuvník uvnitř panelu, který sám roluje.
@@ -145,9 +152,10 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   const [dueDate, setDueDate] = useState(task.dueDate ?? '')
   const [dueTime, setDueTime] = useState(task.dueTime ?? '')
   const [scheduledFor, setScheduledFor] = useState(task.scheduledFor ?? '')
-  // 'none' | předvolba | 'custom' (existující pravidlo mimo předvolby zachovat)
-  const initialRecurrence = task.recurrenceRule ? presetFromRule(task.recurrenceRule) : 'none'
-  const [recurrence, setRecurrence] = useState<string>(initialRecurrence)
+  // Opakování je pravidlo přímo (frekvence + den), ne předvolba odvozená
+  // z termínu. null = neopakuje se. Pravidlo mimo předvolby (z parseru,
+  // „každé 3 týdny") se nechá být a jen se ukáže.
+  const [rule, setRule] = useState<string | null>(task.recurrenceRule ?? null)
   // Checklist se ukládá hned při každé změně (jako iOS Připomínky) —
   // odškrtnutí podúkolu nesmí čekat na „Uložit". Save ho neposílá,
   // Dexie update mění jen zaslaná pole.
@@ -224,11 +232,6 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   const save = async (close: () => void) => {
     if (!title.trim()) return
     const hasDate = Boolean(dueDate || scheduledFor)
-    let recurrenceRule: string | undefined
-    if (recurrence === 'custom') recurrenceRule = task.recurrenceRule
-    else if (recurrence !== 'none') {
-      recurrenceRule = ruleFromPreset(recurrence as RecurrencePreset, dueDate || scheduledFor || todayISO())
-    }
     await updateTask(task.id, {
       title: title.trim(),
       notes: notes.trim() || undefined,
@@ -239,7 +242,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
       // čas bez data nedává smysl — deadline s časem se váže na den
       dueTime: dueDate && dueTime ? dueTime : undefined,
       scheduledFor: scheduledFor || undefined,
-      recurrenceRule,
+      recurrenceRule: rule ?? undefined,
       status: task.status === 'inbox' && hasDate ? 'active' : task.status,
     })
     // Úprava todoistího úkolu se označí jako neodeslaná a hned se zkusí
@@ -273,12 +276,39 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   const zamceno = () => ukazToast('Zařazení úkolu z Todoistu se mění v Todoistu')
 
   const today = todayISO()
-  const recurrenceLabel =
-    recurrence === 'custom' && task.recurrenceRule
-      ? humanizeRule(task.recurrenceRule)
-      : recurrence !== 'none'
-        ? PRESET_LABELS[recurrence as RecurrencePreset]
-        : undefined
+  const parts = rule ? partsFromRule(rule) : null
+  const recurrenceLabel = rule ? velkePismeno(humanizeRule(rule)) : undefined
+
+  // Změna pravidla srovná termín na první výskyt od dneška — „každou
+  // neděli" na úkolu ze středy posune termín na nejbližší neděli. Bez
+  // termínu se opakování nemá od čeho odvíjet, tak ho dostane vždycky.
+  const nastavPravidlo = (r: string | null) => {
+    setRule(r)
+    if (!r) return
+    const srovnany = alignDueDate(r, dueDate || undefined, today)
+    if (srovnany && srovnany !== dueDate) setDueDate(srovnany)
+  }
+  const zvolPredvolbu = (p: RecurrencePreset) => {
+    // den se bere z termínu (jako dřív), ale už zvolené dny v týdnu nebo
+    // den v měsíci přepnutí frekvence nezahodí
+    const zaklad = partsFromRule(ruleFromPreset(p, dueDate || today)) ?? { preset: p, byday: ['MO'], dom: 1, month: 1 }
+    const tydenni = (x: RecurrencePreset) => x === 'weekly' || x === 'biweekly'
+    const mesicni = (x: RecurrencePreset) => x === 'monthly' || x === 'quarterly' || x === 'yearly'
+    const dalsi: RuleParts = {
+      ...zaklad,
+      preset: p,
+      byday: parts && tydenni(parts.preset) && tydenni(p) ? parts.byday : zaklad.byday,
+      dom: parts && mesicni(parts.preset) && mesicni(p) ? parts.dom : zaklad.dom,
+      month: parts && parts.preset === 'yearly' && p === 'yearly' ? parts.month : zaklad.month,
+    }
+    nastavPravidlo(ruleFromParts(dalsi))
+  }
+  const prepniDen = (kod: string) => {
+    if (!parts) return
+    const dny = parts.byday.includes(kod) ? parts.byday.filter((d) => d !== kod) : [...parts.byday, kod]
+    if (dny.length === 0) return // aspoň jeden den musí zůstat
+    nastavPravidlo(ruleFromParts({ ...parts, byday: dny }))
+  }
 
   return (
     <Sheet onClose={onClose} className="space-y-4">
@@ -548,27 +578,98 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
               </div>
             )}
             {picker === 'recurrence' && (
-              <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-                {[
-                  ['none', 'Neopakuje se'],
-                  ...(Object.keys(PRESET_LABELS) as RecurrencePreset[]).map((p) => [p, PRESET_LABELS[p]]),
-                  ...(initialRecurrence === 'custom' && task.recurrenceRule
-                    ? [['custom', `Vlastní (${humanizeRule(task.recurrenceRule)})`]]
-                    : []),
-                ].map(([id, text]) => (
+              <div className="space-y-2.5">
+                {/* frekvence */}
+                <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
                   <button
-                    key={id}
                     type="button"
-                    aria-pressed={recurrence === id}
+                    aria-pressed={!rule}
                     onClick={() => {
-                      setRecurrence(id)
+                      nastavPravidlo(null)
                       setPicker(null)
                     }}
-                    className={`${pill} ${recurrence === id ? 'bg-accent text-card' : 'bg-card text-ink'}`}
+                    className={`${pill} ${!rule ? 'bg-accent text-card' : 'bg-card text-ink-soft'}`}
                   >
-                    {text}
+                    Neopakuje se
                   </button>
-                ))}
+                  {(Object.keys(PRESET_LABELS) as RecurrencePreset[]).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      aria-pressed={parts?.preset === p}
+                      onClick={() => zvolPredvolbu(p)}
+                      className={`${pill} ${parts?.preset === p ? 'bg-accent text-card' : 'bg-card text-ink'}`}
+                    >
+                      {PRESET_LABELS[p]}
+                    </button>
+                  ))}
+                  {rule && !parts && (
+                    <span className={`${pill} bg-accent text-card`}>Vlastní ({humanizeRule(rule)})</span>
+                  )}
+                </div>
+
+                {/* den: u týdenních dny v týdnu (i víc naráz), u měsíčních
+                    den v měsíci jako mřížka 7 × 4, u ročních ještě měsíc */}
+                {parts && (parts.preset === 'weekly' || parts.preset === 'biweekly') && (
+                  <div className="flex gap-1" role="group" aria-label="Dny v týdnu">
+                    {WEEKDAYS.map(([kod, popisek]) => {
+                      const on = parts.byday.includes(kod)
+                      return (
+                        <button
+                          key={kod}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => prepniDen(kod)}
+                          className={`h-10 min-w-0 flex-1 rounded-full text-[13px] font-medium transition-[background-color,color,transform] duration-150 active:scale-95 ${
+                            on ? 'bg-accent text-card' : 'bg-card text-ink'
+                          }`}
+                        >
+                          {popisek}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                {parts && (parts.preset === 'monthly' || parts.preset === 'quarterly' || parts.preset === 'yearly') && (
+                  <div className="grid grid-cols-7 gap-1" role="group" aria-label="Den v měsíci">
+                    {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        aria-pressed={parts.dom === d}
+                        onClick={() => nastavPravidlo(ruleFromParts({ ...parts, dom: d }))}
+                        className={`h-9 rounded-full text-[14px] tabular-nums transition-[background-color,color,transform] duration-150 active:scale-95 ${
+                          parts.dom === d ? 'bg-accent font-semibold text-card' : 'bg-card text-ink'
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {parts && parts.preset === 'yearly' && (
+                  <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }} role="group" aria-label="Měsíc">
+                    {MONTHS.map((nazev, i) => (
+                      <button
+                        key={nazev}
+                        type="button"
+                        aria-pressed={parts.month === i + 1}
+                        onClick={() => nastavPravidlo(ruleFromParts({ ...parts, month: i + 1 }))}
+                        className={`${pill} ${parts.month === i + 1 ? 'bg-accent text-card' : 'bg-card text-ink'}`}
+                      >
+                        {nazev}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {rule && (
+                  <p className="px-1 text-[12px] leading-relaxed text-ink-faint">
+                    {velkePismeno(humanizeRule(rule))}
+                    {dueDate && ` · první výskyt ${formatDayLabel(dueDate)}`}
+                    {' '}· po odškrtnutí se úkol sám založí na další termín
+                  </p>
+                )}
               </div>
             )}
           </div>

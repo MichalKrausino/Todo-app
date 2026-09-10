@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   RULE_EPOCH,
+  alignDueDate,
+  firstOccurrenceFrom,
   humanizeRule,
   nextOccurrence,
   occurrencesBetween,
+  partsFromRule,
   presetFromRule,
+  ruleFromParts,
   ruleFromPreset,
 } from './rrule'
 import { deterministicUuid } from './deterministicId'
@@ -87,5 +91,43 @@ describe('deterministicUuid', () => {
     expect(a).toBe(b)
     expect(a).not.toBe(c)
     expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+  })
+})
+
+describe('části pravidla (frekvence + den)', () => {
+  it('kolečko části → pravidlo → části nic neztratí', () => {
+    const p = { preset: 'weekly' as const, byday: ['TH', 'MO'], dom: 1, month: 1 }
+    const rule = ruleFromParts(p)
+    expect(rule).toBe('FREQ=WEEKLY;BYDAY=MO,TH') // v pořadí týdne, ne ťukání
+    expect(partsFromRule(rule)?.byday).toEqual(['MO', 'TH'])
+    expect(partsFromRule('FREQ=YEARLY;BYMONTH=9;BYMONTHDAY=14')).toEqual({ preset: 'yearly', byday: ['MO'], dom: 14, month: 9 })
+    expect(partsFromRule('FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=5')?.preset).toBe('quarterly')
+  })
+
+  it('pravidlo mimo předvolby vrátí null a nechá se být', () => {
+    expect(partsFromRule('FREQ=WEEKLY;INTERVAL=3;BYDAY=FR')).toBeNull()
+  })
+
+  it('každou neděli: první výskyt od středy je nejbližší neděle', () => {
+    expect(firstOccurrenceFrom('FREQ=WEEKLY;BYDAY=SU', '2026-09-09')).toBe('2026-09-13')
+    // den, který pravidlo trefuje, je výskyt sám
+    expect(firstOccurrenceFrom('FREQ=WEEKLY;BYDAY=WE', '2026-09-09')).toBe('2026-09-09')
+    expect(firstOccurrenceFrom('FREQ=MONTHLY;BYMONTHDAY=1', '2026-09-09')).toBe('2026-10-01')
+  })
+
+  it('termín se srovná na první výskyt od dneška', () => {
+    const dnes = '2026-09-09' // středa
+    expect(alignDueDate('FREQ=WEEKLY;BYDAY=SU', '2026-09-09', dnes)).toBe('2026-09-13')
+    // propadlý termín nezůstává v minulosti
+    expect(alignDueDate('FREQ=WEEKLY;BYDAY=SU', '2026-08-30', dnes)).toBe('2026-09-13')
+    // vzdálený termín, který pravidlo trefuje, zůstane
+    expect(alignDueDate('FREQ=WEEKLY;BYDAY=SU', '2026-10-25', dnes)).toBe('2026-10-25')
+    // bez termínu → první výskyt od dneška
+    expect(alignDueDate('FREQ=DAILY', undefined, dnes)).toBe(dnes)
+  })
+
+  it('respawn po neděli trefí zase neděli, i u dvou dnů v týdnu', () => {
+    expect(nextOccurrence('FREQ=WEEKLY;BYDAY=SU', '2026-09-13', '2026-09-13')).toBe('2026-09-20')
+    expect(nextOccurrence('FREQ=WEEKLY;BYDAY=MO,TH', '2026-09-14', '2026-09-14')).toBe('2026-09-17')
   })
 })
