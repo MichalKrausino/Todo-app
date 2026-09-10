@@ -71,8 +71,10 @@ instalace ani (v pozdější fázi) push notifikace.
 - Vzhled po úklidu: karty bez obrysu na teplém papíře, oddělovače od
   textu, priorita tečkou, kroužek postupu v hlavičce Dnes, kalendář
   v Plánu s čísly a tečkou vytížení.
-- Plán je kalendář: týden v řádce, ťuknutím na měsíc celý měsíc, listuje
-  se šipkami i švihnutím. Vybraný den má pod kalendářem svou agendu
+- Plán je kalendář: týden v řádce přímo na papíře, ťuknutím na měsíc celý
+  měsíc, listuje se šipkami i švihnutím a výběr jde s sebou. Vybraný den
+  je tmavá pilulka, která mezi dny plyne, dnešek modré číslo se štítkem
+  „dnes", vytížení dne tučné číslo a tečky. Vybraný den má pod kalendářem svou agendu
   (schůzky, úkoly), pole „nový úkol na ten den" a výběr z úkolů bez
   termínu — „Sem" pošle úkol na vybraný den, toast to umí vrátit.
   Minulý den ukáže, co se ten den dodělalo.

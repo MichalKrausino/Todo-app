@@ -203,14 +203,10 @@ export function UpcomingView({
         <p className="text-sm text-ink-soft first-letter:uppercase">{souhrn.join(' · ')}</p>
       </header>
 
-      {/* Co není den: úkoly bez termínu, ohlédnutí, návrat na dnešek. */}
-      {(bezTerminu.length > 0 || (onOpenReview && reviewDay) || vybrany !== today) && (
+      {/* Co není den: úkoly bez termínu a ohlédnutí. Skok na dnešek
+          patří kalendáři, stojí v jeho hlavičce. */}
+      {(bezTerminu.length > 0 || (onOpenReview && reviewDay)) && (
         <div className="rise -mx-4 flex gap-2 overflow-x-auto px-4 py-1" style={{ scrollbarWidth: 'none' }}>
-          {vybrany !== today && (
-            <Chip tone="accent" onClick={() => vyber(today)}>
-              Dnes
-            </Chip>
-          )}
           {bezTerminu.length > 0 && (
             <Chip onClick={() => setInbox({})}>
               <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-soft" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -236,8 +232,7 @@ export function UpcomingView({
           rezim={rezim}
           vybrany={vybrany}
           zatizeni={zatizeni}
-          onVyber={setVybrany}
-          onKotva={setKotva}
+          onVyber={vyber}
           onRezim={setRezim}
         />
       </div>
