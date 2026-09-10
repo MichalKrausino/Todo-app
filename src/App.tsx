@@ -333,7 +333,6 @@ export default function App() {
           {tab === 'upcoming' && (
             <UpcomingView
               onOpenTask={setEditing}
-              onShowToday={() => setTab('today')}
               onOpenReview={() => setReviewOpen(true)}
             />
           )}
