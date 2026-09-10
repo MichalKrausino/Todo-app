@@ -36,8 +36,8 @@ instalace ani (v pozdější fázi) push notifikace.
 - Klienti/oblasti → projekty → úkoly, vše offline v IndexedDB (Dexie)
 - Rychlé zadávání s českým parserem: „ve čtvrtek poslat report @klient !vysoká“,
   „za 3 dny“, „příští týden“, „15.9.“ — funguje i bez diakritiky
-- Obrazovky **Dnes** (po termínu / dnes / hotovo), **Plán** (podle dnů + bez
-  termínu) a **Klienti** (detail, projekty, archivace)
+- Obrazovky **Dnes** (po termínu / dnes / hotovo), **Plán** (kalendář
+  a agenda vybraného dne) a **Klienti** (detail, projekty, archivace)
 - Instalace na plochu, offline režim přes service worker
 - Dnes je jedna odpověď: hlavička, jedna řádka kontextu (ranní návrh,
   nejbližší schůzka, uzávěrka, signály, bez termínu — každé chip a panel)
@@ -69,8 +69,13 @@ instalace ani (v pozdější fázi) push notifikace.
   záložky, ⌘↩ uloží detail, Esc zavře; při psaní se písmena berou jako
   písmena
 - Vzhled po úklidu: karty bez obrysu na teplém papíře, oddělovače od
-  textu, priorita tečkou, kroužek postupu v hlavičce Dnes, dny v Plánu
-  jako čísla s tečkou.
+  textu, priorita tečkou, kroužek postupu v hlavičce Dnes, kalendář
+  v Plánu s čísly a tečkou vytížení.
+- Plán je kalendář: týden v řádce, ťuknutím na měsíc celý měsíc, listuje
+  se šipkami i švihnutím. Vybraný den má pod kalendářem svou agendu
+  (schůzky, úkoly), pole „nový úkol na ten den" a výběr z úkolů bez
+  termínu — „Sem" pošle úkol na vybraný den, toast to umí vrátit.
+  Minulý den ukáže, co se ten den dodělalo.
 - Pohyb z knihoven motion-primitives, magicui, react-bits a shadcn/ui
   (motor `motion`): titulky se skládají po písmenech, obrazovky
   nastupují z rozostření, hrany pod dokem a lištou se rozpouštějí
