@@ -1,33 +1,42 @@
-// Kalendář Plánu — typografie na papíře, ne mřížka v krabici.
+// Kalendář Plánu — týden jako tichý graf času.
 //
-// První verze byla kalendář z telefonu v bílé kartě: modré šipky, modrý
-// vybraný den, modré tečky, pod čísly prázdná řádka pro tečky, a když se
-// listovalo, vybraný den zůstal mimo obrazovku, takže agenda dole
-// ukazovala den, který nebyl vidět. Tři modré věci v jedné řádce si
-// konkurovaly a karta okolo sedmi čísel nic nedělala.
+// Dvě verze za sebou byly „kalendář jako všude": čísla, tečky, šipky.
+// Tečka umí říct jen „něco tam je", a marketér s pěti klienty potřebuje
+// vidět jinou věc: KOLIK času ten den sežere a KOMU patří. Pod každým
+// číslem proto stojí sloupek — výška je naplánovaný čas (strop osm
+// hodin), barvy jsou klienti, šedá je schůzka nebo úkol bez klienta.
+// Týden se tak čte jako malý graf: čtvrtek je V Bílém, pátek nabitý,
+// víkend prázdný. Přesný obsah dne pak stojí v kartě pod kalendářem,
+// která z vybraného dne vyrůstá (ocásek karty sedí pod jeho sloupcem).
 //
-// Teď: (1) kalendář stojí přímo na papíře jako pás čísel — jediná karta
-// na obrazovce je agenda pod ním; (2) jediná plná výplň je INKOUSTOVÁ
-// pilulka vybraného dne, která mezi dny plyne (`layoutId`, stejný vzor
-// jako pilulka pod záložkou doku); dnešek je modré písmo a místo zkratky
-// dne má štítek „dnes"; (3) vytížení dne dělá váha písma a tři tiché
-// tečky uvnitř buňky, ne semafor pod ní; (4) šipky jsou tiché, „Dnes" je
-// v hlavičce kalendáře, ne v cizí řádce chipů; (5) listování posouvá
-// i výběr — týden dopředu znamená tentýž den příští týden, agenda dole
-// tak vždycky patří dni, který je vidět. Název měsíce je přepínač na celý
-// měsíc; buňky mají stejný tvar, pilulka jen doplyne na nové místo.
+// Listuje se NATIVNĚ: pás tří stránek (minulý · tento · další) s
+// `scroll-snap`, takže tah má setrvačnost a dopružení prohlížeče, ne
+// naši aproximaci přes pointer events. Po dojetí se pás tiše přestaví
+// zpátky na prostřední stránku (useLayoutEffect před vykreslením —
+// obsah je stejný, oko nic nepozná). Listování bere výběr s sebou:
+// týden dopředu = tentýž den příští týden, agenda dole vždycky patří
+// dni, který je vidět. Šipky jsou jen pro myš (`pointer-fine`).
 //
-// Audit kontrastu čte podklad z předků, ne z létající pilulky: vybraná
-// buňka proto dostane vlastní `bg-ink`, jakmile pilulka dojede (400 ms),
-// a v klidovém režimu hned.
+// Jediná plná výplň je inkoustový kroužek vybraného dne, který mezi dny
+// plyne (`layoutId`); dnešek je modré písmo a v hlavičce sloupce má
+// místo zkratky dne štítek „dnes". Audit kontrastu čte podklad z předků,
+// ne z létající pilulky: vybraný kroužek proto dostane vlastní `bg-ink`,
+// jakmile pilulka dojede (400 ms), a v klidovém režimu hned.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { addDays, formatFullDate, fromISODate, mondayOf, toISODate, todayISO } from '../lib/dates'
 import { plural } from '../lib/labels'
 import { klidovyRezim } from '../lib/motion'
 
 export type PlanRezim = 'tyden' | 'mesic'
+
+/** Nálož jednoho dne: minuty podle klienta (bez barvy = schůzka / bez klienta). */
+export interface DenNaloz {
+  polozky: number
+  minuty: number
+  dily: { barva?: string; minuty: number }[]
+}
 
 const DNY = ['po', 'út', 'st', 'čt', 'pá', 'so', 'ne']
 const monthYearFmt = new Intl.DateTimeFormat('cs-CZ', { month: 'long', year: 'numeric' })
@@ -62,14 +71,19 @@ export function posunVyber(vybrany: string, rezim: PlanRezim, delta: number): st
   return toISODate(new Date(d.getFullYear(), d.getMonth() + delta, Math.min(d.getDate(), posledni)))
 }
 
-// Práh švihnutí: pod ním je to ťuknutí, nad ním listování.
-const SVIH_PX = 48
-// Kolik teček nejvýš — přesný obsah dne stojí rozepsaný pod kalendářem.
-const TECKY_MAX = 3
-// Od kolika položek je den plný a tečky zčervenají.
-const PLNY_DEN = 5
+// Pás má tři stránky — okno dnů, pro které kalendář potřebuje nálož.
+export function oknoPasu(kotva: string, rezim: PlanRezim): [string, string] {
+  const pred = dnyObdobi(posunKotvu(kotva, rezim, -1), rezim)
+  const po = dnyObdobi(posunKotvu(kotva, rezim, 1), rezim)
+  return [pred[0], po[po.length - 1]]
+}
+
+// Strop sloupku: osm hodin je plný den.
+const PLNY_DEN_MIN = 8 * 60
 // Než pilulka dojede na nové místo (pružina 0.45 s).
 const DOJEZD_MS = 400
+// Klid po posledním scroll eventu = tah dojel (záloha za `scrollend`).
+const DOJEZD_SCROLL_MS = 140
 
 const pruzina = { type: 'spring', bounce: 0.2, duration: 0.45 } as const
 
@@ -77,15 +91,15 @@ export function PlanKalendar({
   kotva,
   rezim,
   vybrany,
-  zatizeni,
+  naloz,
   onVyber,
   onRezim,
 }: {
   kotva: string
   rezim: PlanRezim
   vybrany: string
-  /** kolik toho na dni je (úkoly + schůzky) — tečky a váha čísla */
-  zatizeni: Map<string, number>
+  /** nálož dnů v okně pásu (`oknoPasu`) — sloupky pod čísly */
+  naloz: Map<string, DenNaloz>
   onVyber: (iso: string) => void
   onRezim: (r: PlanRezim) => void
 }) {
@@ -99,20 +113,8 @@ export function PlanKalendar({
     rezim === 'mesic' || prvni.getMonth() === posledni.getMonth()
       ? monthYearFmt.format(rezim === 'mesic' ? prvni : posledni)
       : `${monthFmt.format(prvni)} – ${monthYearFmt.format(posledni)}`
-  const lead = rezim === 'mesic' ? (prvni.getDay() + 6) % 7 : 0
 
-  // Směr listování řídí, odkud nová stránka přijede.
-  const smer = useRef(0)
-  const listuj = (delta: number) => {
-    smer.current = delta
-    onVyber(posunVyber(vybrany, rezim, delta))
-  }
-  const prepni = () => {
-    smer.current = 0
-    onRezim(rezim === 'tyden' ? 'mesic' : 'tyden')
-  }
-
-  // Pevný podklad pod vybranou buňkou až po dojezdu pilulky.
+  // Pevný podklad pod vybraným kroužkem až po dojezdu pilulky.
   const [usazeno, setUsazeno] = useState(klid)
   useEffect(() => {
     if (klid) return
@@ -121,56 +123,88 @@ export function PlanKalendar({
     return () => clearTimeout(t)
   }, [vybrany, rezim, klid])
 
-  // Švihnutí do strany listuje; svislý tah patří rolování stránky
-  // (touch-action: pan-y), takže se s ním nepere.
-  const tah = useRef<{ x: number; y: number } | null>(null)
-  const start = (e: React.PointerEvent) => {
-    if (e.pointerType === 'mouse') return
-    tah.current = { x: e.clientX, y: e.clientY }
+  // Pás: po každé změně období stojí prostřední stránka uprostřed.
+  const pas = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = pas.current
+    if (el) el.scrollLeft = el.clientWidth
+  }, [kotva, rezim])
+
+  const dojel = () => {
+    const el = pas.current
+    if (!el || el.clientWidth === 0) return
+    const i = Math.round(el.scrollLeft / el.clientWidth) - 1
+    if (i !== 0) onVyber(posunVyber(vybrany, rezim, i))
   }
-  const konec = (e: React.PointerEvent) => {
-    const t = tah.current
-    tah.current = null
-    if (!t) return
-    const dx = e.clientX - t.x
-    const dy = e.clientY - t.y
-    if (Math.abs(dx) < SVIH_PX || Math.abs(dx) < Math.abs(dy) * 1.2) return
-    listuj(dx < 0 ? 1 : -1)
+  const casovac = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const priScrollu = () => {
+    if (casovac.current) clearTimeout(casovac.current)
+    casovac.current = setTimeout(dojel, DOJEZD_SCROLL_MS)
   }
+  useEffect(() => {
+    const el = pas.current
+    if (!el) return
+    const h = () => {
+      if (casovac.current) clearTimeout(casovac.current)
+      dojel()
+    }
+    el.addEventListener('scrollend', h)
+    return () => el.removeEventListener('scrollend', h)
+  })
+
+  // Šipky (jen myš): plynulé odrolování na vedlejší stránku, zbytek
+  // udělá dojezd stejně jako po tahu prstem.
+  const listuj = (delta: number) => {
+    const el = pas.current
+    if (!el) return
+    if (klid) {
+      onVyber(posunVyber(vybrany, rezim, delta))
+      return
+    }
+    el.scrollTo({ left: el.clientWidth * (1 + delta), behavior: 'smooth' })
+  }
+
+  // Sloupek: v týdnu vyšší (čte se jako graf), v měsíci nižší, aby se
+  // šest řádků vešlo. Když na dni něco je, má sloupek aspoň minimum —
+  // hodina z osmi by jinak byla dvoupixelová čárka bez barvy.
+  const vyskaSloupku = rezim === 'tyden' ? 22 : 8
+  const minSloupku = rezim === 'tyden' ? 6 : 3
 
   const bunka = (iso: string) => {
     const d = fromISODate(iso)
-    const n = zatizeni.get(iso) ?? 0
+    const n = naloz.get(iso)
+    const polozky = n?.polozky ?? 0
     const selected = iso === vybrany
     const isToday = iso === today
     const past = iso < today
-    const tyden = rezim === 'tyden'
     const cislo = selected
       ? 'font-semibold text-card'
       : isToday
         ? 'font-semibold text-accent-deep'
         : past
           ? 'text-ink-faint'
-          : n > 0
+          : polozky > 0
             ? 'font-semibold text-ink'
             : 'text-ink-soft'
-    const tecka = selected ? 'bg-card/70' : n >= PLNY_DEN ? 'bg-danger' : 'bg-ink-faint'
-    const popis = `${formatFullDate(d)}${n > 0 ? `, ${n} ${plural(n, 'položka', 'položky', 'položek')}` : ', volno'}`
+    // Sloupek: výška je čas (strop osm hodin, aspoň 3 px, když něco je),
+    // díly odspoda od největšího.
+    const celkem = n?.minuty ?? 0
+    const vyska = celkem > 0 ? Math.max(minSloupku, Math.round((Math.min(celkem, PLNY_DEN_MIN) / PLNY_DEN_MIN) * vyskaSloupku)) : 0
+    const dily = n ? [...n.dily].sort((a, b) => b.minuty - a.minuty) : []
+    const popis = `${formatFullDate(d)}${polozky > 0 ? `, ${polozky} ${plural(polozky, 'položka', 'položky', 'položek')}` : ', volno'}`
     return (
       <button
         key={iso}
         type="button"
         data-day={iso}
-        data-load={n}
+        data-load={polozky}
         aria-pressed={selected}
         aria-label={popis}
         onClick={() => onVyber(iso)}
-        className="flex justify-center py-0.5 transition-transform duration-150 active:scale-95"
+        className={`flex flex-col items-center transition-transform duration-150 active:scale-95 ${rezim === 'tyden' ? 'py-1' : 'py-0.5'}`}
       >
         <span
-          className={`relative flex w-9 flex-col items-center justify-center rounded-full ${tyden ? 'h-[60px]' : 'h-11'} ${
-            selected && usazeno ? 'bg-ink' : ''
-          }`}
+          className={`relative flex h-9 w-9 items-center justify-center rounded-full ${selected && usazeno ? 'bg-ink' : ''}`}
         >
           {selected &&
             (klid ? (
@@ -183,48 +217,66 @@ export function PlanKalendar({
                 initial={false}
               />
             ))}
-          {tyden && (
-            <span
-              className={`relative z-10 text-[11px] font-medium leading-none ${
-                selected ? 'text-card' : isToday ? 'text-accent-deep' : 'text-ink-faint'
-              }`}
-            >
-              {isToday ? 'dnes' : DNY[(d.getDay() + 6) % 7]}
+          <span className={`relative z-10 text-[17px] leading-none tabular-nums ${cislo}`}>{d.getDate()}</span>
+        </span>
+        <span className={`mt-1 flex items-end ${rezim === 'tyden' ? 'w-6' : 'w-5'}`} style={{ height: vyskaSloupku }} aria-hidden="true">
+          {vyska > 0 && (
+            <span className="flex w-full flex-col-reverse overflow-hidden rounded-[3px]" style={{ height: vyska }}>
+              {dily.map((dil, i) => (
+                <span
+                  key={i}
+                  className={dil.barva ? '' : 'bg-ink-faint'}
+                  style={{ flex: `${dil.minuty} 0 0`, background: dil.barva }}
+                />
+              ))}
             </span>
           )}
-          <span className={`relative z-10 text-[17px] leading-none tabular-nums ${tyden ? 'mt-1.5' : ''} ${cislo}`}>
-            {d.getDate()}
-          </span>
-          <span className="relative z-10 mt-1.5 flex h-1 items-center gap-[3px]">
-            {Array.from({ length: Math.min(n, TECKY_MAX) }).map((_, i) => (
-              <span key={i} className={`h-[3px] w-[3px] rounded-full ${tecka}`} />
-            ))}
-          </span>
         </span>
       </button>
     )
   }
 
-  const mrizka = (
-    <div
-      className="grid grid-cols-7"
-      style={{ touchAction: 'pan-y' }}
-      onPointerDown={start}
-      onPointerUp={konec}
-      onPointerCancel={() => (tah.current = null)}
-    >
-      {rezim === 'mesic' &&
-        DNY.map((w) => (
-          <span key={w} className="pb-1 text-center text-[11px] font-medium leading-none text-ink-faint">
-            {w}
-          </span>
+  // Stránka pásu: týden je sedm buněk, měsíc tolik řádků, kolik chce
+  // nejdelší ze tří stránek v pásu — sousedi mají stejnou výšku, takže
+  // tah neposkakuje, a prázdný šestý řádek se kreslí jen když ho někdo
+  // z nich opravdu potřebuje.
+  const stranky = [-1, 0, 1].map((i) => posunKotvu(kotva, rezim, i))
+  const radkuMesice = (k: string) => {
+    const d = dnyObdobi(k, rezim)
+    return Math.ceil(((fromISODate(d[0]).getDay() + 6) % 7 + d.length) / 7)
+  }
+  const radky = rezim === 'mesic' ? Math.max(...stranky.map(radkuMesice)) : 1
+  const stranka = (k: string) => {
+    const dnyStranky = dnyObdobi(k, rezim)
+    const lead = rezim === 'mesic' ? (fromISODate(dnyStranky[0]).getDay() + 6) % 7 : 0
+    const trail = rezim === 'mesic' ? radky * 7 - lead - dnyStranky.length : 0
+    return (
+      <div key={k} className="grid w-full shrink-0 snap-start grid-cols-7">
+        {Array.from({ length: lead }).map((_, i) => (
+          <span key={`l${i}`} />
         ))}
-      {Array.from({ length: lead }).map((_, i) => (
-        <span key={`lead${i}`} />
-      ))}
-      {dny.map(bunka)}
-    </div>
-  )
+        {dnyStranky.map(bunka)}
+        {Array.from({ length: trail }).map((_, i) => (
+          <span key={`t${i}`} />
+        ))}
+      </div>
+    )
+  }
+
+  // Hlavička sloupců: v týdnu patří prostřední stránce, takže dnešek má
+  // místo zkratky „dnes"; v měsíci jsou to jen dny v týdnu.
+  const hlavicky = DNY.map((w, i) => {
+    const iso = rezim === 'tyden' ? dny[i] : null
+    const dnes = iso === today
+    return (
+      <span
+        key={w}
+        className={`pb-1 text-center text-[11px] font-medium leading-none ${dnes ? 'text-accent-deep' : 'text-ink-faint'}`}
+      >
+        {dnes ? 'dnes' : w}
+      </span>
+    )
+  })
 
   return (
     <div>
@@ -233,7 +285,7 @@ export function PlanKalendar({
             říká, kam se to rozbalí. */}
         <button
           type="button"
-          onClick={prepni}
+          onClick={() => onRezim(rezim === 'tyden' ? 'mesic' : 'tyden')}
           aria-expanded={rezim === 'mesic'}
           className="-ml-2 inline-flex h-10 items-center gap-1 rounded-full px-2 text-[17px] font-semibold text-ink transition-transform duration-150 active:scale-95"
         >
@@ -254,10 +306,7 @@ export function PlanKalendar({
           {vybrany !== today && (
             <button
               type="button"
-              onClick={() => {
-                smer.current = vybrany > today ? -1 : 1
-                onVyber(today)
-              }}
+              onClick={() => onVyber(today)}
               className="pop-soft h-10 rounded-full px-2.5 text-[13px] font-medium text-accent-deep transition-transform duration-150 active:scale-95"
             >
               Dnes
@@ -267,7 +316,7 @@ export function PlanKalendar({
             type="button"
             onClick={() => listuj(-1)}
             aria-label={rezim === 'tyden' ? 'Předchozí týden' : 'Předchozí měsíc'}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-ink-soft transition-transform duration-150 active:scale-90"
+            className="hidden h-10 w-10 items-center justify-center rounded-full text-ink-soft transition-transform duration-150 pointer-fine:flex active:scale-90"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M15 6l-6 6 6 6" />
@@ -277,7 +326,7 @@ export function PlanKalendar({
             type="button"
             onClick={() => listuj(1)}
             aria-label={rezim === 'tyden' ? 'Další týden' : 'Další měsíc'}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-ink-soft transition-transform duration-150 active:scale-90"
+            className="hidden h-10 w-10 items-center justify-center rounded-full text-ink-soft transition-transform duration-150 pointer-fine:flex active:scale-90"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 6l6 6-6 6" />
@@ -286,20 +335,15 @@ export function PlanKalendar({
         </div>
       </div>
 
-      {/* Nová stránka přijede ze strany, kam se listovalo; přepnutí
-          týden ↔ měsíc se jen vynoří. V klidu stojí rovnou na místě. */}
-      {klid ? (
-        <div key={`${rezim}:${kotva}`}>{mrizka}</div>
-      ) : (
-        <motion.div
-          key={`${rezim}:${kotva}`}
-          initial={{ opacity: 0, x: smer.current * 18, y: smer.current === 0 ? 6 : 0 }}
-          animate={{ opacity: 1, x: 0, y: 0 }}
-          transition={{ duration: 0.24, ease: [0.2, 0, 0, 1] }}
-        >
-          {mrizka}
-        </motion.div>
-      )}
+      <div className="grid grid-cols-7">{hlavicky}</div>
+      <div
+        ref={pas}
+        onScroll={priScrollu}
+        className="flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain [&::-webkit-scrollbar]:hidden"
+        style={{ scrollbarWidth: 'none' }}
+      >
+        {stranky.map(stranka)}
+      </div>
     </div>
   )
 }

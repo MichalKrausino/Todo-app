@@ -26,7 +26,7 @@ import {
   sortTasks,
 } from '../db/repo'
 import { plannedMinutes } from '../lib/capacity'
-import { addDays, formatEventRange, formatFullDate, fromISODate, mondayOf, toISODate, todayISO } from '../lib/dates'
+import { addDays, formatEventRange, formatFullDate, formatFullDateNa, fromISODate, mondayOf, toISODate, todayISO } from '../lib/dates'
 import { minutesToLabel } from '../lib/freeSlot'
 import { plural } from '../lib/labels'
 import { parseQuickAdd } from '../lib/quickAdd'
@@ -35,7 +35,7 @@ import { TaskRow } from '../components/TaskRow'
 import { DlouhySeznam } from '../components/DlouhySeznam'
 import { Chip } from '../components/Chip'
 import { BezTerminuSheet } from '../components/BezTerminuSheet'
-import { PlanKalendar, dnyObdobi, kotvaPro, type PlanRezim } from '../components/PlanKalendar'
+import { PlanKalendar, kotvaPro, oknoPasu, type DenNaloz, type PlanRezim } from '../components/PlanKalendar'
 import { TextEffect } from '../components/ui/TextEffect'
 
 const effectiveDate = (t: Task): string | undefined => {
@@ -90,9 +90,9 @@ export function UpcomingView({
 
   // Schůzky pro celé zobrazené období i vybraný den (ten může být mimo,
   // když se listuje pryč). Vícedenní událost patří do KAŽDÉHO svého dne.
-  const dny = dnyObdobi(kotva, rezim)
-  const od = vybrany < dny[0] ? vybrany : dny[0]
-  const doo = vybrany > dny[dny.length - 1] ? vybrany : dny[dny.length - 1]
+  const [odPasu, doPasu] = oknoPasu(kotva, rezim)
+  const od = vybrany < odPasu ? vybrany : odPasu
+  const doo = vybrany > doPasu ? vybrany : doPasu
   const events = useLiveQuery(() => calendarEventsBetween(od, doo), [od, doo]) ?? []
   const eventsPerDay = new Map<string, CalendarEvent[]>()
   for (const e of events) {
@@ -114,12 +114,33 @@ export function UpcomingView({
   }
   const bezTerminu = sortTasks(open.filter((t) => !effectiveDate(t)))
 
-  // Tečky v kalendáři: úkoly + schůzky. Propadlé se počítají na svůj den,
-  // ne na dnešek — kalendář je mapa, ne triáž.
-  const zatizeni = new Map<string, number>()
-  for (const d of dny) {
-    const n = (podleDne.get(d)?.length ?? 0) + (eventsPerDay.get(d)?.length ?? 0)
-    if (n > 0) zatizeni.set(d, n)
+  // Sloupky v kalendáři: čas úkolů po klientech + délka schůzek (bez
+  // barvy), pro všechny tři stránky pásu. Propadlé se počítají na svůj
+  // den, ne na dnešek — kalendář je mapa, ne triáž.
+  const naloz = new Map<string, DenNaloz>()
+  for (let d = od; d <= doo; d = toISODate(addDays(fromISODate(d), 1))) {
+    const ukoly = podleDne.get(d) ?? []
+    const schuzky = eventsPerDay.get(d) ?? []
+    if (ukoly.length === 0 && schuzky.length === 0) continue
+    const podleKlienta = new Map<string, number>()
+    for (const t of ukoly) {
+      const k = t.clientId && clientMap.has(t.clientId) ? t.clientId : ''
+      podleKlienta.set(k, (podleKlienta.get(k) ?? 0) + plannedMinutes([t]))
+    }
+    let neutralni = podleKlienta.get('') ?? 0
+    for (const e of schuzky) {
+      if (e.allDay) continue
+      neutralni += Math.max(0, Math.round((Date.parse(e.end) - Date.parse(e.start)) / 60000))
+    }
+    const dily: DenNaloz['dily'] = [...podleKlienta]
+      .filter(([k]) => k !== '')
+      .map(([k, minuty]) => ({ barva: clientMap.get(k)!.color, minuty }))
+    if (neutralni > 0) dily.push({ minuty: neutralni })
+    naloz.set(d, {
+      polozky: ukoly.length + schuzky.length,
+      minuty: dily.reduce((sum, x) => sum + x.minuty, 0),
+      dily,
+    })
   }
 
   // Minulý den ukazuje, co se ten den dodělalo — ne co na něm propadlo.
@@ -186,6 +207,7 @@ export function UpcomingView({
   }
 
   const nazevDne = vybrany === today ? 'Dnes' : formatFullDate(fromISODate(vybrany))
+  const sloupec = (fromISODate(vybrany).getDay() + 6) % 7
   const nadpisDne = [
     nazevDne,
     dayTasks.length > 0
@@ -231,15 +253,23 @@ export function UpcomingView({
           kotva={kotva}
           rezim={rezim}
           vybrany={vybrany}
-          zatizeni={zatizeni}
+          naloz={naloz}
           onVyber={vyber}
           onRezim={setRezim}
         />
       </div>
 
       <section className="rise" style={{ '--stagger': 2 } as React.CSSProperties}>
-        <h2 className="section-label mb-2 first-letter:uppercase">{nadpisDne}</h2>
+        {/* Karta dne vyrůstá z vybraného sloupce: ocásek stojí pod ním
+            a při změně dne přejede. */}
+        <div className="relative h-2.5" aria-hidden="true">
+          <span
+            className="absolute top-1 h-3 w-3 -translate-x-1/2 rotate-45 rounded-[2px] bg-card transition-[left] duration-300 ease-out"
+            style={{ left: `${((sloupec + 0.5) * 100) / 7}%` }}
+          />
+        </div>
         <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+          <h2 className="section-label px-3 pb-1 pt-3 first-letter:uppercase">{nadpisDne}</h2>
           {dayEvents.length > 0 && (
             <ul className={`divide-y divide-line bg-well/30 ${dayTasks.length > 0 ? 'border-b border-line' : ''}`}>
               {dayEvents.map((e) => (
@@ -268,7 +298,7 @@ export function UpcomingView({
                 value={novy}
                 onChange={(e) => setNovy(e.target.value)}
                 aria-label="Nový úkol na vybraný den"
-                placeholder={`Nový úkol na ${vybrany === today ? 'dnešek' : formatFullDate(fromISODate(vybrany))}…`}
+                placeholder={`Nový úkol na ${vybrany === today ? 'dnešek' : formatFullDateNa(fromISODate(vybrany))}…`}
                 enterKeyHint="done"
                 className="w-full appearance-none rounded-full border border-transparent bg-card py-2.5 pl-4 pr-12 text-[16px] text-ink shadow-card outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus-visible:outline-none"
               />
