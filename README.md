@@ -80,6 +80,10 @@ instalace ani (v pozdější fázi) push notifikace.
   (schůzky, úkoly), pole „nový úkol na ten den" a výběr z úkolů bez
   termínu — „Sem" pošle úkol na vybraný den, toast to umí vrátit.
   Minulý den ukáže, co se ten den dodělalo.
+- Tekutý dok: pilulka pod ikonou letí pružinou, a když prst na doku
+  zůstane a táhne, jede s ním jako želé a puštění vybere nejbližší
+  záložku; vybraná ikona se dokreslí tahem, dok při startu vyjede
+  zespoda, sloupky v kalendáři vyrostou
 - Pohyb z knihoven motion-primitives, magicui, react-bits a shadcn/ui
   (motor `motion`): titulky se skládají po písmenech, obrazovky
   nastupují z rozostření, hrany pod dokem a lištou se rozpouštějí

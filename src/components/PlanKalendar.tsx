@@ -220,7 +220,7 @@ export function PlanKalendar({
           <span className={`relative z-10 text-[17px] leading-none tabular-nums ${cislo}`}>{d.getDate()}</span>
         </span>
         <span className={`mt-1 flex items-end ${rezim === 'tyden' ? 'w-6' : 'w-5'}`} style={{ height: vyskaSloupku }} aria-hidden="true">
-          {vyska > 0 && (
+          {vyska > 0 && klid && (
             <span className="flex w-full flex-col-reverse overflow-hidden rounded-[3px]" style={{ height: vyska }}>
               {dily.map((dil, i) => (
                 <span
@@ -230,6 +230,24 @@ export function PlanKalendar({
                 />
               ))}
             </span>
+          )}
+          {/* Sloupky vyrostou odspoda, každý sloupec o chlup později —
+              graf se „nakreslí", místo aby naskočil. */}
+          {vyska > 0 && !klid && (
+            <motion.span
+              className="flex w-full flex-col-reverse overflow-hidden rounded-[3px]"
+              initial={{ height: 0 }}
+              animate={{ height: vyska }}
+              transition={{ type: 'spring', bounce: 0, duration: 0.55, delay: 0.05 + ((d.getDay() + 6) % 7) * 0.03 }}
+            >
+              {dily.map((dil, i) => (
+                <span
+                  key={i}
+                  className={dil.barva ? '' : 'bg-ink-faint'}
+                  style={{ flex: `${dil.minuty} 0 0`, background: dil.barva }}
+                />
+              ))}
+            </motion.span>
           )}
         </span>
       </button>
