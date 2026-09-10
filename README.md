@@ -58,6 +58,8 @@ instalace ani (v pozdější fázi) push notifikace.
 - Detail úkolu bez formuláře: název jako titulek, poznámka pod ním a jedna
   stavová řádka slotů (Termín, Klient, Projekt, Priorita, Opakování,
   Naplánovat) — stejná jako při zadávání v doku
+- Opakování s frekvencí i dnem: „týdně v neděli", „každé 2 týdny po a čt",
+  „měsíčně 15.", „ročně 14. 9." — termín se sám srovná na první výskyt
 - Triáž propadlých: nadpis „po termínu" otevře průchod jeden po druhém —
   u každého dnes / příští týden / už neplatí, se „Zpět" na poslední krok
 - Odkaz v úkolu jde otevřít ťuknutím: Canva, Drive nebo brief v poznámce

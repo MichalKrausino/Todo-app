@@ -141,3 +141,106 @@ export function humanizeRule(ruleStr: string): string {
   }
   return ruleStr
 }
+
+// --- Části pravidla: frekvence + den. Sdílí je detail úkolu i šablony. ---
+//
+// Úkol dřív dostal opakování jen jako předvolbu („týdně") a den si vzal
+// z termínu — kdo chtěl „každou neděli", musel napřed přesunout termín na
+// neděli. Teď se den volí přímo: u týdenních pravidel dny v týdnu (i víc
+// naráz, „po, čt"), u měsíčních den v měsíci, u ročních ještě měsíc.
+
+// Pořadí je zároveň kanonické pořadí v pravidle: „MO,TH", ne „TH,MO".
+export const WEEKDAYS: ReadonlyArray<readonly [code: string, label: string]> = [
+  ['MO', 'po'],
+  ['TU', 'út'],
+  ['WE', 'st'],
+  ['TH', 'čt'],
+  ['FR', 'pá'],
+  ['SA', 'so'],
+  ['SU', 'ne'],
+]
+
+export const MONTHS = [
+  'leden', 'únor', 'březen', 'duben', 'květen', 'červen',
+  'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec',
+] as const
+
+export interface RuleParts {
+  preset: RecurrencePreset
+  /** kódy dnů v týdnu v pořadí týdne (jen weekly / biweekly) */
+  byday: string[]
+  /** den v měsíci 1–31 (monthly / quarterly / yearly) */
+  dom: number
+  /** měsíc 1–12 (yearly) */
+  month: number
+}
+
+/** Dny v pořadí týdne — pravidlo nesmí záviset na pořadí ťukání. */
+export const sortByday = (dny: Iterable<string>): string[] => {
+  const set = new Set(dny)
+  return WEEKDAYS.map(([kod]) => kod).filter((kod) => set.has(kod))
+}
+
+export function ruleFromParts(p: RuleParts): string {
+  const byday = sortByday(p.byday).join(',') || 'MO'
+  switch (p.preset) {
+    case 'daily':
+      return 'FREQ=DAILY'
+    case 'weekly':
+      return `FREQ=WEEKLY;BYDAY=${byday}`
+    case 'biweekly':
+      return `FREQ=WEEKLY;INTERVAL=2;BYDAY=${byday}`
+    case 'monthly':
+      return `FREQ=MONTHLY;BYMONTHDAY=${p.dom}`
+    case 'quarterly':
+      return `FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=${p.dom}`
+    case 'yearly':
+      return `FREQ=YEARLY;BYMONTH=${p.month};BYMONTHDAY=${p.dom}`
+  }
+}
+
+// Rozklad pravidla na části; null = pravidlo mimo předvolby (např.
+// „každé 3 týdny" z parseru) — takové se nechá být, jen se ukáže.
+export function partsFromRule(ruleStr: string): RuleParts | null {
+  const preset = presetFromRule(ruleStr)
+  if (preset === 'custom') return null
+  let o: Partial<Options>
+  try {
+    o = RRule.parseString(ruleStr)
+  } catch {
+    return null
+  }
+  const byday = Array.isArray(o.byweekday)
+    ? sortByday(o.byweekday.map((w) => JS_TO_BYDAY[(dayNumber(w) + 1) % 7]))
+    : typeof o.byweekday === 'number'
+      ? [JS_TO_BYDAY[(o.byweekday + 1) % 7]]
+      : []
+  const domRaw = Array.isArray(o.bymonthday) ? o.bymonthday[0] : o.bymonthday
+  const monthRaw = Array.isArray(o.bymonth) ? o.bymonth[0] : o.bymonth
+  return {
+    preset,
+    byday: byday.length ? byday : ['MO'],
+    dom: typeof domRaw === 'number' ? domRaw : 1,
+    month: typeof monthRaw === 'number' ? monthRaw : 1,
+  }
+}
+
+// První výskyt pravidla v den `fromISO` nebo po něm (kotva = tentýž den).
+// Detail úkolu tím srovná termín na den, který pravidlo doopravdy trefí:
+// „každou neděli" na úkolu ze středy posune termín na nejbližší neděli.
+export function firstOccurrenceFrom(ruleStr: string, fromISO: string): string | null {
+  const d = buildRule(ruleStr, fromISO).after(toUTC(fromISO), true)
+  return d ? fromUTC(d) : null
+}
+
+// Termín opakovaného úkolu: první výskyt od dneška — pokud stávající
+// termín pravidlo trefuje a ještě nenastal, zůstane (záměrně vzdálený
+// start se nesmí stáhnout k dnešku).
+export function alignDueDate(ruleStr: string, dueISO: string | undefined, todayISO: string): string | undefined {
+  try {
+    if (dueISO && dueISO >= todayISO && firstOccurrenceFrom(ruleStr, dueISO) === dueISO) return dueISO
+    return firstOccurrenceFrom(ruleStr, todayISO) ?? dueISO
+  } catch {
+    return dueISO
+  }
+}
