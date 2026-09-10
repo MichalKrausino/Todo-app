@@ -666,7 +666,8 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
                 {rule && (
                   <p className="px-1 text-[12px] leading-relaxed text-ink-faint">
                     {velkePismeno(humanizeRule(rule))}
-                    {dueDate && ` · první výskyt ${formatDayLabel(dueDate)}`}. Po odškrtnutí se úkol sám založí na další termín.
+                    {dueDate && ` · první výskyt ${formatDayLabel(dueDate)}`}
+                    {' '}· po odškrtnutí se úkol sám založí na další termín
                   </p>
                 )}
               </div>
