@@ -19,7 +19,7 @@ import { estimateTaskMinutes } from '../lib/estimate'
 import { RULE_EPOCH, occurrencesBetween } from '../lib/rrule'
 import { updateClient } from './repo'
 
-export const GENERATION_HORIZON_DAYS = 30
+export const GENERATION_HORIZON_DAYS = 90
 
 const now = () => new Date().toISOString()
 

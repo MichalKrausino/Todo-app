@@ -76,11 +76,13 @@ instalace ani (v pozdější fázi) push notifikace.
   komu který den patří. Ťuknutí na den ho rozbalí na místě: schůzky,
   úkoly, pole „nový úkol na ten den" a výběr z úkolů bez termínu
   („Sem" pošle úkol na vybraný den, toast to umí vrátit). Řádky jdou
-  od dneška po týdnech a dobírají se po čtyřech týdnech.
-- Tekutý dok jako na iOS 26: pod vybranou ikonou je skleněná čočka,
-  která při přepnutí letí jako kapka — natáhne se k nové záložce,
-  zvedne se a stáhne kolem ikony, ikona pod sklem se k ní přitáhne; když prst na doku
-  zůstane a táhne, jede s ním jako želé a puštění vybere nejbližší
+  od dneška po týdnech bez konce — další se přiberou samy, jakmile
+  doscrolluješ dolů.
+- Tekutý dok jako na iOS 26: pod vybranou ikonou je skleněná čočka.
+  Ikona pod prstem se stlačí hned při dotyku, po puštění se čočka
+  nadzvedne, překlouže k nové záložce (sklo při jízdě chytí světlo) a
+  dosedne, až když se zastaví; nová ikona vyjede zespoda; když prst na
+  doku zůstane a táhne, čočka jede s ním a puštění vybere nejbližší
   záložku; vybraná ikona zesílí a dokreslí se tahem, dok při startu
   vyjede zespoda, pruhy v Plánu narostou
 - Pohyb z knihoven motion-primitives, magicui, react-bits a shadcn/ui

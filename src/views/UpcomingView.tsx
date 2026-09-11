@@ -15,7 +15,7 @@
 // hodin. Řádek má celou šířku: pruh je čitelný, popisek pod ním řekne
 // „2 úkoly · schůzka · ~3 h" a rozbalený den nemusí nikam odskakovat.
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { CalendarEvent, Task } from '../db/types'
 import {
@@ -73,6 +73,21 @@ export function UpcomingView({
   const klid = klidovyRezim()
   const [vybrany, setVybrany] = useState<string | null>(today)
   const [dnu, setDnu] = useState(DAVKA_DNI)
+  // Nekonečný seznam: jakmile se konec dostane na dohled, přibere se
+  // další dávka dnů. Tlačítko pod ním zůstává pro klávesnici a čtečku.
+  const konecRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = konecRef.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(
+      (zaznamy) => {
+        if (zaznamy.some((z) => z.isIntersecting)) setDnu((n) => n + DAVKA_DNI)
+      },
+      { rootMargin: '600px 0px' },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
   const [inbox, setInbox] = useState<null | { cil?: string }>(null)
   const [novy, setNovy] = useState('')
 
@@ -384,6 +399,7 @@ export function UpcomingView({
         </section>
       ))}
 
+      <div ref={konecRef} aria-hidden="true" />
       <button
         type="button"
         onClick={() => setDnu((n) => n + DAVKA_DNI)}
