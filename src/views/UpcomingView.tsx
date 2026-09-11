@@ -212,19 +212,60 @@ export function UpcomingView({
     ukazToast(`${nazevDne(iso)} — „${task.title}"`)
   }
 
-  // Týdny: skupina řádků s tichým štítkem.
-  const tydny: { kotva: string; dny: string[] }[] = []
+  // MĚSÍCE jsou hlavní předěl, týdny tichý štítek uvnitř nich. Dřív byl
+  // Plán jen řada týdnů a po pár obrazovkách splýval: „od 21. září" je
+  // štítek, ne orientační bod, a všechny vypadaly stejně. Teď nese měsíc
+  // velké jméno a počet úkolů, týden 13px tichý popisek — dvě velikosti
+  // písma říkají, kde končí jeden celek a začíná druhý, bez jediné linky.
+  // Týden přes přelom měsíce se DĚLÍ, aby blok měsíce nikdy neukazoval
+  // dny jiného; pokračování se pozná podle kotvy (pondělí v minulém
+  // měsíci) a místo „tento týden" ukáže rozsah dnů.
+  const mesice: { kotva: string; tydny: { kotva: string; dny: string[] }[] }[] = []
   for (const d of dny) {
-    const k = mondayOf(d)
-    const posledni = tydny[tydny.length - 1]
-    if (posledni && posledni.kotva === k) posledni.dny.push(d)
-    else tydny.push({ kotva: k, dny: [d] })
+    const mKotva = d.slice(0, 7)
+    const wKotva = mondayOf(d)
+    let mesic = mesice[mesice.length - 1]
+    if (!mesic || mesic.kotva !== mKotva) {
+      mesic = { kotva: mKotva, tydny: [] }
+      mesice.push(mesic)
+    }
+    const posledni = mesic.tydny[mesic.tydny.length - 1]
+    if (posledni && posledni.kotva === wKotva) posledni.dny.push(d)
+    else mesic.tydny.push({ kotva: wKotva, dny: [d] })
   }
-  const stitekTydne = (kotva: string) => {
-    if (kotva === pondeli) return 'tento týden'
-    if (kotva === toISODate(addDays(fromISODate(pondeli), 7))) return 'příští týden'
-    const d = fromISODate(kotva)
-    return `od ${d.getDate()}. ${monthFmt.format(d)}`
+
+  const stitekMesice = (kotva: string) => {
+    const d = fromISODate(`${kotva}-01`)
+    const jmeno = monthFmt.format(d)
+    // Rok se píše, až když nejde o tenhle — Plán je nekonečný, tak se
+    // do něj dá dorolovat i na příští leden.
+    return d.getFullYear() === fromISODate(today).getFullYear() ? jmeno : `${jmeno} ${d.getFullYear()}`
+  }
+
+  // Souhrn měsíce počítá CELÝ měsíc (od dneška), ne jen vykreslené dny —
+  // úkoly jsou v paměti všechny, takže se číslo doscrollováním nemění.
+  // Hodiny jsou čas úkolů jako v hlavičce („tento týden · ~4 h"),
+  // schůzky v nich nejsou: kalendář je stažený jen po konec okna.
+  const souhrnMesice = (kotva: string) => {
+    let ukoly = 0
+    let minuty = 0
+    for (const [den, ts] of podleDne) {
+      if (!den.startsWith(kotva)) continue
+      ukoly += ts.length
+      minuty += plannedMinutes(ts)
+    }
+    if (ukoly === 0) return 'volno'
+    return `${ukoly} ${plural(ukoly, 'úkol', 'úkoly', 'úkolů')}${minuty > 0 ? ` · ~${minutesToLabel(minuty)}` : ''}`
+  }
+
+  const stitekTydne = (kotva: string, dnyTydne: string[], pokracovani: boolean) => {
+    if (!pokracovani) {
+      if (kotva === pondeli) return 'tento týden'
+      if (kotva === toISODate(addDays(fromISODate(pondeli), 7))) return 'příští týden'
+    }
+    const od = fromISODate(dnyTydne[0]).getDate()
+    const do_ = fromISODate(dnyTydne[dnyTydne.length - 1]).getDate()
+    return od === do_ ? `${od}.` : `${od}.–${do_}.`
   }
 
   const popisDne = (n: DenNaloz | undefined) => {
@@ -402,10 +443,26 @@ export function UpcomingView({
         </div>
       )}
 
-      {tydny.map((t, i) => (
-        <section key={t.kotva} className="rise" style={{ '--stagger': Math.min(i + 1, 6) } as React.CSSProperties}>
-          <h2 className="section-label mb-1">{stitekTydne(t.kotva)}</h2>
-          <ol className="divide-y divide-line">{t.dny.map(radekDne)}</ol>
+      {mesice.map((m, i) => (
+        <section
+          key={m.kotva}
+          className={`rise ${i > 0 ? 'pt-3' : ''}`}
+          style={{ '--stagger': Math.min(i + 1, 6) } as React.CSSProperties}
+        >
+          <div className="flex items-baseline justify-between gap-3 px-1">
+            <h2 className="display text-[19px] font-semibold leading-tight first-letter:uppercase">
+              {stitekMesice(m.kotva)}
+            </h2>
+            <span className="shrink-0 text-[13px] text-ink-soft">{souhrnMesice(m.kotva)}</span>
+          </div>
+          {m.tydny.map((t, j) => (
+            <div key={t.kotva} className={j === 0 ? 'mt-2' : 'mt-4'}>
+              <h3 className="section-label mb-1">
+                {stitekTydne(t.kotva, t.dny, t.kotva.slice(0, 7) !== m.kotva)}
+              </h3>
+              <ol className="divide-y divide-line">{t.dny.map(radekDne)}</ol>
+            </div>
+          ))}
         </section>
       ))}
 
