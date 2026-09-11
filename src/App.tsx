@@ -45,7 +45,7 @@ const TABS: Array<{ id: Tab; label: string; icon: (on: boolean) => React.ReactNo
     id: 'today',
     label: 'Dnes',
     icon: (on) => (
-      <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <svg viewBox="0 0 24 24" className="h-full w-full transition-[stroke-width] duration-300" fill="none" stroke="currentColor" strokeWidth={on ? 2.1 : 1.7} strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="9" />
         <Tah d="M8.5 12.2l2.4 2.4 4.8-5.2" on={on} />
       </svg>
@@ -55,7 +55,7 @@ const TABS: Array<{ id: Tab; label: string; icon: (on: boolean) => React.ReactNo
     id: 'upcoming',
     label: 'Plán',
     icon: (on) => (
-      <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <svg viewBox="0 0 24 24" className="h-full w-full transition-[stroke-width] duration-300" fill="none" stroke="currentColor" strokeWidth={on ? 2.1 : 1.7} strokeLinecap="round" strokeLinejoin="round">
         <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
         <path d="M8 3v4M16 3v4" />
         <Tah d="M3.5 9.5h17" on={on} />
@@ -66,7 +66,7 @@ const TABS: Array<{ id: Tab; label: string; icon: (on: boolean) => React.ReactNo
     id: 'clients',
     label: 'Klienti',
     icon: (on) => (
-      <svg viewBox="0 0 24 24" className="h-full w-full" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <svg viewBox="0 0 24 24" className="h-full w-full transition-[stroke-width] duration-300" fill="none" stroke="currentColor" strokeWidth={on ? 2.1 : 1.7} strokeLinecap="round" strokeLinejoin="round">
         <circle cx="9" cy="8.5" r="3.25" />
         <path d="M3.5 19c.6-3 2.8-4.75 5.5-4.75S13.9 16 14.5 19" />
         <circle cx="17" cy="9.5" r="2.5" />

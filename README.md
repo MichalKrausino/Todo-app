@@ -69,21 +69,19 @@ instalace ani (v pozdější fázi) push notifikace.
   záložky, ⌘↩ uloží detail, Esc zavře; při psaní se písmena berou jako
   písmena
 - Vzhled po úklidu: karty bez obrysu na teplém papíře, oddělovače od
-  textu, priorita tečkou, kroužek postupu v hlavičce Dnes, kalendář
-  v Plánu s čísly a sloupky času.
-- Plán je kalendář jako tichý graf: týden v řádce přímo na papíře a pod
-  každým dnem sloupek času v barvách klientů (šedá schůzky), takže je na
-  první pohled vidět, který den je nabitý a komu patří. Ťuknutím na měsíc
-  celý měsíc, listuje se tahem prstu (nativní setrvačnost) a výběr jde
-  s sebou. Vybraný den je tmavý kroužek, který mezi dny plyne, dnešek
-  modré číslo se štítkem „dnes". Vybraný den má pod kalendářem svou agendu
-  (schůzky, úkoly), pole „nový úkol na ten den" a výběr z úkolů bez
-  termínu — „Sem" pošle úkol na vybraný den, toast to umí vrátit.
-  Minulý den ukáže, co se ten den dodělalo.
-- Tekutý dok: pilulka pod ikonou letí pružinou, a když prst na doku
+  textu, priorita tečkou, kroužek postupu v hlavičce Dnes, dny v Plánu
+  jako řádky s pruhem času.
+- Plán bez mřížky: každý den je řádek a čas je pruh v barvách klientů
+  (šedá schůzky), takže týden čteš jako graf — kde je plno, kde volno,
+  komu který den patří. Ťuknutí na den ho rozbalí na místě: schůzky,
+  úkoly, pole „nový úkol na ten den" a výběr z úkolů bez termínu
+  („Sem" pošle úkol na vybraný den, toast to umí vrátit). Řádky jdou
+  od dneška po týdnech a dobírají se po čtyřech týdnech.
+- Tekutý dok jako na iOS 26: pod vybranou ikonou je skleněná čočka,
+  která se při přepnutí zvedne, přejede a dosedne; když prst na doku
   zůstane a táhne, jede s ním jako želé a puštění vybere nejbližší
-  záložku; vybraná ikona se dokreslí tahem, dok při startu vyjede
-  zespoda, sloupky v kalendáři vyrostou
+  záložku; vybraná ikona zesílí a dokreslí se tahem, dok při startu
+  vyjede zespoda, pruhy v Plánu narostou
 - Pohyb z knihoven motion-primitives, magicui, react-bits a shadcn/ui
   (motor `motion`): titulky se skládají po písmenech, obrazovky
   nastupují z rozostření, hrany pod dokem a lištou se rozpouštějí

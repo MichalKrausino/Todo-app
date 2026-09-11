@@ -23,11 +23,15 @@
 // nenadýmá — audit chování počítá běžící animace.
 
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { motion, useMotionValue, useSpring, useTransform, useVelocity, type MotionValue } from 'motion/react'
+import { animate, motion, useMotionValue, useSpring, useTransform, useVelocity, type MotionValue } from 'motion/react'
 import { klidovyRezim } from '../lib/motion'
 
-// Průměr pilulky (= ikona doku v klidu).
-const PILULKA = 40
+// Čočka pod vybranou záložkou: širší než ikona, skoro na výšku doku —
+// jako tab bar v iOS 26 (a GitHub či Instagram, které ho přebraly).
+const PILULKA = 64
+const PILULKA_V = 44
+// Zdvih při přepnutí: čočka se nadzvedne, přejede a dosedne.
+const ZDVIH_MS = 480
 // Kolik pixelů je ještě ťuknutí; nad tím se pilulka odlepí od záložky.
 const PRAH_TAHU = 6
 
@@ -64,9 +68,14 @@ export function DokZalozky({
   const x = klid ? cil : pruzina
   // Želé: podle rychlosti se pilulka roztáhne do strany a o to zploští.
   const rychlost = useVelocity(x)
-  const scaleX = useTransform(rychlost, [-3000, 0, 3000], [1.22, 1, 1.22])
-  const scaleY = useTransform(scaleX, (s) => 1 / Math.sqrt(s))
+  const protazeni = useTransform(rychlost, [-3000, 0, 3000], [1.16, 1, 1.16])
+  // Zdvih: při přepnutí záložky se čočka nadzvedne (1 → 1.1 → 1), jako by
+  // se odlepila od skla, přejela a zase dosedla. Násobí se s protažením.
+  const zdvih = useMotionValue(1)
+  const scaleX = useTransform([zdvih, protazeni], ([z, p]: number[]) => z * p)
+  const scaleY = useTransform([zdvih, protazeni], ([z, p]: number[]) => z / Math.sqrt(p))
   const stred = useTransform(x, (v) => v + PILULKA / 2)
+  const [leti, setLeti] = useState(false)
 
   // Střed ikony vůči pásu.
   const stredIkony = (id: string): number | null => {
@@ -91,7 +100,17 @@ export function DokZalozky({
       cil.jump(s - PILULKA / 2)
       pruzina.jump(s - PILULKA / 2)
       poprve.current = false
-    } else cil.set(s - PILULKA / 2)
+      return
+    }
+    cil.set(s - PILULKA / 2)
+    // Let: zdvih + jas na dobu přejezdu.
+    setLeti(true)
+    const a = animate(zdvih, [1, 1.1, 1], { duration: ZDVIH_MS / 1000, ease: [0.3, 0, 0.2, 1], times: [0, 0.35, 1] })
+    const t = setTimeout(() => setLeti(false), ZDVIH_MS)
+    return () => {
+      a.stop()
+      clearTimeout(t)
+    }
   }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const p = pas.current
@@ -181,6 +200,7 @@ export function DokZalozky({
         onPointerCancel={zrusit}
         data-pas=""
         data-tahne={tahne ? 'true' : undefined}
+        data-leti={leti ? 'true' : undefined}
       >
         <motion.span
           aria-hidden="true"
@@ -190,8 +210,8 @@ export function DokZalozky({
             scaleX: klid ? 1 : scaleX,
             scaleY: klid ? 1 : scaleY,
             width: PILULKA,
-            height: PILULKA,
-            marginTop: -PILULKA / 2,
+            height: PILULKA_V,
+            marginTop: -PILULKA_V / 2,
           }}
         />
         {children}
@@ -220,8 +240,8 @@ export function DokZalozka({ id, on, children }: { id: string; on: boolean; chil
     const rp = el.closest('[data-pas]')?.getBoundingClientRect()
     if (!rp) return 1
     const d = Math.abs(s - (r.left - rp.left + r.width / 2))
-    const dosah = 56
-    return d >= dosah ? 1 : 1 + 0.14 * (1 - d / dosah)
+    const dosah = 64
+    return d >= dosah ? 1 : 1 + 0.12 * (1 - d / dosah)
   })
   return (
     <motion.span ref={ref} style={{ scale: nadmuti }} className="relative block h-[60%] w-[60%]">
