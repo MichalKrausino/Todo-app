@@ -113,10 +113,12 @@ instalace ani (v pozdější fázi) push notifikace.
 - Ranní návrh dne: server každé ráno vybere 3–6 úkolů (termíny, priority,
   odklady, zanedbaní klienti), pošle push notifikaci a v appce se návrhy
   přijímají/zamítají jedním klepnutím. Návrh se učí z odpovědí: „Dnes
-  ne" = zítra znovu (podruhé za dva týdny = týden pokoj), „Až za týden"
-  = týden pokoj rovnou, co ignoruješ, ustoupí jiným. Odložení není
+  ne" = zítra znovu (podruhé za dva týdny = pauza), „Volnější den"
+  = pauza rovnou, co ignoruješ, ustoupí jiným. Odložení není
   zapomenutí: appka ukáže, kdy se úkol vrátí (panel návrhu, inbox,
-  Plán), a po týdnu ho tři rána nabídne přednostně. Zapíná se v panelu
+  Plán), a pak ho tři rána nabídne přednostně. Kam se odkládá, volí
+  appka podle zátěže: nejbližší pracovní den, kde máš nejmíň úkolů
+  a schůzek — v návrhu i v triáži propadlých. Zapíná se v panelu
   synchronizace (obláček) — na iPhonu musí být appka přidaná na ploše
 - Google kalendář (po přihlášení přes Google): schůzky ze všech kalendářů
   na Dnes s výpočtem volného času, počty schůzek v Plánu, a přijatý ranní

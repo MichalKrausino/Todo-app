@@ -73,9 +73,10 @@ export function kdySeVrati(
   taskId: string,
   histZitra: Rozhodnuti[],
   decision: 'rejected' | 'snoozed',
+  until?: string,
   dnes = todayISO(),
 ): string | undefined {
   const bezDnesniho = histZitra.filter((h) => !(h.date === dnes && h.taskId === taskId))
-  const p = pametUkolu(taskId, [...bezDnesniho, { date: dnes, taskId, decision }], posun(dnes, 1))
+  const p = pametUkolu(taskId, [...bezDnesniho, { date: dnes, taskId, decision, until }], posun(dnes, 1))
   return p.pauza ? p.pauzaDo : undefined
 }

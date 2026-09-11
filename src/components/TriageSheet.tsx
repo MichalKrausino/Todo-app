@@ -14,7 +14,8 @@
 import { useState } from 'react'
 import type { Client, Task } from '../db/types'
 import { updateTask } from '../db/repo'
-import { formatDayLabel, formatDaysAgo, fromISODate, nextMonday, toISODate, todayISO } from '../lib/dates'
+import { addDays, formatDayLabel, formatDaysAgo, fromISODate, toISODate, todayISO } from '../lib/dates'
+import { useNaloz, volnejsiDen } from '../lib/volnyDen'
 import { plural } from '../lib/labels'
 import { Sheet } from './Sheet'
 
@@ -54,7 +55,11 @@ export function TriageSheet({
   const na = hotovo.length
   const task = fronta[na]
   const dnes = todayISO()
-  const pondeli = toISODate(nextMonday(fromISODate(dnes)))
+  // Odložit = přesunout tam, kde je na to místo: nejbližší pracovní den
+  // s nejmenší zátěží v příštím týdnu. Počítá se živě, takže když sem
+  // v jedné triáži pošleš pět úkolů, nesesypou se na jeden den.
+  const naloz = useNaloz()
+  const volny = volnejsiDen(naloz, toISODate(addDays(fromISODate(dnes), 1)), 7)
 
   const odpovez = (odpoved: Odpoved) => {
     if (!task) return
@@ -64,7 +69,7 @@ export function TriageSheet({
       status: task.status,
     }
     if (odpoved === 'dnes') void updateTask(task.id, posun(task, dnes))
-    if (odpoved === 'tyden') void updateTask(task.id, posun(task, pondeli))
+    if (odpoved === 'tyden') void updateTask(task.id, posun(task, volny))
     // `dropped` místo smazání: úkol zmizí ze všech otevřených seznamů,
     // ale zůstane v datech — zahozená práce je taky informace.
     if (odpoved === 'neplati') void updateTask(task.id, { status: 'dropped' })
@@ -134,7 +139,7 @@ export function TriageSheet({
                   onClick={() => odpovez('tyden')}
                   className="w-full rounded-xl bg-card py-3 text-[15px] font-medium text-ink shadow-card transition-transform duration-150 active:scale-[0.98]"
                 >
-                  {`Příští týden (${formatDayLabel(pondeli)})`}
+                  {`Volnější den (${formatDayLabel(volny)})`}
                 </button>
                 <button
                   onClick={() => odpovez('neplati')}
@@ -168,7 +173,7 @@ export function TriageSheet({
                   {`${hotovo.length} ${plural(hotovo.length, 'úkol', 'úkoly', 'úkolů')} vyřízeno`}
                 </p>
                 <p className="mt-3 text-[13px] text-ink-faint">
-                  {`dnes ${spocitej('dnes')} · příští týden ${spocitej('tyden')} · už neplatí ${spocitej('neplati')}`}
+                  {`dnes ${spocitej('dnes')} · volnější den ${spocitej('tyden')} · už neplatí ${spocitej('neplati')}`}
                   {spocitej('preskoceno') > 0 && ` · beze změny ${spocitej('preskoceno')}`}
                 </p>
               </div>
