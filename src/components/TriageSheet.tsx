@@ -6,7 +6,16 @@
 // propadlých je ta nejhorší věc, kterou appka umí ukázat ráno.
 //
 // Tady je z toho rozhodování po jednom: velký název, kolik toho propadlo,
-// a tři odpovědi. Sto úkolů se projde za dvě minuty.
+// a čtyři odpovědi. Sto úkolů se projde za dvě minuty.
+//
+// ODPOVĚDI JSOU DNY, NE SLOVA. Dřív tu stálo „Příští týden (pondělí)" —
+// jedno tlačítko, jedno datum, takže sto propadlých úkolů skončilo na
+// jediném pondělí. To je tatáž zeď, jen o týden dál. Teď je žebřík:
+// dnes → zítra → volnější den → už neplatí, a oba odkladové dny mají
+// pod sebou konkrétní datum, takže je vidět, kam to půjde. „Volnější
+// den" je nejbližší pracovní den s nejmenší zátěží do týdne
+// (`src/lib/volnyDen.ts`) a počítá se ŽIVĚ: každý odložený úkol tam
+// přibude, takže další stisk najde jiný den a hromádka se rozprostře.
 //
 // Fronta se snímá při otevření schválně: odpovědi mění živý dotaz pod tím,
 // a bez snímku by se pořadí pod rukama přerovnávalo.
@@ -19,7 +28,7 @@ import { useNaloz, volnejsiDen } from '../lib/volnyDen'
 import { plural } from '../lib/labels'
 import { Sheet } from './Sheet'
 
-type Odpoved = 'dnes' | 'tyden' | 'neplati' | 'preskoceno'
+type Odpoved = 'dnes' | 'zitra' | 'volny' | 'neplati' | 'preskoceno'
 
 interface Krok {
   task: Task
@@ -33,6 +42,11 @@ interface Krok {
 // Pevný termín se nepřepisuje na tichu — je to fakt, ne přání.
 const posun = (t: Task, den: string): Partial<Task> =>
   t.scheduledFor ? { scheduledFor: den } : { dueDate: den }
+
+// Den pod tlačítkem: vždycky konkrétní datum („so 13. 9."), ne relativní
+// slovo — nad ním už jedno je a „Zítra / zítra" nic neříká.
+const dayFmt = new Intl.DateTimeFormat('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' })
+const popisDne = (iso: string): string => dayFmt.format(fromISODate(iso))
 
 const propadloDne = (t: Task): string =>
   [t.scheduledFor, t.dueDate].filter((d): d is string => Boolean(d)).sort()[0] ?? todayISO()
@@ -55,11 +69,12 @@ export function TriageSheet({
   const na = hotovo.length
   const task = fronta[na]
   const dnes = todayISO()
-  // Odložit = přesunout tam, kde je na to místo: nejbližší pracovní den
-  // s nejmenší zátěží v příštím týdnu. Počítá se živě, takže když sem
-  // v jedné triáži pošleš pět úkolů, nesesypou se na jeden den.
+  const zitra = toISODate(addDays(fromISODate(dnes), 1))
+  // Volnější den = nejbližší pracovní den s nejmenší zátěží, nejdál za
+  // týden (úmyslný strop: odložit o měsíc není odložení, to je zapomenutí).
+  // Zátěž je živá, takže každý odložený úkol posune volbu dalšímu.
   const naloz = useNaloz()
-  const volny = volnejsiDen(naloz, toISODate(addDays(fromISODate(dnes), 1)), 7)
+  const volny = volnejsiDen(naloz, zitra, 7)
 
   const odpovez = (odpoved: Odpoved) => {
     if (!task) return
@@ -69,7 +84,8 @@ export function TriageSheet({
       status: task.status,
     }
     if (odpoved === 'dnes') void updateTask(task.id, posun(task, dnes))
-    if (odpoved === 'tyden') void updateTask(task.id, posun(task, volny))
+    if (odpoved === 'zitra') void updateTask(task.id, posun(task, zitra))
+    if (odpoved === 'volny') void updateTask(task.id, posun(task, volny))
     // `dropped` místo smazání: úkol zmizí ze všech otevřených seznamů,
     // ale zůstane v datech — zahozená práce je taky informace.
     if (odpoved === 'neplati') void updateTask(task.id, { status: 'dropped' })
@@ -135,12 +151,25 @@ export function TriageSheet({
                 >
                   Dnes
                 </button>
-                <button
-                  onClick={() => odpovez('tyden')}
-                  className="w-full rounded-xl bg-card py-3 text-[15px] font-medium text-ink shadow-card transition-transform duration-150 active:scale-[0.98]"
-                >
-                  {`Volnější den (${formatDayLabel(volny)})`}
-                </button>
+                {/* Dva odklady vedle sebe: stejná váha, každý s dnem pod
+                    sebou. Když volnější den vyjde na zítřek, řeknou obě
+                    tlačítka totéž datum — a to je právě ta informace. */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => odpovez('zitra')}
+                    className="flex-1 rounded-xl bg-card py-2.5 shadow-card transition-transform duration-150 active:scale-[0.98]"
+                  >
+                    <span className="block text-[15px] font-medium text-ink">Zítra</span>
+                    <span className="block text-[13px] text-ink-soft">{popisDne(zitra)}</span>
+                  </button>
+                  <button
+                    onClick={() => odpovez('volny')}
+                    className="flex-1 rounded-xl bg-card py-2.5 shadow-card transition-transform duration-150 active:scale-[0.98]"
+                  >
+                    <span className="block text-[15px] font-medium text-ink">Volnější den</span>
+                    <span className="block text-[13px] text-ink-soft">{popisDne(volny)}</span>
+                  </button>
+                </div>
                 <button
                   onClick={() => odpovez('neplati')}
                   className="w-full rounded-xl py-3 text-[15px] font-medium text-danger transition-transform duration-150 active:scale-[0.98]"
@@ -173,8 +202,20 @@ export function TriageSheet({
                   {`${hotovo.length} ${plural(hotovo.length, 'úkol', 'úkoly', 'úkolů')} vyřízeno`}
                 </p>
                 <p className="mt-3 text-[13px] text-ink-faint">
-                  {`dnes ${spocitej('dnes')} · volnější den ${spocitej('tyden')} · už neplatí ${spocitej('neplati')}`}
-                  {spocitej('preskoceno') > 0 && ` · beze změny ${spocitej('preskoceno')}`}
+                  {/* Jen to, co se opravdu stalo — se čtyřmi odpověďmi by
+                      výčet s nulami byl na dvě řádky a nic by neřekl. */}
+                  {(
+                    [
+                      ['dnes', 'dnes'],
+                      ['zitra', 'zítra'],
+                      ['volny', 'volnější den'],
+                      ['neplati', 'už neplatí'],
+                      ['preskoceno', 'beze změny'],
+                    ] as [Odpoved, string][]
+                  )
+                    .filter(([o]) => spocitej(o) > 0)
+                    .map(([o, jmeno]) => `${jmeno} ${spocitej(o)}`)
+                    .join(' · ')}
                 </p>
               </div>
               <button
