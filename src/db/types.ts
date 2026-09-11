@@ -143,7 +143,11 @@ export interface CalendarEvent {
 export interface DayPlanSuggestion {
   taskId: string
   reason: string
-  decision: 'accepted' | 'rejected' | 'ignored'
+  // rejected = „dnes ne" (zítra znovu; podruhé za dva týdny = týden pokoj),
+  // snoozed = „až za týden" (týden pokoj rovnou), ignored = bez odpovědi
+  // nebo „Zpět". Co z toho server vyvodí, počítá pick.ts — a appka touž
+  // funkcí (src/lib/navrhPamet.ts), aby uměla říct, kdy se úkol vrátí.
+  decision: 'accepted' | 'rejected' | 'snoozed' | 'ignored'
 }
 
 // Co appka ráno navrhla a jak jsem reagoval (Fáze 6).

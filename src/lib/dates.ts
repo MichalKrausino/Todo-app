@@ -67,6 +67,20 @@ export function formatFullDateNa(d: Date): string {
   return fullFmt.format(d).replace(/^[^\s]+/, DNY_NA[d.getDay()])
 }
 
+// „v pátek 18. září" — kdy se něco stane (ve středu, ve čtvrtek).
+const DNY_V = ['v neděli', 'v pondělí', 'v úterý', 've středu', 've čtvrtek', 'v pátek', 'v sobotu']
+export function formatFullDateV(d: Date): string {
+  return fullFmt.format(d).replace(/^[^\s]+/, DNY_V[d.getDay()])
+}
+
+/** „zítra" / „v pátek 18. září" — do věty, kdy se něco vrátí. */
+export function formatKdy(iso: string): string {
+  const today = todayISO()
+  if (iso === today) return 'dnes'
+  if (iso === toISODate(addDays(fromISODate(today), 1))) return 'zítra'
+  return formatFullDateV(fromISODate(iso))
+}
+
 // Pondělí týdne, do kterého daný den patří.
 export function mondayOf(iso: string): string {
   const d = fromISODate(iso)

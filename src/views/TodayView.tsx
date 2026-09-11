@@ -21,7 +21,8 @@ import { Chip } from '../components/Chip'
 import { HelpSheet } from '../components/HelpSheet'
 import { ShutdownSheet } from '../components/ShutdownSheet'
 import { TriageSheet } from '../components/TriageSheet'
-import { NavrhSheet } from '../components/NavrhSheet'
+import { NavrhSheet, type Odpocivajici } from '../components/NavrhSheet'
+import { useNavrhPamet } from '../lib/navrhPamet'
 import { KalendarSheet, minutesOfDay, untilLabel } from '../components/KalendarSheet'
 import { SignalySheet, signalRadky } from '../components/SignalySheet'
 import { TaskRow } from '../components/TaskRow'
@@ -150,6 +151,7 @@ export function TodayView({
   const clients = useLiveQuery(allClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []
   const dayPlan = useLiveQuery(() => getDayPlan(today), [today])
+  const pamet = useNavrhPamet()
   const events = useLiveQuery(() => calendarEventsOn(today), [today]) ?? []
 
   const clientMap = new Map(clients.map((c) => [c.id, c]))
@@ -269,6 +271,11 @@ export function TodayView({
   const navrhy = (dayPlan?.suggestions ?? [])
     .filter((s) => s.decision === 'ignored' && taskById.has(s.taskId))
     .map((s) => ({ task: taskById.get(s.taskId)!, reason: s.reason }))
+  // Paměť návrhu: co se vrací z odložení a co zrovna odpočívá (s dnem návratu).
+  const odpocivajici: Odpocivajici[] = [...pamet.odpociva]
+    .filter(([id]) => taskById.has(id))
+    .map(([id, doKdy]) => ({ task: taskById.get(id)!, do: doKdy }))
+    .sort((a, b) => a.do.localeCompare(b.do))
   const bezici = events.find((e) => !e.allDay && minutesOfDay(e.start) <= nowMin && nowMin < minutesOfDay(e.end))
   const dalsi = events
     .filter((e) => !e.allDay && minutesOfDay(e.start) > nowMin)
@@ -578,7 +585,14 @@ export function TodayView({
       </section>
 
       {navrhOpen && dayPlan && (
-        <NavrhSheet planId={dayPlan.id} navrhy={navrhy} clients={clientMap} onClose={() => setNavrhOpen(false)} />
+        <NavrhSheet
+          planId={dayPlan.id}
+          navrhy={navrhy}
+          clients={clientMap}
+          pamet={pamet}
+          odpocivajici={odpocivajici}
+          onClose={() => setNavrhOpen(false)}
+        />
       )}
       {kalendarOpen && (
         <KalendarSheet
