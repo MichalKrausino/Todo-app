@@ -76,7 +76,8 @@ instalace ani (v pozdější fázi) push notifikace.
   komu který den patří. Ťuknutí na den ho rozbalí na místě: schůzky,
   úkoly, pole „nový úkol na ten den" a výběr z úkolů bez termínu
   („Sem" pošle úkol na vybraný den, toast to umí vrátit). Řádky jdou
-  od dneška po týdnech a dobírají se po čtyřech týdnech.
+  od dneška po týdnech bez konce — další se přiberou samy, jakmile
+  doscrolluješ dolů.
 - Tekutý dok jako na iOS 26: pod vybranou ikonou je skleněná čočka,
   která při přepnutí letí jako kapka — natáhne se k nové záložce,
   zvedne se a stáhne kolem ikony, ikona pod sklem se k ní přitáhne; když prst na doku
