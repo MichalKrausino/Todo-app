@@ -33,6 +33,8 @@ import { Switch } from './ui/Switch'
 import { SharingSheet } from './SharingSheet'
 import { sharedClientIds } from '../sync/shares'
 import { Sheet } from './Sheet'
+import { ukazToast } from '../lib/toast'
+import { zkontrolujAktualizaci } from '../lib/aktualizace'
 import { TodoistSheet } from './TodoistSheet'
 
 const PHASE_LABELS: Record<SyncPhase, string> = {
@@ -205,8 +207,28 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
         {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
 
         {/* Verze buildu: když něco „pořád blbne", tohle jako první řekne,
-            jestli telefon vůbec kouká na novou appku. */}
-        <p className="pb-1 text-center text-[11px] text-ink-faint">verze {__BUILD__}</p>
+            jestli telefon vůbec kouká na novou appku — a tlačítko vedle
+            zkontroluje novou verzi hned, bez čekání na návrat do popředí. */}
+        <p className="flex flex-col items-center gap-1 pb-1 text-[11px] text-ink-faint">
+          <span>verze {__BUILD__}</span>
+          <button
+            type="button"
+            onClick={() =>
+              void zkontrolujAktualizaci().then((v) =>
+                ukazToast(
+                  v === 'nova'
+                    ? 'Stahuji novou verzi, za chvíli se appka sama obnoví.'
+                    : v === 'aktualni'
+                      ? 'Máš nejnovější verzi.'
+                      : 'Aktualizaci teď nejde zkontrolovat.',
+                ),
+              )
+            }
+            className="inline-flex h-11 items-center rounded-full px-4 text-[13px] font-medium text-accent-deep transition-transform duration-150 active:scale-95"
+          >
+            Zkontrolovat aktualizaci
+          </button>
+        </p>
         </>
       )}
     </Sheet>
