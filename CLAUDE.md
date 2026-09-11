@@ -78,9 +78,15 @@ podkladu `paper` (ne studená iOS šeď), hairline oddělovače, plovoucí sklen
 vzoru tab baru iOS 26 — Liquid Glass, jak ho nosí GitHub i Instagram):
 pod vybranou ikonou je **čočka** — široké sklo 64 × 44 světlejší než
 deska, s ostrým světlem na horní hraně a měkkým stínem, takže stojí
-nad dokem (`.tab-on`); při přepnutí se **zvedne (1 → 1,1 → 1), rozsvítí
-(`data-leti`), přejede pružinou a dosedne**, vybraná ikona zesílí tah
-(1,7 → 2,1). Když prst na doku zůstane a táhne, čočka se odlepí a jede
+nad dokem (`.tab-on`); při přepnutí letí jako **kapka**: čočka má dvě hrany s vlastní
+pružinou, hrana ve směru jízdy vyrazí hned a zadní o 90 ms později
+(`ZADNI_HRANA_MS`), takže se mezi záložkami natáhne do dlouhé kapsle a
+na cíli se stáhne kolem ikony; k tomu se **zvedne (1 → 1,1 → 1),
+rozsvítí (`data-leti`)** a podle rychlosti zploští, ikona pod sklem se
+o pár pixelů přitáhne k čočce (lom, `DokZalozka`) a nadme se, vybraná
+ikona zesílí tah (1,7 → 2,1). Průzkum, ze kterého kapka vzešla: tab bar
+iOS 26 (kapsle, která mezi záložkami „teče"), Cubertova liquid tab bar
+na Dribbble, expo-glass-tabs (interruptible spring na transformu). Když prst na doku zůstane a táhne, čočka se odlepí a jede
 s ním — pružina za prstem lehce
 zaostává, podle rychlosti se roztahuje do strany (želé: `useVelocity` →
 `scaleX`, `scaleY` dorovnává objem), ikona, kolem které projíždí, se

@@ -78,7 +78,8 @@ instalace ani (v pozdější fázi) push notifikace.
   („Sem" pošle úkol na vybraný den, toast to umí vrátit). Řádky jdou
   od dneška po týdnech a dobírají se po čtyřech týdnech.
 - Tekutý dok jako na iOS 26: pod vybranou ikonou je skleněná čočka,
-  která se při přepnutí zvedne, přejede a dosedne; když prst na doku
+  která při přepnutí letí jako kapka — natáhne se k nové záložce,
+  zvedne se a stáhne kolem ikony, ikona pod sklem se k ní přitáhne; když prst na doku
   zůstane a táhne, jede s ním jako želé a puštění vybere nejbližší
   záložku; vybraná ikona zesílí a dokreslí se tahem, dok při startu
   vyjede zespoda, pruhy v Plánu narostou
