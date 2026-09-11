@@ -78,22 +78,33 @@ podkladu `paper` (ne studená iOS šeď), hairline oddělovače, plovoucí sklen
 vzoru tab baru iOS 26 — Liquid Glass, jak ho nosí GitHub i Instagram):
 pod vybranou ikonou je **čočka** — široké sklo 64 × 44 světlejší než
 deska, s ostrým světlem na horní hraně a měkkým stínem, takže stojí
-nad dokem (`.tab-on`); při přepnutí letí jako **kapka**: čočka má dvě hrany s vlastní
-pružinou, hrana ve směru jízdy vyrazí hned a zadní o 90 ms později
-(`ZADNI_HRANA_MS`), takže se mezi záložkami natáhne do dlouhé kapsle a
-na cíli se stáhne kolem ikony; k tomu se **zvedne (1 → 1,1 → 1),
-rozsvítí (`data-leti`)** a podle rychlosti zploští, ikona pod sklem se
-o pár pixelů přitáhne k čočce (lom, `DokZalozka`) a nadme se, vybraná
-ikona zesílí tah (1,7 → 2,1). Průzkum, ze kterého kapka vzešla: tab bar
-iOS 26 (kapsle, která mezi záložkami „teče"), Cubertova liquid tab bar
-na Dribbble, expo-glass-tabs (interruptible spring na transformu). Když prst na doku zůstane a táhne, čočka se odlepí a jede
-s ním — pružina za prstem lehce
-zaostává, podle rychlosti se roztahuje do strany (želé: `useVelocity` →
-`scaleX`, `scaleY` dorovnává objem), ikona, kolem které projíždí, se
-nadme, a puštění vybere záložku nejblíž prstu. Podpis vybrané ikony
-(fajfka, linka data, druhá postava) se dokreslí tahem (`motion.path`,
-`pathLength`), ikona při vybrání poskočí pružinou a dok při startu
-vyjede zespoda. Tři věci, které se tu dají rozbít: (1) gesto stojí na
+nad dokem (`.tab-on`). Přepnutí má **tři fáze a nic se nedeformuje**
+(předchozí verze letěla jako kapka a natahovala se mezi záložkami —
+hravé, ne přesné): (1) **stisk** — ikona pod prstem se stlačí na 0,9
+hned při dotyku (`stisknuto` v kontextu, pružina 600/32), ještě než se
+cokoli vybere; (2) **zdvih a klouzání** — čočka se nadzvedne (`ZDVIH`
+1,07, stín se prodlouží a sklo zesvětlá přes `data-leti`) a **jednou
+pružinou** (400/32/0,85 — rychlý rozjezd, dlouhé dobrždění, přestřelení
+pod pixel) překlouže k cíli; během jízdy po ní přejede **odlesk**
+(`.tab-lesk`): pruh světla stojí ve světě, ne na skle, takže se vůči
+čočce posouvá proti směru jízdy — polohu i jas mu dává `useVelocity`,
+v klidu je neviditelný; ikony, kolem kterých sklo jede, se pod ním
+nadzvednou (o 3 px, jen pod letící čočkou) a přitáhnou (lom), pod
+stojící čočkou je ikona jen o 6 % větší; (3) **dosednutí** — zdvih se
+povolí, až když se čočka opravdu zastaví (rychlost pod `PRAH_KLIDU`, ne
+stopky; pojistka `LET_MAX_MS`), nová ikona vyjede zespoda jako
+`replace.downUp` u SF Symbols (+5 px, 0,88 → 1, odraz 0,4) o 120 ms po
+vzletu — ve chvíli, kdy na ni sklo dojíždí, stará lehce klesne, vybraná
+ikona zesílí tah (1,7 → 2,1). Změřeno po 8 ms: čočka 38 → 245 px za
+~300 ms, zdvih 64 → 68,6 px, odlesk svítí jen za jízdy, dosedne v 340 ms.
+Průzkum: tab bar iOS 26 (kapsle, která chytá světlo), SF Symbols
+`replace.downUp`, zásady E. Kowalského (stisk 0,9–0,97 jako okamžitá
+odezva, pružina místo keyframes, protože jde přerušit). Když prst na
+doku zůstane a táhne, čočka se odlepí a jede s ním — pružina za prstem
+lehce zaostává, ikona, kolem které projíždí, se nadzvedne, a puštění
+vybere záložku nejblíž prstu. Podpis vybrané ikony (fajfka, linka data,
+druhá postava) se dokreslí tahem (`motion.path`, `pathLength`) a dok
+při startu vyjede zespoda. Tři věci, které se tu dají rozbít: (1) gesto stojí na
 pointer events + pointer capture na celém pásu s `touch-action: none`;
 s capture pošle prohlížeč `click` pásu, ne tlačítku, takže **výběr dělá
 pointerup**, `onClick` tlačítek zůstává pro klávesnici a je idempotentní;
@@ -104,7 +115,7 @@ z ref, první zavolání se přeskočí) — když visel na `value`, zakládal s
 při každém přepnutí a jeho okamžité první zavolání čočku skočilo na
 cíl dřív, než pružina vyrazila, takže let nebyl nikdy vidět (změřeno:
 60 ms po ťuknutí už stála na místě; po opravě se natáhne z 64 na 213 px); (3) v klidovém režimu pilulka skáče bez pružiny (`jump`),
-nic se neroztahuje ani nenadýmá.
+nic se nezvedá, nesvítí ani nenadýmá.
 Zadávání úkolu v doku má **jednu stavovou řádku** (Termín / Klient /
 Projekt / Priorita — prázdný slot nabízí, vyplněný ukazuje hodnotu,
 otevřený je plný akcent) a **jeden panel nad ní**, do kterého se vejdou

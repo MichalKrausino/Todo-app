@@ -35,7 +35,7 @@ function Tah({ d, on }: { d: string; on: boolean }) {
       d={d}
       initial={{ pathLength: 0, opacity: 0.3 }}
       animate={{ pathLength: 1, opacity: 1 }}
-      transition={{ duration: 0.5, ease: [0.2, 0, 0, 1], delay: 0.06 }}
+      transition={{ duration: 0.5, ease: [0.2, 0, 0, 1], delay: 0.14 }}
     />
   )
 }
@@ -411,8 +411,8 @@ export default function App() {
           <ClickSpark className="relative">
           <nav className="flex h-14 items-center px-2.5">
             {/* DokZalozky (vlastní, po vzoru tab baru iOS 26): pilulka pod
-                ikonou letí pružinou, a když prst na doku zůstane a táhne,
-                jede s ním jako želé a puštění vybere nejbližší záložku. */}
+                ikonou se zvedne, překlouže a dosedne; když prst na doku zůstane a táhne,
+                jede s ním a puštění vybere nejbližší záložku. */}
             <DokZalozky value={tab} onChange={(id) => setTab(id as Tab)} className="flex flex-1 items-center">
             <Dock className="flex-1 gap-1">
             {TABS.map((t, i) => (
