@@ -216,3 +216,17 @@ describe('formatDaysAgo', () => {
     expect(formatDaysAgo('2026-09-02T09:00:00.000Z', '2026-08-31')).toBe('dnes')
   })
 })
+
+describe('formatFullDateV / formatKdy', () => {
+  it('skloňuje den s předložkou v/ve', async () => {
+    const { formatFullDateV } = await import('./dates')
+    expect(formatFullDateV(new Date(2026, 8, 18))).toBe('v pátek 18. září')
+    expect(formatFullDateV(new Date(2026, 8, 16))).toBe('ve středu 16. září')
+    expect(formatFullDateV(new Date(2026, 8, 17))).toBe('ve čtvrtek 17. září')
+  })
+  it('zítřek řekne slovem', async () => {
+    const { formatKdy, todayISO, addDays, fromISODate, toISODate } = await import('./dates')
+    expect(formatKdy(toISODate(addDays(fromISODate(todayISO()), 1)))).toBe('zítra')
+    expect(formatKdy(todayISO())).toBe('dnes')
+  })
+})

@@ -3,8 +3,11 @@ import {
   type Rec,
   type Rozhodnuti,
   type Scored,
+  DUVOD_NAVRATU,
   historieZPlanu,
   IGNOROVANI_STROP,
+  NAVRAT_BONUS,
+  NAVRAT_MAX,
   ohodnot,
   pametUkolu,
   pickSuggestions,
@@ -170,7 +173,7 @@ describe('paměť návrhu — historie z plánů', () => {
 
 describe('paměť návrhu — jeden úkol', () => {
   it('bez historie nic nemění', () => {
-    expect(pametUkolu('a', [], TODAY)).toEqual({ delta: 0, pauza: false })
+    expect(pametUkolu('a', [], TODAY)).toEqual({ delta: 0, pauza: false, pauzaDo: undefined, navrat: false })
   })
 
   it('jedno odmítnutí = odložit na zítra: nabídne se znovu, jen níž', () => {
@@ -179,11 +182,36 @@ describe('paměť návrhu — jeden úkol', () => {
     expect(p.delta).toBe(-ZTRATA_ZA_ODMITNUTI)
   })
 
-  it('dvě odmítnutí = týden pokoj', () => {
+  it('dvě odmítnutí = týden pokoj s viditelným datem návratu', () => {
     const h = [rozhodnuti('2026-08-28', 'a', 'rejected'), rozhodnuti('2026-08-30', 'a', 'rejected')]
-    expect(pametUkolu('a', h, TODAY).pauza).toBe(true)
-    // po týdnu od posledního odmítnutí se vrací
-    expect(pametUkolu('a', h, '2026-09-07').pauza).toBe(false)
+    expect(pametUkolu('a', h, TODAY)).toEqual({ delta: 0, pauza: true, pauzaDo: '2026-09-06', navrat: false })
+  })
+
+  it('„až za týden" = týden pokoj rovnou', () => {
+    const p = pametUkolu('a', [rozhodnuti('2026-08-30', 'a', 'snoozed')], TODAY)
+    expect(p).toEqual({ delta: 0, pauza: true, pauzaDo: '2026-09-06', navrat: false })
+  })
+
+  it('odložení není zapomenutí: po pauze se tři rána vrací přednostně, pak zase běžně', () => {
+    const h = [rozhodnuti('2026-08-30', 'a', 'snoozed')]
+    for (const den of ['2026-09-06', '2026-09-07', '2026-09-08']) {
+      const p = pametUkolu('a', h, den)
+      expect(p.navrat).toBe(true)
+      expect(p.delta).toBe(NAVRAT_BONUS)
+      expect(p.pauzaDo).toBe('2026-09-06')
+    }
+    const po = pametUkolu('a', h, '2026-09-09')
+    expect(po.navrat).toBe(false)
+    expect(po.pauza).toBe(false)
+  })
+
+  it('další „dnes ne" po návratu = zase týden pokoj', () => {
+    const h = [
+      rozhodnuti('2026-08-20', 'a', 'rejected'),
+      rozhodnuti('2026-08-21', 'a', 'rejected'),
+      rozhodnuti('2026-08-28', 'a', 'rejected'), // po návratu 28. 8.
+    ]
+    expect(pametUkolu('a', h, TODAY)).toMatchObject({ pauza: true, pauzaDo: '2026-09-04' })
   })
 
   it('ignorování ubírá po kouskách a má strop', () => {
@@ -196,16 +224,32 @@ describe('paměť návrhu — jeden úkol', () => {
 
   it('rozhodnutí u jiných úkolů se nepletou', () => {
     const h = [rozhodnuti('2026-08-30', 'b', 'rejected'), rozhodnuti('2026-08-29', 'b', 'rejected')]
-    expect(pametUkolu('a', h, TODAY)).toEqual({ delta: 0, pauza: false })
+    expect(pametUkolu('a', h, TODAY)).toMatchObject({ delta: 0, pauza: false })
   })
 })
 
 describe('paměť návrhu — kandidáti', () => {
-  it('dvakrát odmítnutý úkol se nenabídne', () => {
+  it('odpočívající úkol se nenabídne', () => {
     const a = task({ id: 'a', dueDate: TODAY })
     const b = task({ id: 'b', dueDate: TODAY })
     const h = [rozhodnuti('2026-08-29', 'a', 'rejected'), rozhodnuti('2026-08-30', 'a', 'rejected')]
     expect(ohodnot([a, b], NO_CLIENTS, TODAY, h).map((c) => c.t.id)).toEqual(['b'])
+  })
+
+  it('vracející se úkol nese důvod návratu a v návrhu stojí první, i před termíny', () => {
+    const vraci = task({ id: 'vraci', priority: 'low' })
+    const dnes = task({ id: 'dnes', dueDate: TODAY, priority: 'critical' })
+    const h = [rozhodnuti('2026-08-24', 'vraci', 'snoozed')] // pauza do 31. 8. = TODAY
+    const kandidati = ohodnot([dnes, vraci], NO_CLIENTS, TODAY, h)
+    expect(kandidati.find((c) => c.t.id === 'vraci')?.reason).toBe(DUVOD_NAVRATU)
+    expect(pickSuggestions(kandidati).map((c) => c.t.id)).toEqual(['vraci', 'dnes'])
+  })
+
+  it('návratů je za ráno nejvýš NAVRAT_MAX, zbytek počká na další ráno', () => {
+    const tasks = Array.from({ length: NAVRAT_MAX + 2 }, (_, i) => task({ id: `v${i}` }))
+    const h = tasks.map((t) => rozhodnuti('2026-08-24', t.id as string, 'snoozed'))
+    const picked = pickSuggestions(ohodnot(tasks, NO_CLIENTS, TODAY, h))
+    expect(picked.filter((c) => c.navrat)).toHaveLength(NAVRAT_MAX)
   })
 
   it('ignorovaný úkol bez termínu ustoupí čerstvému téže priority', () => {

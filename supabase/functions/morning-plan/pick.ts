@@ -8,6 +8,8 @@ export interface Scored {
   t: Rec
   score: number
   reason: string
+  /** vrací se po odložení — má v návrhu jisté místo (viz pickSuggestions) */
+  navrat?: boolean
 }
 
 export const daysBetween = (a: string, b: string): number =>
@@ -177,20 +179,27 @@ function cascade(undated: Scored[], limit: number, usedClients: Map<string, numb
 }
 
 /**
- * Sestaví návrh dne. Úkoly s termínem mají přednost (jsou opravdu naléhavé),
- * ale pár slotů se drží úkolům bez termínu — bez toho by je nabité dny
- * s termíny vytlačily úplně a nikdy by se nepřipomněly.
+ * Sestaví návrh dne. Napřed to, co se vrací z odložení (má jisté místo —
+ * odložení nesmí být zapomenutí), pak úkoly s termínem (jsou opravdu
+ * naléhavé), ale pár slotů se drží úkolům bez termínu — bez toho by je
+ * nabité dny s termíny vytlačily úplně a nikdy by se nepřipomněly.
  */
 export function pickSuggestions(candidates: Scored[]): Scored[] {
-  const dated = candidates.filter((c) => eff(c.t)).sort(byScore)
-  const undated = candidates.filter((c) => !eff(c.t)).sort(byScore)
-
   const usedClients = new Map<string, number>()
+  const navraty = candidates.filter((c) => c.navrat).sort(byScore).slice(0, NAVRAT_MAX)
+  for (const c of navraty) takeClient(c, usedClients)
+  // Návraty nad limit se dnes nenabízejí vůbec — okno návratu trvá tři
+  // rána, takže přijdou na řadu zítra, místo aby zaplavily dnešek.
+  const zbytek = candidates.filter((c) => !c.navrat)
+  const dated = zbytek.filter((c) => eff(c.t)).sort(byScore)
+  const undated = zbytek.filter((c) => !eff(c.t)).sort(byScore)
+
+  const zbyva = TOTAL - navraty.length
   const rezerva = Math.min(UNDATED_MIN, undated.length)
 
   const datedPicked: Scored[] = []
   for (const c of dated) {
-    if (datedPicked.length >= TOTAL - rezerva) break
+    if (datedPicked.length >= zbyva - rezerva) break
     if (!clientFree(c, usedClients)) continue
     datedPicked.push(c)
     takeClient(c, usedClients)
@@ -198,25 +207,32 @@ export function pickSuggestions(candidates: Scored[]): Scored[] {
 
   const undatedPicked = cascade(
     undated,
-    Math.min(UNDATED_MAX, TOTAL - datedPicked.length),
+    Math.min(UNDATED_MAX, zbyva - datedPicked.length),
     usedClients,
   )
 
-  return [...datedPicked, ...undatedPicked]
+  return [...navraty, ...datedPicked, ...undatedPicked]
 }
 
 // ── Učení z rozhodnutí ──────────────────────────────────────────────────
 // Appka si každé ráno pamatuje, jak jsi na návrh reagoval (day_plans:
-// accepted / rejected / ignored). Žádný model — dvě pravidla, která jdou
-// říct jednou větou a nepřekvapí:
-//  1. „Dnes ne" znamená odložit na zítra: úkol se nabídne znovu, jen
-//     o chlup níž. Ale co odmítneš DVAKRÁT, dostane týden pokoj — třetí
-//     ráno by už bylo otravování, ne pomoc.
-//  2. Co necháš bez odpovědi, ustoupí jiným: každé ignorované nabídnutí
+// accepted / rejected / snoozed / ignored). Žádný model — pár pravidel,
+// která jdou říct jednou větou, a jedna zásada nad nimi: ODLOŽENÍ NIKDY
+// NENÍ ZAPOMENUTÍ. Každá pauza má datum konce, které appka ukazuje
+// (panel návrhu, inbox, Plán), a po jejím konci se úkol NABÍDNE
+// PŘEDNOSTNĚ tři rána po sobě — teprve když ho i potom necháš být,
+// spadne zpátky mezi ostatní.
+//  1. „Dnes ne" = odložit na zítra: úkol se nabídne znovu, jen o chlup
+//     níž. Co odmítneš DVAKRÁT během dvou týdnů, dostane týden pokoj —
+//     třetí ráno by už bylo otravování, ne pomoc.
+//  2. „Až za týden" = týden pokoj rovnou, když víš, že tenhle týden ne.
+//  3. Co necháš bez odpovědi, ustoupí jiným: každé ignorované nabídnutí
 //     ubere kousek skóre, takže se v inboxu vystřídají i další úkoly
-//     místo věčně stejné trojice nahoře. Paměť je krátká (14 dní) —
-//     starší rozhodnutí se zapomenou a úkol se vrátí.
+//     místo věčně stejné trojice nahoře.
+//  4. Paměť je krátká (14 dní): starší rozhodnutí se zapomenou.
 // Přijetí nic neupravuje: přijatý úkol dostane datum a dál se řídí jím.
+// Server i appka počítají TOUŽ funkcí (src/lib/navrhPamet.ts ji dováží),
+// takže co appka ukáže jako „vrátí se v pátek", to server v pátek udělá.
 
 export interface Rozhodnuti {
   date: string
@@ -228,17 +244,25 @@ export interface Rozhodnuti {
 export const HISTORIE_DNI = 14
 /** Kolikáté odmítnutí úkol na čas vyřadí… */
 export const ODMITNUTI_PAUZA = 2
-/** …a na kolik dní od posledního odmítnutí. */
+/** …a na kolik dní od posledního odmítnutí (i délka „až za týden"). */
 export const PAUZA_DNI = 7
+/** Po konci pauzy se úkol tolik rán nabízí přednostně. */
+export const NAVRAT_DNI = 3
+/** Kolik vracejících se úkolů má v návrhu jisté místo za jedno ráno. */
+export const NAVRAT_MAX = 2
+/** Skóre navíc pro vracející se úkol — má přebít běžné kandidáty. */
+export const NAVRAT_BONUS = 3
 /** Ztráta skóre za jedno ignorované nabídnutí a strop, kolik se jich počítá. */
 export const ZTRATA_ZA_IGNOROVANI = 0.3
 export const IGNOROVANI_STROP = 4
 /** Ztráta za jediné odmítnutí — nabídne se znovu, jen o chlup níž. */
 export const ZTRATA_ZA_ODMITNUTI = 0.5
+/** Důvod u vracejícího se úkolu (appka podle něj nic nepozná — čte navrat z pameti). */
+export const DUVOD_NAVRATU = 'týden odkladu uběhl — vrací se'
 
 const jeISODen = (s: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(s)
 
-/** Rozhodnutí z uložených plánů za posledních HISTORIE_DNI dní (dnešek se nepočítá). */
+/** Rozhodnutí z uložených plánů za posledních HISTORIE_DNI dní před `today` (ten den se nepočítá). */
 export function historieZPlanu(plans: Rec[], today: string): Rozhodnuti[] {
   const od = addDaysISO(today, -HISTORIE_DNI)
   const out: Rozhodnuti[] = []
@@ -255,37 +279,47 @@ export function historieZPlanu(plans: Rec[], today: string): Rozhodnuti[] {
 }
 
 export interface Pamet {
-  /** posun skóre (záporný nebo nula) */
+  /** posun skóre (záporný, nula, nebo NAVRAT_BONUS při návratu) */
   delta: number
   /** úkol se dnes vůbec nenabízí */
   pauza: boolean
+  /** první den, kdy se úkol zase nabídne (jen když nějaká pauza byla) */
+  pauzaDo?: string
+  /** pauza právě skončila — úkol má v návrhu jisté místo */
+  navrat: boolean
 }
 
 /** Co si návrh o úkolu pamatuje z minulých rozhodnutí. */
 export function pametUkolu(taskId: string, hist: Rozhodnuti[], today: string): Pamet {
-  let odmitnuti = 0
-  let posledniOdmitnuti = ''
+  const odmitnuti: string[] = []
   let ignorovani = 0
+  let konec: string | undefined
+  const prodluz = (den: string) => {
+    if (!konec || den > konec) konec = den
+  }
   for (const h of hist) {
     if (h.taskId !== taskId) continue
-    if (h.decision === 'rejected') {
-      odmitnuti++
-      if (h.date > posledniOdmitnuti) posledniOdmitnuti = h.date
-    } else if (h.decision === 'ignored') ignorovani++
+    if (h.decision === 'rejected') odmitnuti.push(h.date)
+    else if (h.decision === 'snoozed') prodluz(addDaysISO(h.date, PAUZA_DNI))
+    else if (h.decision === 'ignored') ignorovani++
   }
-  if (odmitnuti >= ODMITNUTI_PAUZA && posledniOdmitnuti && daysBetween(posledniOdmitnuti, today) <= PAUZA_DNI) {
-    return { delta: 0, pauza: true }
+  if (odmitnuti.length >= ODMITNUTI_PAUZA) {
+    prodluz(addDaysISO(odmitnuti.reduce((a, b) => (a > b ? a : b)), PAUZA_DNI))
+  }
+  if (konec && konec > today) return { delta: 0, pauza: true, pauzaDo: konec, navrat: false }
+  if (konec && daysBetween(konec, today) < NAVRAT_DNI) {
+    return { delta: NAVRAT_BONUS, pauza: false, pauzaDo: konec, navrat: true }
   }
   let delta = 0
-  if (odmitnuti === 1) delta -= ZTRATA_ZA_ODMITNUTI
+  if (odmitnuti.length === 1) delta -= ZTRATA_ZA_ODMITNUTI
   delta -= ZTRATA_ZA_IGNOROVANI * Math.min(ignorovani, IGNOROVANI_STROP)
-  return { delta, pauza: false }
+  return { delta, pauza: false, pauzaDo: konec, navrat: false }
 }
 
 /**
  * Kandidáti do návrhu: otevřené úkoly, oskórované a upravené pamětí.
  * Vyřazené (pauza) a nulové se nevrací — pickSuggestions dostane jen to,
- * co má smysl nabídnout.
+ * co má smysl nabídnout. Vracející se úkol nese svůj důvod.
  */
 export function ohodnot(
   tasks: Rec[],
@@ -300,7 +334,8 @@ export function ohodnot(
     if (pamet.pauza) continue
     const { score, reason } = scoreAndReason(t, clientsById, today)
     const upravene = score + pamet.delta
-    if (upravene > 0) out.push({ t, score: upravene, reason })
+    if (upravene <= 0) continue
+    out.push(pamet.navrat ? { t, score: upravene, reason: DUVOD_NAVRATU, navrat: true } : { t, score: upravene, reason })
   }
   return out
 }

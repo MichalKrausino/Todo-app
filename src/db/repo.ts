@@ -5,7 +5,8 @@ import { db } from './db'
 import { emitRepoWrite } from './events'
 import type { Client, ClientKind, Priority, Project, Task, TaskStatus } from './types'
 import { deterministicUuid } from '../lib/deterministicId'
-import { todayISO } from '../lib/dates'
+import { addDays, fromISODate, toISODate, todayISO } from '../lib/dates'
+import { HISTORIE_DNI } from '../../supabase/functions/morning-plan/pick'
 import { estimateTaskMinutes } from '../lib/estimate'
 import { nextOccurrence } from '../lib/rrule'
 
@@ -409,7 +410,7 @@ export const getDayPlan = (date: string) =>
 export async function decideDayPlanSuggestion(
   planId: string,
   taskId: string,
-  decision: 'accepted' | 'rejected' | 'ignored', // ignored = „Zpět" v panelu návrhu
+  decision: 'accepted' | 'rejected' | 'snoozed' | 'ignored', // ignored = „Zpět" v panelu návrhu
 ): Promise<void> {
   const plan = await db.dayPlans.get(planId)
   if (!plan) return
@@ -424,6 +425,25 @@ export async function decideDayPlanSuggestion(
         updatedAt: now(),
       })
     }
+  }
+  emitRepoWrite()
+}
+
+/**
+ * Probudí odpočívající úkol: jeho odmítnutí a odložení z posledních
+ * dvou týdnů se přepíšou na „bez odpovědi", takže od zítřka je zase ve
+ * hře. Rozhodnutí jsou jediný zdroj pravdy o pauze (server i appka je
+ * čtou touž funkcí), proto se mění ona, ne úkol.
+ */
+export async function probudUkol(taskId: string): Promise<void> {
+  const od = toISODate(addDays(fromISODate(todayISO()), -HISTORIE_DNI))
+  const plans = await db.dayPlans.where('date').aboveOrEqual(od).filter((p) => !p.deletedAt).toArray()
+  for (const plan of plans) {
+    if (!plan.suggestions.some((s) => s.taskId === taskId && (s.decision === 'rejected' || s.decision === 'snoozed'))) continue
+    const suggestions = plan.suggestions.map((s) =>
+      s.taskId === taskId && (s.decision === 'rejected' || s.decision === 'snoozed') ? { ...s, decision: 'ignored' as const } : s,
+    )
+    await db.dayPlans.update(plan.id, { suggestions, updatedAt: now() })
   }
   emitRepoWrite()
 }

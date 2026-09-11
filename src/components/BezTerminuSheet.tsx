@@ -8,7 +8,7 @@
 import { useState } from 'react'
 import type { Client, Task } from '../db/types'
 import { updateTask } from '../db/repo'
-import { formatDayLabel, formatFullDateNa, fromISODate } from '../lib/dates'
+import { formatDayLabel, formatFullDateNa, formatKdy, fromISODate } from '../lib/dates'
 
 // „na zítra", „na dnešek", jinak „na sobotu 12. září" — 4. pád.
 const naDen = (iso: string): string => {
@@ -25,6 +25,7 @@ export function BezTerminuSheet({
   ukoly,
   clients,
   cilovyDen,
+  odpociva,
   onOpenTask,
   onClose,
 }: {
@@ -32,6 +33,8 @@ export function BezTerminuSheet({
   clients: Map<string, Client>
   /** den z kalendáře — s ním má každý řádek tlačítko „Sem" */
   cilovyDen?: string
+  /** úkoly, které zrovna odpočívají mimo ranní návrh → den návratu */
+  odpociva?: Map<string, string>
   onOpenTask: (t: Task) => void
   onClose: () => void
 }) {
@@ -80,6 +83,7 @@ export function BezTerminuSheet({
               {seznam.map((t) => {
                 const client = t.clientId ? clients.get(t.clientId) : undefined
                 const hotovo = poslane.has(t.id)
+                const navrat = odpociva?.get(t.id)
                 return (
                   <li key={t.id} className="flex items-center gap-3 px-4 py-2.5">
                     <button
@@ -88,10 +92,16 @@ export function BezTerminuSheet({
                       className={`min-w-0 flex-1 text-left ${hotovo ? 'text-ink-faint' : ''}`}
                     >
                       <span className="block truncate text-[15px]">{t.title}</span>
-                      {client && (
-                        <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-soft">
-                          <span className="h-2 w-2 rounded-full" style={{ background: client.color }} />
-                          {client.name}
+                      {(client || navrat) && (
+                        <span className="flex items-center gap-2 text-[13px] text-ink-soft">
+                          {client && (
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="h-2 w-2 rounded-full" style={{ background: client.color }} />
+                              {client.name}
+                            </span>
+                          )}
+                          {/* odpočívá mimo ranní návrh — a je vidět, kdy se vrátí */}
+                          {navrat && <span className="text-ink-faint">odpočívá · vrátí se {formatKdy(navrat)}</span>}
                         </span>
                       )}
                     </button>

@@ -35,6 +35,7 @@ import { plural } from '../lib/labels'
 import { klidovyRezim } from '../lib/motion'
 import { parseQuickAdd } from '../lib/quickAdd'
 import { ukazToast } from '../lib/toast'
+import { useNavrhPamet } from '../lib/navrhPamet'
 import { TaskRow } from '../components/TaskRow'
 import { DlouhySeznam } from '../components/DlouhySeznam'
 import { Chip } from '../components/Chip'
@@ -94,6 +95,7 @@ export function UpcomingView({
   // Než první dotaz doběhne, není to „volno" — jen se ještě neví.
   const openRaw = useLiveQuery(openTasks, [])
   const open = openRaw ?? []
+  const pamet = useNavrhPamet()
   const clients = useLiveQuery(allClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []
   const clientMap = new Map(clients.map((c) => [c.id, c]))
@@ -240,6 +242,7 @@ export function UpcomingView({
     const d = fromISODate(iso)
     const n = naloz.get(iso)
     const otevreny = vybrany === iso
+    const vraceni = otevreny ? open.filter((t) => pamet.odpociva.get(t.id) === iso) : []
     const isToday = iso === today
     const zitra = iso === toISODate(addDays(fromISODate(today), 1))
     const vikend = [0, 6].includes(d.getDay())
@@ -325,6 +328,13 @@ export function UpcomingView({
                 <p className="px-4 py-4 text-sm text-ink-faint">Volný den. Napiš, co na něj patří.</p>
               )}
             </div>
+            {/* Odložené úkoly se ten den vrátí do ranního návrhu — v Plánu
+                je to vidět, aby odložení nebylo zapomenutí. */}
+            {vraceni.length > 0 && (
+              <p className="px-1 text-[13px] text-ink-faint">
+                Vrátí se do ranního návrhu: {vraceni.map((t) => t.title).join(', ')}
+              </p>
+            )}
             {/* Tiché pole jako v detailu klienta: plusko se vynoří až s textem. */}
             <form onSubmit={(e) => void pridej(e, iso)} className="relative">
               <input
@@ -413,6 +423,7 @@ export function UpcomingView({
           ukoly={bezTerminu}
           clients={clientMap}
           cilovyDen={inbox.cil}
+          odpociva={pamet.odpociva}
           onOpenTask={onOpenTask}
           onClose={() => setInbox(null)}
         />
