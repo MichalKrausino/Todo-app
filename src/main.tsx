@@ -4,6 +4,7 @@ import { registerSW } from 'virtual:pwa-register'
 import App from './App'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { reconcileTemplates } from './db/templates'
+import { nastavRegistraci } from './lib/aktualizace'
 import { initAppBadge } from './lib/badge'
 import { initTheme } from './lib/theme'
 import { initCalendar } from './sync/calendar'
@@ -19,6 +20,7 @@ registerSW({
   immediate: true,
   onRegisteredSW(_url, registration) {
     if (!registration) return
+    nastavRegistraci(registration)
     const check = () => void registration.update().catch(() => {})
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') check()

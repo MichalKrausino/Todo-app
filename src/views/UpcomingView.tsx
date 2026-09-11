@@ -1,15 +1,19 @@
-// Plán = kalendář a agenda vybraného dne.
+// Plán = dny jako řádky, čas jako pruh.
 //
-// Dřív: pás čtrnácti dnů s tečkami a pod ním sekce na každý den, na
-// kterém něco leželo — až třicet karet pod sebou, „bez termínu" a
-// ohlédnutí úplně dole. Prázdný den nešel ani vybrat, natož na něj něco
-// naplánovat, a týden ani měsíc nebyly nikde vidět. Teď: (1) hlavička
-// se souhrnem týdne; (2) řádka chipů pro to, co není den — bez termínu,
-// ohlédnutí, skok na dnešek; (3) kalendář (týden, rozbalitelný na měsíc,
-// listuje se šipkami i švihnutím); (4) agenda vybraného dne v jedné
-// kartě — schůzky, úkoly, a pod ní tiché pole „nový úkol na ten den"
-// a výběr z úkolů bez termínu. Plánuje se tak, jak se plánuje: napřed
-// den, pak co na něj. Minulý den ukáže, co se ten den dodělalo.
+// Jeden nápad, ne tři: každý den je řádek — vlevo datum, vpravo pruh,
+// jehož délka je naplánovaný čas (celý pruh = osm hodin) a barvy jsou
+// klienti (šedá schůzka nebo úkol bez klienta). Týden se tak čte jako
+// vodorovný graf: kde je plno, kde je volno, komu který den patří. Řádky
+// jdou pod sebou od dneška a scrollují se do budoucnosti — žádný
+// přepínač týden/měsíc, žádný pás čísel, žádná zvláštní karta; ťuknutí
+// na den ho rozbalí na místě (schůzky, úkoly, pole pro nový úkol a
+// výběr z úkolů bez termínu) a plánuje se tam, kde se den vidí.
+//
+// Dvě předchozí verze byly kalendář z telefonu (mřížka čísel s tečkami,
+// pak se sloupky) a karta dne pod ním. Mřížka umí ukázat jen „něco tam
+// je" a u sedmi čísel v řádce není místo na jméno klienta ani na počet
+// hodin. Řádek má celou šířku: pruh je čitelný, popisek pod ním řekne
+// „2 úkoly · schůzka · ~3 h" a rozbalený den nemusí nikam odskakovat.
 
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -20,7 +24,6 @@ import {
   allProjects,
   calendarEventsBetween,
   completeTask,
-  doneOn,
   openTasks,
   reopenTask,
   sortTasks,
@@ -29,13 +32,14 @@ import { plannedMinutes } from '../lib/capacity'
 import { addDays, formatEventRange, formatFullDate, formatFullDateNa, fromISODate, mondayOf, toISODate, todayISO } from '../lib/dates'
 import { minutesToLabel } from '../lib/freeSlot'
 import { plural } from '../lib/labels'
+import { klidovyRezim } from '../lib/motion'
 import { parseQuickAdd } from '../lib/quickAdd'
 import { ukazToast } from '../lib/toast'
 import { TaskRow } from '../components/TaskRow'
 import { DlouhySeznam } from '../components/DlouhySeznam'
 import { Chip } from '../components/Chip'
 import { BezTerminuSheet } from '../components/BezTerminuSheet'
-import { PlanKalendar, kotvaPro, oknoPasu, type DenNaloz, type PlanRezim } from '../components/PlanKalendar'
+import { DisclosureContent } from '../components/ui/Disclosure'
 import { TextEffect } from '../components/ui/TextEffect'
 
 const effectiveDate = (t: Task): string | undefined => {
@@ -43,13 +47,19 @@ const effectiveDate = (t: Task): string | undefined => {
   return dates.sort()[0]
 }
 
-const REZIM_KLIC = 'todo.plan.rezim'
-const nactiRezim = (): PlanRezim => {
-  try {
-    return localStorage.getItem(REZIM_KLIC) === 'mesic' ? 'mesic' : 'tyden'
-  } catch {
-    return 'tyden'
-  }
+// Celý pruh = osm hodin; víc se do řádku nevejde a řekne to popisek.
+const PLNY_DEN_MIN = 8 * 60
+// Kolik dní se ukáže napoprvé a o kolik se dobírá.
+const DAVKA_DNI = 28
+const DNY = ['po', 'út', 'st', 'čt', 'pá', 'so', 'ne']
+const monthFmt = new Intl.DateTimeFormat('cs-CZ', { month: 'long' })
+
+/** Nálož jednoho dne: minuty podle klienta (bez barvy = schůzka / bez klienta). */
+interface DenNaloz {
+  ukoly: number
+  schuzky: number
+  minuty: number
+  dily: { barva?: string; minuty: number }[]
 }
 
 export function UpcomingView({
@@ -60,27 +70,13 @@ export function UpcomingView({
   onOpenReview?: () => void
 }) {
   const today = todayISO()
-  const [vybrany, setVybrany] = useState(today)
-  const [rezim, setRezimStav] = useState<PlanRezim>(nactiRezim)
-  const [kotva, setKotva] = useState(() => kotvaPro(today, nactiRezim()))
+  const klid = klidovyRezim()
+  const [vybrany, setVybrany] = useState<string | null>(today)
+  const [dnu, setDnu] = useState(DAVKA_DNI)
   const [inbox, setInbox] = useState<null | { cil?: string }>(null)
   const [novy, setNovy] = useState('')
 
-  const setRezim = (r: PlanRezim) => {
-    setRezimStav(r)
-    setKotva(kotvaPro(vybrany, r))
-    try {
-      localStorage.setItem(REZIM_KLIC, r)
-    } catch {
-      /* soukromé okno */
-    }
-  }
-  const vyber = (iso: string) => {
-    setVybrany(iso)
-    setKotva(kotvaPro(iso, rezim))
-  }
-
-  // Než první dotaz doběhne, není to „volný den" — jen se ještě neví.
+  // Než první dotaz doběhne, není to „volno" — jen se ještě neví.
   const openRaw = useLiveQuery(openTasks, [])
   const open = openRaw ?? []
   const clients = useLiveQuery(allClients, []) ?? []
@@ -88,37 +84,37 @@ export function UpcomingView({
   const clientMap = new Map(clients.map((c) => [c.id, c]))
   const projectMap = new Map(projects.map((p) => [p.id, p]))
 
-  // Schůzky pro celé zobrazené období i vybraný den (ten může být mimo,
-  // když se listuje pryč). Vícedenní událost patří do KAŽDÉHO svého dne.
-  const [odPasu, doPasu] = oknoPasu(kotva, rezim)
-  const od = vybrany < odPasu ? vybrany : odPasu
-  const doo = vybrany > doPasu ? vybrany : doPasu
-  const events = useLiveQuery(() => calendarEventsBetween(od, doo), [od, doo]) ?? []
+  const dny = Array.from({ length: dnu }, (_, i) => toISODate(addDays(fromISODate(today), i)))
+  const konec = dny[dny.length - 1]
+
+  // Schůzky pro celé okno. Vícedenní událost patří do KAŽDÉHO svého dne.
+  const events = useLiveQuery(() => calendarEventsBetween(today, konec), [today, konec]) ?? []
   const eventsPerDay = new Map<string, CalendarEvent[]>()
   for (const e of events) {
     if (e.isTodoBlock) continue
-    let d = e.startDay < od ? od : e.startDay
-    const end = (e.endDay ?? e.startDay) > doo ? doo : (e.endDay ?? e.startDay)
+    let d = e.startDay < today ? today : e.startDay
+    const end = (e.endDay ?? e.startDay) > konec ? konec : (e.endDay ?? e.startDay)
     let guard = 0
-    while (d <= end && guard++ < 45) {
+    while (d <= end && guard++ < 90) {
       eventsPerDay.set(d, [...(eventsPerDay.get(d) ?? []), e])
       d = toISODate(addDays(fromISODate(d), 1))
     }
   }
 
+  // Propadlé úkoly patří na dnešek — v Plánu se dívá dopředu, ne zpátky;
+  // triáž propadlých je na Dnes.
   const podleDne = new Map<string, Task[]>()
   for (const t of open) {
     const d = effectiveDate(t)
     if (!d) continue
-    podleDne.set(d, [...(podleDne.get(d) ?? []), t])
+    const den = d < today ? today : d
+    podleDne.set(den, [...(podleDne.get(den) ?? []), t])
   }
   const bezTerminu = sortTasks(open.filter((t) => !effectiveDate(t)))
 
-  // Sloupky v kalendáři: čas úkolů po klientech + délka schůzek (bez
-  // barvy), pro všechny tři stránky pásu. Propadlé se počítají na svůj
-  // den, ne na dnešek — kalendář je mapa, ne triáž.
+  // Pruh dne: čas úkolů po klientech + délka schůzek (bez barvy).
   const naloz = new Map<string, DenNaloz>()
-  for (let d = od; d <= doo; d = toISODate(addDays(fromISODate(d), 1))) {
+  for (const d of dny) {
     const ukoly = podleDne.get(d) ?? []
     const schuzky = eventsPerDay.get(d) ?? []
     if (ukoly.length === 0 && schuzky.length === 0) continue
@@ -135,35 +131,25 @@ export function UpcomingView({
     const dily: DenNaloz['dily'] = [...podleKlienta]
       .filter(([k]) => k !== '')
       .map(([k, minuty]) => ({ barva: clientMap.get(k)!.color, minuty }))
+      .sort((a, b) => b.minuty - a.minuty)
     if (neutralni > 0) dily.push({ minuty: neutralni })
     naloz.set(d, {
-      polozky: ukoly.length + schuzky.length,
+      ukoly: ukoly.length,
+      schuzky: schuzky.length,
       minuty: dily.reduce((sum, x) => sum + x.minuty, 0),
       dily,
     })
   }
 
-  // Minulý den ukazuje, co se ten den dodělalo — ne co na něm propadlo.
-  const minuly = vybrany < today
-  const hotoveVDen = useLiveQuery(() => (minuly ? doneOn(vybrany) : Promise.resolve<Task[]>([])), [minuly, vybrany]) ?? []
-  const dayTasks = minuly ? hotoveVDen : sortTasks(podleDne.get(vybrany) ?? [])
-  const dayEvents = [...(eventsPerDay.get(vybrany) ?? [])].sort(
-    (a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start),
-  )
-  const workMin = minuly ? 0 : plannedMinutes(dayTasks)
-
-  // Souhrn týdne vybraného dne do hlavičky.
-  const pondeli = mondayOf(vybrany)
-  const tyden = Array.from({ length: 7 }, (_, i) => toISODate(addDays(fromISODate(pondeli), i)))
+  // Souhrn tohoto týdne do hlavičky.
+  const pondeli = mondayOf(today)
+  const tyden = Array.from({ length: 7 }, (_, i) => toISODate(addDays(fromISODate(pondeli), i))).filter((d) => d >= today)
   const tydenUkoly = tyden.flatMap((d) => podleDne.get(d) ?? [])
   const tydenSchuzky = tyden.reduce((n, d) => n + (eventsPerDay.get(d)?.length ?? 0), 0)
   const tydenMin = plannedMinutes(tydenUkoly)
-  const tentoTyden = pondeli === mondayOf(today)
   const souhrn = [
-    tentoTyden ? 'tento týden' : `týden od ${fromISODate(pondeli).getDate()}. ${fromISODate(pondeli).getMonth() + 1}.`,
-    tydenUkoly.length > 0
-      ? `${tydenUkoly.length} ${plural(tydenUkoly.length, 'úkol', 'úkoly', 'úkolů')}`
-      : 'bez úkolů',
+    'tento týden',
+    tydenUkoly.length > 0 ? `${tydenUkoly.length} ${plural(tydenUkoly.length, 'úkol', 'úkoly', 'úkolů')}` : 'bez úkolů',
     tydenMin > 0 ? `~${minutesToLabel(tydenMin)}` : '',
     tydenSchuzky > 0 ? `${tydenSchuzky} ${plural(tydenSchuzky, 'schůzka', 'schůzky', 'schůzek')}` : '',
   ].filter(Boolean)
@@ -186,15 +172,18 @@ export function UpcomingView({
     />
   )
 
-  // Nový úkol rovnou na vybraný den — parser dál rozumí klientovi,
-  // prioritě i času; den je daný kalendářem.
-  const pridej = async (e: React.FormEvent) => {
+  const nazevDne = (iso: string) => (iso === today ? 'Dnes' : formatFullDate(fromISODate(iso)))
+  const naDen = (iso: string) => (iso === today ? 'dnešek' : formatFullDateNa(fromISODate(iso)))
+
+  // Nový úkol rovnou na rozbalený den — parser dál rozumí klientovi,
+  // prioritě i času; den je daný řádkem.
+  const pridej = async (e: React.FormEvent, iso: string) => {
     e.preventDefault()
     const parsed = parseQuickAdd(novy, clients, new Date(), projects)
     if (!parsed.title) return
     const task = await addTask({
       title: parsed.title,
-      dueDate: vybrany,
+      dueDate: iso,
       dueTime: parsed.dueTime,
       priority: parsed.priority,
       clientId: parsed.clientId,
@@ -203,20 +192,161 @@ export function UpcomingView({
       notes: parsed.notes,
     })
     setNovy('')
-    ukazToast(`${nazevDne} — „${task.title}"`)
+    ukazToast(`${nazevDne(iso)} — „${task.title}"`)
   }
 
-  const nazevDne = vybrany === today ? 'Dnes' : formatFullDate(fromISODate(vybrany))
-  const sloupec = (fromISODate(vybrany).getDay() + 6) % 7
-  const nadpisDne = [
-    nazevDne,
-    dayTasks.length > 0
-      ? `${dayTasks.length} ${minuly ? plural(dayTasks.length, 'hotový', 'hotové', 'hotových') : plural(dayTasks.length, 'úkol', 'úkoly', 'úkolů')}`
-      : '',
-    workMin > 0 ? `~${minutesToLabel(workMin)}` : '',
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  // Týdny: skupina řádků s tichým štítkem.
+  const tydny: { kotva: string; dny: string[] }[] = []
+  for (const d of dny) {
+    const k = mondayOf(d)
+    const posledni = tydny[tydny.length - 1]
+    if (posledni && posledni.kotva === k) posledni.dny.push(d)
+    else tydny.push({ kotva: k, dny: [d] })
+  }
+  const stitekTydne = (kotva: string) => {
+    if (kotva === pondeli) return 'tento týden'
+    if (kotva === toISODate(addDays(fromISODate(pondeli), 7))) return 'příští týden'
+    const d = fromISODate(kotva)
+    return `od ${d.getDate()}. ${monthFmt.format(d)}`
+  }
+
+  const popisDne = (n: DenNaloz | undefined) => {
+    if (!n) return ''
+    return [
+      n.ukoly > 0 ? `${n.ukoly} ${plural(n.ukoly, 'úkol', 'úkoly', 'úkolů')}` : '',
+      n.schuzky > 0 ? `${n.schuzky} ${plural(n.schuzky, 'schůzka', 'schůzky', 'schůzek')}` : '',
+      n.minuty > 0 ? `~${minutesToLabel(n.minuty)}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ')
+  }
+
+  const radekDne = (iso: string) => {
+    const d = fromISODate(iso)
+    const n = naloz.get(iso)
+    const otevreny = vybrany === iso
+    const isToday = iso === today
+    const zitra = iso === toISODate(addDays(fromISODate(today), 1))
+    const vikend = [0, 6].includes(d.getDay())
+    const celkem = n?.minuty ?? 0
+    const preteklo = celkem > PLNY_DEN_MIN
+    // Šířky dílů v procentech pruhu; přetečený den se stlačí na celý pruh.
+    const zaklad = Math.max(celkem, PLNY_DEN_MIN)
+    const dayTasks = sortTasks(podleDne.get(iso) ?? [])
+    const dayEvents = [...(eventsPerDay.get(iso) ?? [])].sort(
+      (a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start),
+    )
+    return (
+      <li key={iso} data-day={iso}>
+        <button
+          type="button"
+          aria-expanded={otevreny}
+          onClick={() => setVybrany(otevreny ? null : iso)}
+          className="flex w-full items-center gap-3 py-2.5 text-left transition-transform duration-150 active:scale-[0.99]"
+        >
+          <span className="flex w-11 shrink-0 flex-col items-start leading-none">
+            <span className={`text-[11px] font-medium ${isToday || zitra ? 'text-accent-deep' : 'text-ink-faint'}`}>
+              {isToday ? 'dnes' : zitra ? 'zítra' : DNY[(d.getDay() + 6) % 7]}
+            </span>
+            <span
+              className={`mt-1 text-[22px] font-semibold tabular-nums ${
+                isToday ? 'text-accent-deep' : vikend && !n ? 'text-ink-soft' : 'text-ink'
+              }`}
+            >
+              {d.getDate()}
+            </span>
+          </span>
+          <span className="min-w-0 flex-1">
+            {/* Pruh: délka je čas, barvy klienti. Prázdný den má jen
+                tichou kolej — graf s nulou má pořád osu. */}
+            <span className={`flex h-2.5 w-full gap-px overflow-hidden rounded-full ${n ? 'bg-well' : 'bg-well/60'}`}>
+              {n?.dily.map((dil, i) => (
+                <span
+                  key={i}
+                  className={`h-full ${dil.barva ? '' : 'bg-ink-faint'} ${klid ? '' : 'pruh-roste'}`}
+                  style={{
+                    width: `${Math.max(2, (dil.minuty / zaklad) * 100)}%`,
+                    background: dil.barva,
+                    animationDelay: klid ? undefined : `${i * 60}ms`,
+                  }}
+                />
+              ))}
+            </span>
+            <span className={`mt-1.5 block truncate text-[13px] ${n ? 'text-ink-soft' : 'text-ink-faint'}`}>
+              {n ? popisDne(n) : 'volno'}
+              {preteklo && <span className="text-danger"> · přes 8 h</span>}
+            </span>
+          </span>
+          <svg
+            viewBox="0 0 24 24"
+            className={`h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 ${otevreny ? 'rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+
+        {/* Rozbalený den: agenda, pole pro nový úkol, výběr bez termínu.
+            Rozbaluje se na místě, takže se plánuje tam, kde se den vidí. */}
+        <DisclosureContent open={otevreny}>
+          <div className="space-y-2 pb-4 pt-1">
+            <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+              {dayEvents.length > 0 && (
+                <ul className={`divide-y divide-line bg-well/30 ${dayTasks.length > 0 ? 'border-b border-line' : ''}`}>
+                  {dayEvents.map((e) => (
+                    <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
+                      <span className="w-24 shrink-0 text-[13px] tabular-nums text-ink-soft">{formatEventRange(e)}</span>
+                      <span className="min-w-0 flex-1 truncate text-[15px] text-ink">{e.title}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {dayTasks.length > 0 && <DlouhySeznam polozky={dayTasks} radek={row} davka={12} className="divide-y divide-line" />}
+              {openRaw !== undefined && dayTasks.length === 0 && dayEvents.length === 0 && (
+                <p className="px-4 py-4 text-sm text-ink-faint">Volný den. Napiš, co na něj patří.</p>
+              )}
+            </div>
+            {/* Tiché pole jako v detailu klienta: plusko se vynoří až s textem. */}
+            <form onSubmit={(e) => void pridej(e, iso)} className="relative">
+              <input
+                value={novy}
+                onChange={(e) => setNovy(e.target.value)}
+                aria-label="Nový úkol na vybraný den"
+                placeholder={`Nový úkol na ${naDen(iso)}…`}
+                enterKeyHint="done"
+                className="w-full appearance-none rounded-full border border-transparent bg-card py-2.5 pl-4 pr-12 text-[16px] text-ink shadow-card outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus-visible:outline-none"
+              />
+              <button
+                type="submit"
+                aria-label="Přidat úkol"
+                disabled={!novy.trim()}
+                className={`absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-accent text-card transition-[opacity,transform] duration-200 active:scale-90 ${
+                  novy.trim() ? 'opacity-100' : 'pointer-events-none opacity-0'
+                }`}
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
+            </form>
+            {bezTerminu.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setInbox({ cil: iso })}
+                className="px-1 py-1 text-[13px] font-medium text-accent-deep"
+              >
+                + Vybrat z úkolů bez termínu · {bezTerminu.length}
+              </button>
+            )}
+          </div>
+        </DisclosureContent>
+      </li>
+    )
+  }
 
   return (
     <div className="space-y-5">
@@ -225,8 +355,7 @@ export function UpcomingView({
         <p className="text-sm text-ink-soft first-letter:uppercase">{souhrn.join(' · ')}</p>
       </header>
 
-      {/* Co není den: úkoly bez termínu a ohlédnutí. Skok na dnešek
-          patří kalendáři, stojí v jeho hlavičce. */}
+      {/* Co není den: úkoly bez termínu a ohlédnutí. */}
       {(bezTerminu.length > 0 || (onOpenReview && reviewDay)) && (
         <div className="rise -mx-4 flex gap-2 overflow-x-auto px-4 py-1" style={{ scrollbarWidth: 'none' }}>
           {bezTerminu.length > 0 && (
@@ -248,85 +377,20 @@ export function UpcomingView({
         </div>
       )}
 
-      <div className="rise" style={{ '--stagger': 1 } as React.CSSProperties}>
-        <PlanKalendar
-          kotva={kotva}
-          rezim={rezim}
-          vybrany={vybrany}
-          naloz={naloz}
-          onVyber={vyber}
-          onRezim={setRezim}
-        />
-      </div>
+      {tydny.map((t, i) => (
+        <section key={t.kotva} className="rise" style={{ '--stagger': Math.min(i + 1, 6) } as React.CSSProperties}>
+          <h2 className="section-label mb-1">{stitekTydne(t.kotva)}</h2>
+          <ol className="divide-y divide-line">{t.dny.map(radekDne)}</ol>
+        </section>
+      ))}
 
-      <section className="rise" style={{ '--stagger': 2 } as React.CSSProperties}>
-        {/* Karta dne vyrůstá z vybraného sloupce: ocásek stojí pod ním
-            a při změně dne přejede. */}
-        <div className="relative h-2.5" aria-hidden="true">
-          <span
-            className="absolute top-1 h-3 w-3 -translate-x-1/2 rotate-45 rounded-[2px] bg-card transition-[left] duration-300 ease-out"
-            style={{ left: `${((sloupec + 0.5) * 100) / 7}%` }}
-          />
-        </div>
-        <div className="overflow-hidden rounded-2xl bg-card shadow-card">
-          <h2 className="section-label px-3 pb-1 pt-3 first-letter:uppercase">{nadpisDne}</h2>
-          {dayEvents.length > 0 && (
-            <ul className={`divide-y divide-line bg-well/30 ${dayTasks.length > 0 ? 'border-b border-line' : ''}`}>
-              {dayEvents.map((e) => (
-                <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <span className="w-24 shrink-0 text-[13px] tabular-nums text-ink-soft">{formatEventRange(e)}</span>
-                  <span className="min-w-0 flex-1 truncate text-[15px] text-ink">{e.title}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {dayTasks.length > 0 && (
-            <DlouhySeznam polozky={dayTasks} radek={row} davka={12} className="divide-y divide-line" />
-          )}
-          {openRaw !== undefined && dayTasks.length === 0 && dayEvents.length === 0 && (
-            <p className="px-4 py-5 text-sm text-ink-faint">
-              {minuly ? 'Ten den se nic nedodělalo.' : 'Volný den. Napiš, co na něj patří.'}
-            </p>
-          )}
-        </div>
-
-        {!minuly && (
-          <div className="mt-3 space-y-2">
-            {/* Tiché pole jako v detailu klienta: plusko se vynoří až s textem. */}
-            <form onSubmit={pridej} className="relative">
-              <input
-                value={novy}
-                onChange={(e) => setNovy(e.target.value)}
-                aria-label="Nový úkol na vybraný den"
-                placeholder={`Nový úkol na ${vybrany === today ? 'dnešek' : formatFullDateNa(fromISODate(vybrany))}…`}
-                enterKeyHint="done"
-                className="w-full appearance-none rounded-full border border-transparent bg-card py-2.5 pl-4 pr-12 text-[16px] text-ink shadow-card outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus-visible:outline-none"
-              />
-              <button
-                type="submit"
-                aria-label="Přidat úkol"
-                disabled={!novy.trim()}
-                className={`absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-accent text-card transition-[opacity,transform] duration-200 active:scale-90 ${
-                  novy.trim() ? 'opacity-100' : 'pointer-events-none opacity-0'
-                }`}
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-              </button>
-            </form>
-            {bezTerminu.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setInbox({ cil: vybrany })}
-                className="px-1 py-1 text-[13px] font-medium text-accent-deep"
-              >
-                + Vybrat z úkolů bez termínu · {bezTerminu.length}
-              </button>
-            )}
-          </div>
-        )}
-      </section>
+      <button
+        type="button"
+        onClick={() => setDnu((n) => n + DAVKA_DNI)}
+        className="px-1 py-2 text-[13px] font-medium text-accent-deep"
+      >
+        Další čtyři týdny
+      </button>
 
       {inbox && (
         <BezTerminuSheet
