@@ -411,10 +411,11 @@ export async function decideDayPlanSuggestion(
   planId: string,
   taskId: string,
   decision: 'accepted' | 'rejected' | 'snoozed' | 'ignored', // ignored = „Zpět" v panelu návrhu
+  until?: string, // den návratu (volnější den) u odložení a pauzy
 ): Promise<void> {
   const plan = await db.dayPlans.get(planId)
   if (!plan) return
-  const suggestions = plan.suggestions.map((s) => (s.taskId === taskId ? { ...s, decision } : s))
+  const suggestions = plan.suggestions.map((s) => (s.taskId === taskId ? { ...s, decision, until } : s))
   await db.dayPlans.update(planId, { suggestions, updatedAt: now() })
   if (decision === 'accepted') {
     const task = await db.tasks.get(taskId)

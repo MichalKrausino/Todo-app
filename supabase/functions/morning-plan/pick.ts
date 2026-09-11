@@ -225,7 +225,9 @@ export function pickSuggestions(candidates: Scored[]): Scored[] {
 //  1. „Dnes ne" = odložit na zítra: úkol se nabídne znovu, jen o chlup
 //     níž. Co odmítneš DVAKRÁT během dvou týdnů, dostane týden pokoj —
 //     třetí ráno by už bylo otravování, ne pomoc.
-//  2. „Až za týden" = týden pokoj rovnou, když víš, že tenhle týden ne.
+//  2. „Volnější den" = pokoj rovnou; vrátí se v nejbližší pracovní den
+//     s nejmenší zátěží (den si volí appka při odpovědi a ukládá ho
+//     k rozhodnutí jako `until` — server ho jen ctí).
 //  3. Co necháš bez odpovědi, ustoupí jiným: každé ignorované nabídnutí
 //     ubere kousek skóre, takže se v inboxu vystřídají i další úkoly
 //     místo věčně stejné trojice nahoře.
@@ -238,6 +240,8 @@ export interface Rozhodnuti {
   date: string
   taskId: string
   decision: string
+  /** den návratu zvolený při odpovědi (volnější den); bez něj +PAUZA_DNI */
+  until?: string
 }
 
 /** Jak daleko do minulosti se rozhodnutí počítají. */
@@ -258,7 +262,7 @@ export const IGNOROVANI_STROP = 4
 /** Ztráta za jediné odmítnutí — nabídne se znovu, jen o chlup níž. */
 export const ZTRATA_ZA_ODMITNUTI = 0.5
 /** Důvod u vracejícího se úkolu (appka podle něj nic nepozná — čte navrat z pameti). */
-export const DUVOD_NAVRATU = 'týden odkladu uběhl — vrací se'
+export const DUVOD_NAVRATU = 'odložené se vrací — dnes je na to místo'
 
 const jeISODen = (s: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(s)
 
@@ -272,7 +276,8 @@ export function historieZPlanu(plans: Rec[], today: string): Rozhodnuti[] {
     const suggestions = Array.isArray(p.suggestions) ? (p.suggestions as Rec[]) : []
     for (const s of suggestions) {
       if (!s || typeof s.taskId !== 'string') continue
-      out.push({ date, taskId: s.taskId, decision: String(s.decision ?? 'ignored') })
+      const until = typeof s.until === 'string' && jeISODen(s.until) ? s.until : undefined
+      out.push({ date, taskId: s.taskId, decision: String(s.decision ?? 'ignored'), until })
     }
   }
   return out
@@ -291,20 +296,23 @@ export interface Pamet {
 
 /** Co si návrh o úkolu pamatuje z minulých rozhodnutí. */
 export function pametUkolu(taskId: string, hist: Rozhodnuti[], today: string): Pamet {
-  const odmitnuti: string[] = []
+  // Den návratu si volí appka při odpovědi (nejbližší volnější pracovní
+  // den) a ukládá ho k rozhodnutí; bez něj platí pevných PAUZA_DNI.
+  const odmitnuti: Rozhodnuti[] = []
   let ignorovani = 0
   let konec: string | undefined
   const prodluz = (den: string) => {
     if (!konec || den > konec) konec = den
   }
+  const navratPo = (h: Rozhodnuti) => (h.until && h.until > h.date ? h.until : addDaysISO(h.date, PAUZA_DNI))
   for (const h of hist) {
     if (h.taskId !== taskId) continue
-    if (h.decision === 'rejected') odmitnuti.push(h.date)
-    else if (h.decision === 'snoozed') prodluz(addDaysISO(h.date, PAUZA_DNI))
+    if (h.decision === 'rejected') odmitnuti.push(h)
+    else if (h.decision === 'snoozed') prodluz(navratPo(h))
     else if (h.decision === 'ignored') ignorovani++
   }
   if (odmitnuti.length >= ODMITNUTI_PAUZA) {
-    prodluz(addDaysISO(odmitnuti.reduce((a, b) => (a > b ? a : b)), PAUZA_DNI))
+    prodluz(navratPo(odmitnuti.reduce((a, b) => (a.date > b.date ? a : b))))
   }
   if (konec && konec > today) return { delta: 0, pauza: true, pauzaDo: konec, navrat: false }
   if (konec && daysBetween(konec, today) < NAVRAT_DNI) {

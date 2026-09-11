@@ -148,6 +148,9 @@ export interface DayPlanSuggestion {
   // nebo „Zpět". Co z toho server vyvodí, počítá pick.ts — a appka touž
   // funkcí (src/lib/navrhPamet.ts), aby uměla říct, kdy se úkol vrátí.
   decision: 'accepted' | 'rejected' | 'snoozed' | 'ignored'
+  // den návratu zvolený při odpovědi — nejbližší volnější pracovní den
+  // (src/lib/volnyDen.ts); server ho ctí, bez něj platí pevný týden
+  until?: string
 }
 
 // Co appka ráno navrhla a jak jsem reagoval (Fáze 6).

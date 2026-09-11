@@ -162,12 +162,19 @@ describe('paměť návrhu — historie z plánů', () => {
     expect(h.map((x) => x.taskId)).toEqual(['a', 'b'])
   })
 
-  it('rozbitý plán přeskočí, chybějící rozhodnutí bere jako ignorované', () => {
+  it('rozbitý plán přeskočí, chybějící rozhodnutí bere jako ignorované, den návratu přenese', () => {
     const h = historieZPlanu(
-      [{ id: 'x', date: 'kdysi', suggestions: [{ taskId: 'a' }] }, { id: 'y', date: '2026-08-30', suggestions: [{ taskId: 'a' }, { nic: 1 }] }],
+      [
+        { id: 'x', date: 'kdysi', suggestions: [{ taskId: 'a' }] },
+        { id: 'y', date: '2026-08-30', suggestions: [{ taskId: 'a' }, { nic: 1 }, { taskId: 'b', decision: 'snoozed', until: '2026-09-02' }, { taskId: 'c', decision: 'snoozed', until: 'brzy' }] },
+      ],
       TODAY,
     )
-    expect(h).toEqual([{ date: '2026-08-30', taskId: 'a', decision: 'ignored' }])
+    expect(h).toEqual([
+      { date: '2026-08-30', taskId: 'a', decision: 'ignored', until: undefined },
+      { date: '2026-08-30', taskId: 'b', decision: 'snoozed', until: '2026-09-02' },
+      { date: '2026-08-30', taskId: 'c', decision: 'snoozed', until: undefined },
+    ])
   })
 })
 
@@ -220,6 +227,20 @@ describe('paměť návrhu — jeden úkol', () => {
     )
     expect(pametUkolu('a', h.slice(0, 2), TODAY).delta).toBeCloseTo(-2 * ZTRATA_ZA_IGNOROVANI)
     expect(pametUkolu('a', h, TODAY).delta).toBeCloseTo(-IGNOROVANI_STROP * ZTRATA_ZA_IGNOROVANI)
+  })
+
+  it('zvolený den návratu má přednost před pevným týdnem', () => {
+    const h: Rozhodnuti[] = [{ date: '2026-08-30', taskId: 'a', decision: 'snoozed', until: '2026-09-02' }]
+    expect(pametUkolu('a', h, TODAY)).toMatchObject({ pauza: true, pauzaDo: '2026-09-02' })
+    expect(pametUkolu('a', h, '2026-09-02')).toMatchObject({ navrat: true })
+    // i u pauzy po druhém odmítnutí — a nesmyslný (dřívější) den se ignoruje
+    const r: Rozhodnuti[] = [
+      { date: '2026-08-28', taskId: 'a', decision: 'rejected' },
+      { date: '2026-08-30', taskId: 'a', decision: 'rejected', until: '2026-09-03' },
+    ]
+    expect(pametUkolu('a', r, TODAY).pauzaDo).toBe('2026-09-03')
+    const spatne: Rozhodnuti[] = [{ date: '2026-08-30', taskId: 'a', decision: 'snoozed', until: '2026-08-01' }]
+    expect(pametUkolu('a', spatne, TODAY).pauzaDo).toBe('2026-09-06')
   })
 
   it('rozhodnutí u jiných úkolů se nepletou', () => {

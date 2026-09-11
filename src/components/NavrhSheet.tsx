@@ -9,19 +9,24 @@
 // Odpovědi a co znamenají (logiku počítá pick.ts, sem se jen dováží):
 //   Přijmout na dnešek — úkol dostane dnešek a blok v kalendáři „Todo".
 //   Dnes ne — zítra znovu; podruhé během dvou týdnů = týden pokoj.
-//   Až za týden — týden pokoj rovnou.
+//   Volnější den — pokoj rovnou; vrátí se v nejbližší pracovní den
+//     s nejmenší zátěží (src/lib/volnyDen.ts), datum je v tlačítku.
 //   Už neplatí — jen u úkolu, který se vrací z odložení: dvakrát
 //     odložené a potřetí nechtěné je nejspíš mrtvé, tak se to řekne.
 // Odložení nikdy není zapomenutí: toast řekne, KDY se úkol vrátí, karta
 // „Odpočívá" dole ukazuje všechno, co zrovna čeká, a „Vrátit" to probudí.
+// Den návratu volí appka podle zátěže (i u pauzy po druhém „dnes ne",
+// tam nejdřív za tři dny — dvakrát „ne" chce aspoň pár dní klidu) a
+// ukládá ho k rozhodnutí, server ho jen ctí.
 
 import { useState } from 'react'
 import type { Client, Task } from '../db/types'
 import { decideDayPlanSuggestion, probudUkol, updateTask } from '../db/repo'
 import { deleteBlockForTask, scheduleBlockForTask } from '../sync/calendar'
-import { formatKdy, todayISO } from '../lib/dates'
+import { addDays, formatDayLabel, formatKdy, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { plural } from '../lib/labels'
 import { kdySeVrati, type NavrhPamet } from '../lib/navrhPamet'
+import { useNaloz, volnejsiDen } from '../lib/volnyDen'
 import { ukazToast } from '../lib/toast'
 import { Sheet } from './Sheet'
 import { Button } from './ui/Button'
@@ -43,7 +48,15 @@ interface Krok {
   navrh: Navrh
   odpoved: Odpoved
   pred: Pick<Task, 'scheduledFor' | 'status'>
+  /** den návratu, když z odpovědi vzešla pauza */
+  navrat?: string
 }
+
+const posun = (iso: string, n: number): string => toISODate(addDays(fromISODate(iso), n))
+/** Pauza po druhém „dnes ne" začíná hledat volnější den až od třetího dne. */
+const KLID_PO_ODMITNUTI_DNI = 3
+/** Okno, ve kterém se hledá volnější den. */
+const OKNO_DNI = 7
 
 export function NavrhSheet({
   planId,
@@ -66,6 +79,12 @@ export function NavrhSheet({
   const na = hotovo.length
   const aktualni = fronta[na]
   const dnes = todayISO()
+  // Kam odložit: nejbližší pracovní den s nejmenší zátěží. Počítá se
+  // živě, takže po každé odpovědi (přijetí přidá práci na dnešek,
+  // odložení na den návratu nic) sedí i pro další úkol ve frontě.
+  const naloz = useNaloz()
+  const volny = volnejsiDen(naloz, posun(dnes, 1), OKNO_DNI)
+  const volnyPoPauze = volnejsiDen(naloz, posun(dnes, KLID_PO_ODMITNUTI_DNI), OKNO_DNI)
 
   const prijmi = (navrh: Navrh) => {
     const pred = { scheduledFor: navrh.task.scheduledFor, status: navrh.task.status }
@@ -104,16 +123,18 @@ export function NavrhSheet({
       krok.pred = pred
     } else if (odpoved === 'odlozeno') {
       // „Dnes ne" úkol nikam neposouvá — zítra se nabídne znovu. Jen
-      // podruhé během dvou týdnů z toho vzejde týden pokoj, a to se řekne.
-      void decideDayPlanSuggestion(planId, id, 'rejected')
-      const navrat = kdySeVrati(id, pamet.histZitra, 'rejected', dnes)
+      // podruhé během dvou týdnů z toho vzejde pauza do volnějšího dne,
+      // a to se řekne i s datem.
+      const navrat = kdySeVrati(id, pamet.histZitra, 'rejected', volnyPoPauze, dnes)
+      void decideDayPlanSuggestion(planId, id, 'rejected', navrat)
       if (navrat) {
-        ukazToast(`Podruhé „dnes ne" — týden pokoj, vrátí se ${formatKdy(navrat)}`, [{ popisek: 'Zpět', kdyz: () => vrat(krok) }])
+        krok.navrat = navrat
+        ukazToast(`Podruhé „dnes ne" — vrátí se ${formatKdy(navrat)}, až budeš mít volněji`, [{ popisek: 'Zpět', kdyz: () => vrat(krok) }])
       }
     } else if (odpoved === 'tyden') {
-      void decideDayPlanSuggestion(planId, id, 'snoozed')
-      const navrat = kdySeVrati(id, pamet.histZitra, 'snoozed', dnes)
-      ukazToast(`Odloženo, vrátí se ${navrat ? formatKdy(navrat) : 'za týden'}`, [{ popisek: 'Zpět', kdyz: () => vrat(krok) }])
+      void decideDayPlanSuggestion(planId, id, 'snoozed', volny)
+      krok.navrat = volny
+      ukazToast(`Odloženo na volnější den — vrátí se ${formatKdy(volny)}`, [{ popisek: 'Zpět', kdyz: () => vrat(krok) }])
     } else {
       // „Už neplatí" — zahozená práce zůstává v datech (status dropped,
       // ne tombstone), stejně jako v triáži.
@@ -144,8 +165,8 @@ export function NavrhSheet({
   const pocet = (o: Odpoved) => hotovo.filter((k) => k.odpoved === o).length
   const klient = aktualni?.task.clientId ? clients.get(aktualni.task.clientId) : undefined
   const vraciSe = aktualni ? pamet.vraci.has(aktualni.task.id) : false
-  const tydenOd = hotovo.find((k) => k.odpoved === 'tyden')
-  const navratTydne = tydenOd ? kdySeVrati(tydenOd.navrh.task.id, pamet.histZitra, 'snoozed', dnes) : undefined
+  // Shrnutí: dny návratu všeho, co dnes dostalo pauzu (bez opakování).
+  const navraty = [...new Set(hotovo.filter((k) => k.odpoved !== 'vraceno' && k.navrat).map((k) => k.navrat!))].sort()
   const cekajici = odpocivajici.filter((o) => !probuzene.has(o.task.id))
 
   return (
@@ -193,7 +214,7 @@ export function NavrhSheet({
                 </Button>
                 <div className="flex items-center justify-center gap-1">
                   <Button variant="ghost" size="sm" className="h-11 px-3 text-ink-soft" onClick={() => odpovez('tyden')}>
-                    Až za týden
+                    {`Volnější den (${formatDayLabel(volny)})`}
                   </Button>
                   {vraciSe && (
                     <Button variant="ghost" size="sm" className="h-11 px-3 text-ink-soft" onClick={() => odpovez('zahozeno')}>
@@ -220,17 +241,17 @@ export function NavrhSheet({
                   {[
                     `přijato ${pocet('prijato')}`,
                     `dnes ne ${pocet('odlozeno')}`,
-                    pocet('tyden') > 0 ? `za týden ${pocet('tyden')}` : '',
+                    pocet('tyden') > 0 ? `volnější den ${pocet('tyden')}` : '',
                     pocet('zahozeno') > 0 ? `už neplatí ${pocet('zahozeno')}` : '',
                   ]
                     .filter(Boolean)
                     .join(' · ')}
                 </p>
-                {(pocet('odlozeno') > 0 || pocet('tyden') > 0) && (
+                {(pocet('odlozeno') > 0 || navraty.length > 0) && (
                   <p className="mt-3 text-[13px] text-ink-faint">
                     {[
-                      pocet('odlozeno') > 0 ? '„Dnes ne" se zítra nabídne znovu.' : '',
-                      pocet('tyden') > 0 && navratTydne ? `Odložené se vrátí ${formatKdy(navratTydne)}.` : '',
+                      hotovo.some((k) => k.odpoved === 'odlozeno' && !k.navrat) ? '„Dnes ne" se zítra nabídne znovu.' : '',
+                      navraty.length > 0 ? `Odložené se vrátí ${navraty.map((d) => formatKdy(d)).join(' a ')}.` : '',
                     ]
                       .filter(Boolean)
                       .join(' ')}
