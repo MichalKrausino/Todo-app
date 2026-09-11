@@ -78,7 +78,16 @@ podkladu `paper` (ne studená iOS šeď), hairline oddělovače, plovoucí sklen
 vzoru tab baru iOS 26 — Liquid Glass, jak ho nosí GitHub i Instagram):
 pod vybranou ikonou je **čočka** — široké sklo 64 × 44 světlejší než
 deska, s ostrým světlem na horní hraně a měkkým stínem, takže stojí
-nad dokem (`.tab-on`). Přepnutí má **tři fáze a nic se nedeformuje**
+nad dokem (`.tab-on`). **Složený dok je úzký** (`DOK_SIRKA` v `App.tsx`,
+262 px, `mx-auto`): tři sloty po 64 px = přesně šířka čočky, okraje
+6 / 8 px, takže čočka (44 v 56) i plusko (40 v 56) sedí v rozích
+kapsle se stejnou mezerou jako svisle a zaoblení vrstev je
+**soustředné** (28 − 6 = 22, 28 − 8 = 20). Dřív se záložky roztahovaly
+na třetiny celé šířky a čočka měla vlevo 28 px, nahoře 6. Otevřené
+zadávání dostane celou šířku (`max-width` s přechodem). Polohy ikon se
+dělí měřítkem pásu (`stredVuciPasu`) — dok přijíždí zmenšený na 0,94 a
+čočka se usazuje během nájezdu; bez přepočtu stála po každém startu
+o 2 px vedle. Přepnutí má **tři fáze a nic se nedeformuje**
 (předchozí verze letěla jako kapka a natahovala se mezi záložkami —
 hravé, ne přesné): (1) **stisk** — ikona pod prstem se stlačí na 0,9
 hned při dotyku (`stisknuto` v kontextu, pružina 600/32), ještě než se

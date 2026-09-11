@@ -40,6 +40,15 @@ function Tah({ d, on }: { d: string; on: boolean }) {
   )
 }
 
+// Šířka složeného doku: tři sloty po 64 px (přesně šířka čočky) s mezerou
+// 4 px, 8 px k plusku (40 px) a okraje 6 / 8 px. Čočka (44 px v 56)
+// i plusko (40 px v 56) tak sedí v rozích kapsle se stejnou mezerou,
+// jakou mají svisle — zaoblení vrstev je soustředné (28 − 6 = 22,
+// 28 − 8 = 20). Dřív se záložky roztahovaly na třetiny celé šířky
+// a čočka měla vlevo 28 px, nahoře 6. Otevřené zadávání dostane
+// celou šířku — pole a řádka slotů ji potřebují.
+const DOK_SIRKA = 6 + 3 * 64 + 2 * 4 + 8 + 40 + 8
+
 const TABS: Array<{ id: Tab; label: string; icon: (on: boolean) => React.ReactNode }> = [
   {
     id: 'today',
@@ -385,9 +394,10 @@ export default function App() {
           initial={klidovyRezim() ? false : { y: 36, opacity: 0, scale: 0.94 }}
           animate={{ y: 0, opacity: 1, scale: 1 }}
           transition={{ type: 'spring', bounce: 0.28, duration: 0.75, delay: 0.12 }}
-          className={`dock pointer-events-auto overflow-hidden transition-[border-radius] duration-300 ease-ios ${
+          className={`dock pointer-events-auto mx-auto overflow-hidden transition-[border-radius,max-width] duration-300 ease-ios ${
             addOpen ? 'rounded-[28px]' : 'rounded-full'
           }`}
+          style={{ maxWidth: addOpen ? '100%' : DOK_SIRKA }}
         >
           {/* Zadávání se rozvine až po ťuknutí na plus — složené zabírá
               nulovou výšku, takže dok je v klidu jen tenká kapsle. */}
@@ -409,7 +419,7 @@ export default function App() {
               hmatová odezva bez haptiky. Dock (magicui): pod kurzorem se
               ikony zvětšují jako v macOS doku; prst nechá velikost být. */}
           <ClickSpark className="relative">
-          <nav className="flex h-14 items-center px-2.5">
+          <nav className="flex h-14 items-center pl-1.5 pr-2">
             {/* DokZalozky (vlastní, po vzoru tab baru iOS 26): pilulka pod
                 ikonou se zvedne, překlouže a dosedne; když prst na doku zůstane a táhne,
                 jede s ním a puštění vybere nejbližší záložku. */}
@@ -455,7 +465,7 @@ export default function App() {
                     aria-label={addOpen ? 'Zavřít zadávání' : 'Nový úkol'}
                     aria-expanded={addOpen}
                     onClick={() => setAddOpen((v) => !v)}
-                    className={`ml-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-[background-color,transform] duration-150 active:scale-90 ${
+                    className={`ml-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-[background-color,transform] duration-150 active:scale-90 ${
                       addOpen ? 'bg-well text-ink-soft' : 'bg-accent text-card shadow-float'
                     }`}
                   >

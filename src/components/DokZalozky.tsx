@@ -75,6 +75,14 @@ const Ctx = createContext<Kontext | null>(null)
 
 const sevri = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
 
+/** Střed prvku vůči levé hraně pásu v nezmenšených pixelech (viz stredIkony). */
+function stredVuciPasu(el: Element, p: HTMLElement): number {
+  const r = el.getBoundingClientRect()
+  const rp = p.getBoundingClientRect()
+  const meritko = p.offsetWidth > 0 && rp.width > 0 ? rp.width / p.offsetWidth : 1
+  return (r.left - rp.left + r.width / 2) / meritko
+}
+
 export function DokZalozky({
   value,
   onChange,
@@ -139,14 +147,15 @@ export function DokZalozky({
     [], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
-  // Střed ikony vůči pásu.
+  // Střed ikony vůči pásu. Rect se dělí měřítkem pásu: dok při startu
+  // přijíždí zmenšený (scale 0,94) a čočka se usazuje ještě během
+  // nájezdu — bez přepočtu by z rectů vyšla poloha o 6 % blíž ke kraji
+  // a čočka by po každém startu stála o 2 px vedle.
   const stredIkony = (id: string): number | null => {
     const el = ikony.current.get(id)
     const p = pas.current
     if (!el || !p) return null
-    const r = el.getBoundingClientRect()
-    const rp = p.getBoundingClientRect()
-    return r.left - rp.left + r.width / 2
+    return stredVuciPasu(el, p)
   }
   const skoc = (s: number) => {
     cil.jump(s)
@@ -313,10 +322,9 @@ export function DokZalozka({ id, on, children }: { id: string; on: boolean; chil
   const odstup = useTransform(ctx?.stred ?? fallback, (s: number) => {
     const el = ref.current
     if (!el || ctx?.klid) return Infinity
-    const r = el.getBoundingClientRect()
-    const rp = el.closest('[data-pas]')?.getBoundingClientRect()
-    if (!rp) return Infinity
-    return s - (r.left - rp.left + r.width / 2)
+    const p = el.closest<HTMLElement>('[data-pas]')
+    if (!p) return Infinity
+    return s - stredVuciPasu(el, p)
   })
   const DOSAH = 64
   const blizkost = useTransform(odstup, (d: number) => {
