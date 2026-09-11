@@ -321,12 +321,15 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
 
   await page.getByRole('button',{name:/Projít/}).click(); await page.waitForTimeout(800)
   T_(await page.locator('.sheet-panel').count() > 0, 'triáž se otevřela')
-  await page.getByRole('button',{name:'Dnes',exact:true}).last().click(); await page.waitForTimeout(500)
-  await page.getByRole('button',{name:/Volnější den/}).click(); await page.waitForTimeout(500)
-  await page.getByRole('button',{name:'Už neplatí'}).click(); await page.waitForTimeout(700)
+  // Celý žebřík odpovědí: každá musí úkol z propadlých opravdu odnést.
+  const odpoved = (re) => page.locator('.sheet-panel').getByRole('button',{name:re})
+  await odpoved(/^Dnes$/).click(); await page.waitForTimeout(500)
+  await odpoved(/^Zítra/).click(); await page.waitForTimeout(500)
+  await odpoved(/^Volnější den/).click(); await page.waitForTimeout(500)
+  await odpoved(/Už neplatí/).click(); await page.waitForTimeout(700)
   await page.keyboard.press('Escape'); await page.waitForTimeout(700)
   const po = await poTerminu()
-  T_(po === pred - 3, 'tři odpovědi ubraly tři úkoly z propadlých (' + pred + ' → ' + po + ')')
+  T_(po === pred - 4, 'čtyři odpovědi ubraly čtyři úkoly z propadlých (' + pred + ' → ' + po + ')')
 
   // Zpět musí vrátit i „Už neplatí" — jinak by to bylo tiché mazání práce.
   await page.getByRole('button',{name:/Projít/}).click(); await page.waitForTimeout(800)
