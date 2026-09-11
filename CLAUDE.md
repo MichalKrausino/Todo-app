@@ -85,7 +85,10 @@ kapsle se stejnou mezerou jako svisle a zaoblení vrstev je
 **soustředné** (28 − 6 = 22, 28 − 8 = 20). Dřív se záložky roztahovaly
 na třetiny celé šířky (366 px) a čočka měla vlevo 28 px, nahoře 6;
 se 4px mezerami (262 px) byl dok moc sevřený, 306 je střed. Otevřené
-zadávání dostane celou šířku (`max-width` s přechodem). Polohy ikon se
+zadávání dostane celou šířku (`max-width` s přechodem). **Dok sedí
+níž než bezpečná zóna**: patička má `max(8px, safe-area − 10px)`,
+takže na iPhonu s indikátorem je spodní hrana 24 pt nad displejem (jako
+tab bar iOS 26), bez indikátoru a nad klávesnicí zůstává 8 px. Polohy ikon se
 dělí měřítkem pásu (`stredVuciPasu`) — dok přijíždí zmenšený na 0,94 a
 čočka se usazuje během nájezdu; bez přepočtu stála po každém startu
 o 2 px vedle. Přepnutí má **tři fáze a nic se nedeformuje**

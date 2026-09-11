@@ -388,7 +388,12 @@ export default function App() {
       <footer
         ref={dockRef}
         className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-3"
-        style={{ paddingBottom: 'calc(var(--dock-safe, env(safe-area-inset-bottom)) + 0.5rem)' }}
+        // Dok sedí níž než bezpečná zóna — jako tab bar v iOS 26, který
+        // domovnímu indikátoru nechá jen pár bodů. Na iPhonu s indikátorem
+        // (zóna 34 pt) je spodní hrana 24 pt nad displejem; dřív +8 px nad
+        // zónou, tedy 42 pt. Pojistka 8 px platí bez indikátoru (Mac,
+        // starší iPhone) i nad klávesnicí, kde se zóna nuluje.
+        style={{ paddingBottom: 'max(0.5rem, calc(var(--dock-safe, env(safe-area-inset-bottom)) - 10px))' }}
       >
         {/* Dok při startu vyjede zespoda pružinou — jediná věc na
             obrazovce, která přijíždí proti směru obsahu. V klidu stojí. */}
