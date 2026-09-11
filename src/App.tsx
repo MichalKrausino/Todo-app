@@ -41,13 +41,15 @@ function Tah({ d, on }: { d: string; on: boolean }) {
 }
 
 // Šířka složeného doku: tři sloty po 64 px (přesně šířka čočky) s mezerou
-// 4 px, 8 px k plusku (40 px) a okraje 6 / 8 px. Čočka (44 px v 56)
-// i plusko (40 px v 56) tak sedí v rozích kapsle se stejnou mezerou,
-// jakou mají svisle — zaoblení vrstev je soustředné (28 − 6 = 22,
+// 20 px, 20 px k plusku (40 px) a okraje 6 / 8 px = 306 px. Čočka
+// (44 px v 56) i plusko (40 px v 56) tak sedí v rozích kapsle se stejnou
+// mezerou, jakou mají svisle — zaoblení vrstev je soustředné (28 − 6 = 22,
 // 28 − 8 = 20). Dřív se záložky roztahovaly na třetiny celé šířky
-// a čočka měla vlevo 28 px, nahoře 6. Otevřené zadávání dostane
-// celou šířku — pole a řádka slotů ji potřebují.
-const DOK_SIRKA = 6 + 3 * 64 + 2 * 4 + 8 + 40 + 8
+// (366 px) a čočka měla vlevo 28 px, nahoře 6; se 4px mezerami (262 px)
+// byl dok zase moc sevřený — 306 je střed. Na 320 px displeji ho
+// okraje patičky stlačí na 296 a sloty se o pár pixelů zúží. Otevřené
+// zadávání dostane celou šířku — pole a řádka slotů ji potřebují.
+const DOK_SIRKA = 6 + 3 * 64 + 2 * 20 + 20 + 40 + 8
 
 const TABS: Array<{ id: Tab; label: string; icon: (on: boolean) => React.ReactNode }> = [
   {
@@ -424,7 +426,7 @@ export default function App() {
                 ikonou se zvedne, překlouže a dosedne; když prst na doku zůstane a táhne,
                 jede s ním a puštění vybere nejbližší záložku. */}
             <DokZalozky value={tab} onChange={(id) => setTab(id as Tab)} className="flex flex-1 items-center">
-            <Dock className="flex-1 gap-1">
+            <Dock className="flex-1 gap-5">
             {TABS.map((t, i) => (
               <Tooltip key={t.id}>
                 <TooltipTrigger asChild>
@@ -465,7 +467,7 @@ export default function App() {
                     aria-label={addOpen ? 'Zavřít zadávání' : 'Nový úkol'}
                     aria-expanded={addOpen}
                     onClick={() => setAddOpen((v) => !v)}
-                    className={`ml-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-[background-color,transform] duration-150 active:scale-90 ${
+                    className={`ml-5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-[background-color,transform] duration-150 active:scale-90 ${
                       addOpen ? 'bg-well text-ink-soft' : 'bg-accent text-card shadow-float'
                     }`}
                   >
