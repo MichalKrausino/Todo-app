@@ -3,7 +3,9 @@
 // Chytrou verzi plánu připravuje před 5:00 UTC naplánovaná Claude úloha
 // (předplatné, žádné API) — zapisuje day_plans se stejným deterministickým id.
 // Tahle funkce čerstvý existující plán jen odešle jako push; když chybí,
-// spočítá záložní plán čistou logikou (Fáze 6 bez modelu).
+// spočítá záložní plán čistou logikou (Fáze 6 bez modelu). Logika si
+// pamatuje minulá rozhodnutí (day_plans za 14 dní): dvakrát odmítnutý
+// úkol dostane týden pokoj, ignorované ustupují jiným — viz pick.ts.
 //
 // Nasazeno na Supabase jako funkce `morning-plan` (verify_jwt: true).
 
@@ -11,7 +13,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import * as webpush from 'jsr:@negrel/webpush@0.3'
 // Skórování a výběr jsou čistá logika ve vlastním souboru — testuje je
 // pick.test.ts vitestem, sem se jen zavolají.
-import { eff, pickSuggestions, scoreAndReason } from './pick.ts'
+import { addDaysISO, eff, HISTORIE_DNI, historieZPlanu, ohodnot, pickSuggestions } from './pick.ts'
 
 type Rec = Record<string, unknown>
 
@@ -63,12 +65,21 @@ Deno.serve(async () => {
   let sent = 0
 
   for (const userId of users) {
-    const [tasksRes, clientsRes] = await Promise.all([
+    const [tasksRes, clientsRes, plansRes] = await Promise.all([
       admin.from('tasks').select('data').eq('user_id', userId).is('deleted_at', null),
       admin.from('clients').select('data').eq('user_id', userId).is('deleted_at', null),
+      // Minulé plány = paměť návrhu (co jsi odmítl a co ignoroval).
+      admin
+        .from('day_plans')
+        .select('data')
+        .eq('user_id', userId)
+        .is('deleted_at', null)
+        .gte('data->>date', addDaysISO(today, -HISTORIE_DNI)),
     ])
     const tasks = (tasksRes.data ?? []).map((r) => r.data as Rec)
     const clients = (clientsRes.data ?? []).map((r) => r.data as Rec)
+    if (plansRes.error) console.error('day_plans history', plansRes.error.message)
+    const historie = historieZPlanu((plansRes.data ?? []).map((r) => r.data as Rec), today)
     const clientsById = new Map(clients.map((c) => [c.id as string, c]))
 
     const taskById = new Map(tasks.map((t) => [t.id as string, t]))
@@ -99,14 +110,9 @@ Deno.serve(async () => {
           title: (taskById.get(s.taskId as string)?.title as string) ?? 'Úkol',
         }))
     } else {
-      const candidates = tasks
-        .filter((t) => t.status === 'active' || t.status === 'inbox')
-        .map((t) => ({ t, ...scoreAndReason(t, clientsById, today) }))
-        .filter((x) => x.score > 0)
-
-      // Pestrost, rezerva pro úkoly bez termínu a jejich vážení prioritou
-      // řeší pickSuggestions — viz pick.ts.
-      const picked = pickSuggestions(candidates)
+      // Skórování, paměť rozhodnutí, pestrost, rezerva pro úkoly bez
+      // termínu a jejich vážení prioritou — všechno v pick.ts.
+      const picked = pickSuggestions(ohodnot(tasks, clientsById, today, historie))
       if (picked.length === 0 && !isSunday) continue
 
       if (picked.length > 0) {

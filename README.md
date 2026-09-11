@@ -112,8 +112,10 @@ instalace ani (v pozdější fázi) push notifikace.
   vytváření klienta nebo v jeho nastavení
 - Ranní návrh dne: server každé ráno vybere 3–6 úkolů (termíny, priority,
   odklady, zanedbaní klienti), pošle push notifikaci a v appce se návrhy
-  přijímají/zamítají jedním klepnutím. Zapíná se v panelu synchronizace
-  (obláček) — na iPhonu musí být appka přidaná na ploše
+  přijímají/zamítají jedním klepnutím. Návrh se učí z odpovědí: co
+  odmítneš dvakrát, dostane týden pokoj, co ignoruješ, ustoupí jiným.
+  Zapíná se v panelu synchronizace (obláček) — na iPhonu musí být
+  appka přidaná na ploše
 - Google kalendář (po přihlášení přes Google): schůzky ze všech kalendářů
   na Dnes s výpočtem volného času, počty schůzek v Plánu, a přijatý ranní
   návrh si sám zabere blok v samostatném kalendáři „Todo“ — tvoje schůzky

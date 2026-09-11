@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import {
   type Rec,
+  type Rozhodnuti,
   type Scored,
+  historieZPlanu,
+  IGNOROVANI_STROP,
+  ohodnot,
+  pametUkolu,
   pickSuggestions,
   scoreAndReason,
   TOTAL,
   UNDATED_MAX,
+  ZTRATA_ZA_IGNOROVANI,
+  ZTRATA_ZA_ODMITNUTI,
 } from './pick.ts'
 
 const TODAY = '2026-08-31'
@@ -127,5 +134,97 @@ describe('výběr návrhů', () => {
 
   it('nic k nabídnutí = prázdný návrh', () => {
     expect(pickSuggestions([])).toHaveLength(0)
+  })
+})
+
+const plan = (date: string, suggestions: Array<[string, string]>): Rec => ({
+  id: `p-${date}`,
+  date,
+  suggestions: suggestions.map(([taskId, decision]) => ({ taskId, decision, reason: '' })),
+})
+
+const rozhodnuti = (date: string, taskId: string, decision: string): Rozhodnuti => ({ date, taskId, decision })
+
+describe('paměť návrhu — historie z plánů', () => {
+  it('bere jen posledních 14 dní a ne dnešek', () => {
+    const h = historieZPlanu(
+      [
+        plan('2026-08-30', [['a', 'rejected']]),
+        plan('2026-08-17', [['b', 'ignored']]),
+        plan('2026-08-16', [['c', 'ignored']]),
+        plan(TODAY, [['d', 'ignored']]),
+      ],
+      TODAY,
+    )
+    expect(h.map((x) => x.taskId)).toEqual(['a', 'b'])
+  })
+
+  it('rozbitý plán přeskočí, chybějící rozhodnutí bere jako ignorované', () => {
+    const h = historieZPlanu(
+      [{ id: 'x', date: 'kdysi', suggestions: [{ taskId: 'a' }] }, { id: 'y', date: '2026-08-30', suggestions: [{ taskId: 'a' }, { nic: 1 }] }],
+      TODAY,
+    )
+    expect(h).toEqual([{ date: '2026-08-30', taskId: 'a', decision: 'ignored' }])
+  })
+})
+
+describe('paměť návrhu — jeden úkol', () => {
+  it('bez historie nic nemění', () => {
+    expect(pametUkolu('a', [], TODAY)).toEqual({ delta: 0, pauza: false })
+  })
+
+  it('jedno odmítnutí = odložit na zítra: nabídne se znovu, jen níž', () => {
+    const p = pametUkolu('a', [rozhodnuti('2026-08-30', 'a', 'rejected')], TODAY)
+    expect(p.pauza).toBe(false)
+    expect(p.delta).toBe(-ZTRATA_ZA_ODMITNUTI)
+  })
+
+  it('dvě odmítnutí = týden pokoj', () => {
+    const h = [rozhodnuti('2026-08-28', 'a', 'rejected'), rozhodnuti('2026-08-30', 'a', 'rejected')]
+    expect(pametUkolu('a', h, TODAY).pauza).toBe(true)
+    // po týdnu od posledního odmítnutí se vrací
+    expect(pametUkolu('a', h, '2026-09-07').pauza).toBe(false)
+  })
+
+  it('ignorování ubírá po kouskách a má strop', () => {
+    const h = Array.from({ length: IGNOROVANI_STROP + 3 }, (_, i) =>
+      rozhodnuti(`2026-08-${String(20 + i).padStart(2, '0')}`, 'a', 'ignored'),
+    )
+    expect(pametUkolu('a', h.slice(0, 2), TODAY).delta).toBeCloseTo(-2 * ZTRATA_ZA_IGNOROVANI)
+    expect(pametUkolu('a', h, TODAY).delta).toBeCloseTo(-IGNOROVANI_STROP * ZTRATA_ZA_IGNOROVANI)
+  })
+
+  it('rozhodnutí u jiných úkolů se nepletou', () => {
+    const h = [rozhodnuti('2026-08-30', 'b', 'rejected'), rozhodnuti('2026-08-29', 'b', 'rejected')]
+    expect(pametUkolu('a', h, TODAY)).toEqual({ delta: 0, pauza: false })
+  })
+})
+
+describe('paměť návrhu — kandidáti', () => {
+  it('dvakrát odmítnutý úkol se nenabídne', () => {
+    const a = task({ id: 'a', dueDate: TODAY })
+    const b = task({ id: 'b', dueDate: TODAY })
+    const h = [rozhodnuti('2026-08-29', 'a', 'rejected'), rozhodnuti('2026-08-30', 'a', 'rejected')]
+    expect(ohodnot([a, b], NO_CLIENTS, TODAY, h).map((c) => c.t.id)).toEqual(['b'])
+  })
+
+  it('ignorovaný úkol bez termínu ustoupí čerstvému téže priority', () => {
+    const stary = task({ id: 'stary', createdAt: '2026-08-20T08:00:00.000Z' })
+    const cerstvy = task({ id: 'cerstvy' })
+    const bez = ohodnot([stary, cerstvy], NO_CLIENTS, TODAY)
+    expect(bez[0].t.id).toBe('stary') // stárnutí ho dřív drželo nahoře
+    const h = [rozhodnuti('2026-08-29', 'stary', 'ignored'), rozhodnuti('2026-08-30', 'stary', 'ignored')]
+    const s = ohodnot([stary, cerstvy], NO_CLIENTS, TODAY, h).sort((x, y) => y.score - x.score)
+    expect(s[0].t.id).toBe('cerstvy')
+  })
+
+  it('úkol s dnešním termínem ignorování nevyřadí', () => {
+    const a = task({ id: 'a', dueDate: TODAY })
+    const h = Array.from({ length: 6 }, (_, i) => rozhodnuti(`2026-08-2${i}`, 'a', 'ignored'))
+    expect(ohodnot([a], NO_CLIENTS, TODAY, h)).toHaveLength(1)
+  })
+
+  it('hotové a zahozené úkoly se nenabízejí', () => {
+    expect(ohodnot([task({ status: 'done', dueDate: TODAY }), task({ status: 'dropped', dueDate: TODAY })], NO_CLIENTS, TODAY)).toEqual([])
   })
 })

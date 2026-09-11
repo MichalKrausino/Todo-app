@@ -88,7 +88,9 @@ alter table public.push_subscriptions enable row level security;
 -- Plánovač: pg_cron + pg_net; job „morning-plan" volá edge funkci
 -- /functions/v1/morning-plan denně v 5:00 UTC (7:00 léto / 6:00 zima).
 -- Funkce skóruje kandidáty (termíny, priority, odklady, zanedbaní klienti),
--- uloží DayPlan do day_plans (sync ho stáhne do appky) a pošle push.
+-- započte minulá rozhodnutí z day_plans (dvakrát odmítnuté má týden pokoj,
+-- ignorované ustupuje), uloží DayPlan do day_plans (sync ho stáhne do
+-- appky) a pošle push.
 --
 -- Průběžná upozornění: edge funkce /functions/v1/reminders?kind=…
 -- (iOS webovým appkám nedovolí naplánovat notifikaci lokálně, takže

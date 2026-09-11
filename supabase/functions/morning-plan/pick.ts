@@ -204,3 +204,103 @@ export function pickSuggestions(candidates: Scored[]): Scored[] {
 
   return [...datedPicked, ...undatedPicked]
 }
+
+// ── Učení z rozhodnutí ──────────────────────────────────────────────────
+// Appka si každé ráno pamatuje, jak jsi na návrh reagoval (day_plans:
+// accepted / rejected / ignored). Žádný model — dvě pravidla, která jdou
+// říct jednou větou a nepřekvapí:
+//  1. „Dnes ne" znamená odložit na zítra: úkol se nabídne znovu, jen
+//     o chlup níž. Ale co odmítneš DVAKRÁT, dostane týden pokoj — třetí
+//     ráno by už bylo otravování, ne pomoc.
+//  2. Co necháš bez odpovědi, ustoupí jiným: každé ignorované nabídnutí
+//     ubere kousek skóre, takže se v inboxu vystřídají i další úkoly
+//     místo věčně stejné trojice nahoře. Paměť je krátká (14 dní) —
+//     starší rozhodnutí se zapomenou a úkol se vrátí.
+// Přijetí nic neupravuje: přijatý úkol dostane datum a dál se řídí jím.
+
+export interface Rozhodnuti {
+  date: string
+  taskId: string
+  decision: string
+}
+
+/** Jak daleko do minulosti se rozhodnutí počítají. */
+export const HISTORIE_DNI = 14
+/** Kolikáté odmítnutí úkol na čas vyřadí… */
+export const ODMITNUTI_PAUZA = 2
+/** …a na kolik dní od posledního odmítnutí. */
+export const PAUZA_DNI = 7
+/** Ztráta skóre za jedno ignorované nabídnutí a strop, kolik se jich počítá. */
+export const ZTRATA_ZA_IGNOROVANI = 0.3
+export const IGNOROVANI_STROP = 4
+/** Ztráta za jediné odmítnutí — nabídne se znovu, jen o chlup níž. */
+export const ZTRATA_ZA_ODMITNUTI = 0.5
+
+const jeISODen = (s: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(s)
+
+/** Rozhodnutí z uložených plánů za posledních HISTORIE_DNI dní (dnešek se nepočítá). */
+export function historieZPlanu(plans: Rec[], today: string): Rozhodnuti[] {
+  const od = addDaysISO(today, -HISTORIE_DNI)
+  const out: Rozhodnuti[] = []
+  for (const p of plans) {
+    const date = String(p.date ?? '')
+    if (!jeISODen(date) || date < od || date >= today) continue
+    const suggestions = Array.isArray(p.suggestions) ? (p.suggestions as Rec[]) : []
+    for (const s of suggestions) {
+      if (!s || typeof s.taskId !== 'string') continue
+      out.push({ date, taskId: s.taskId, decision: String(s.decision ?? 'ignored') })
+    }
+  }
+  return out
+}
+
+export interface Pamet {
+  /** posun skóre (záporný nebo nula) */
+  delta: number
+  /** úkol se dnes vůbec nenabízí */
+  pauza: boolean
+}
+
+/** Co si návrh o úkolu pamatuje z minulých rozhodnutí. */
+export function pametUkolu(taskId: string, hist: Rozhodnuti[], today: string): Pamet {
+  let odmitnuti = 0
+  let posledniOdmitnuti = ''
+  let ignorovani = 0
+  for (const h of hist) {
+    if (h.taskId !== taskId) continue
+    if (h.decision === 'rejected') {
+      odmitnuti++
+      if (h.date > posledniOdmitnuti) posledniOdmitnuti = h.date
+    } else if (h.decision === 'ignored') ignorovani++
+  }
+  if (odmitnuti >= ODMITNUTI_PAUZA && posledniOdmitnuti && daysBetween(posledniOdmitnuti, today) <= PAUZA_DNI) {
+    return { delta: 0, pauza: true }
+  }
+  let delta = 0
+  if (odmitnuti === 1) delta -= ZTRATA_ZA_ODMITNUTI
+  delta -= ZTRATA_ZA_IGNOROVANI * Math.min(ignorovani, IGNOROVANI_STROP)
+  return { delta, pauza: false }
+}
+
+/**
+ * Kandidáti do návrhu: otevřené úkoly, oskórované a upravené pamětí.
+ * Vyřazené (pauza) a nulové se nevrací — pickSuggestions dostane jen to,
+ * co má smysl nabídnout.
+ */
+export function ohodnot(
+  tasks: Rec[],
+  clientsById: Map<string, Rec>,
+  today: string,
+  hist: Rozhodnuti[] = [],
+): Scored[] {
+  const out: Scored[] = []
+  for (const t of tasks) {
+    if (t.status !== 'active' && t.status !== 'inbox') continue
+    const pamet = pametUkolu(String(t.id ?? ''), hist, today)
+    if (pamet.pauza) continue
+    const { score, reason } = scoreAndReason(t, clientsById, today)
+    const upravene = score + pamet.delta
+    if (upravene > 0) out.push({ t, score: upravene, reason })
+  }
+  return out
+}
