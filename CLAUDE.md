@@ -99,7 +99,11 @@ s capture pošle prohlížeč `click` pásu, ne tlačítku, takže **výběr dě
 pointerup**, `onClick` tlačítek zůstává pro klávesnici a je idempotentní;
 (2) polohy ikon se měří při stisku a přes `ResizeObserver`, ne při
 renderu — Dock z magicui je pod kurzorem zvětšuje a šířka pásu závisí
-na klávesnici; (3) v klidovém režimu pilulka skáče bez pružiny (`jump`),
+na klávesnici; **ResizeObserver se zakládá jednou** (aktuální záložka
+z ref, první zavolání se přeskočí) — když visel na `value`, zakládal se
+při každém přepnutí a jeho okamžité první zavolání čočku skočilo na
+cíl dřív, než pružina vyrazila, takže let nebyl nikdy vidět (změřeno:
+60 ms po ťuknutí už stála na místě; po opravě se natáhne z 64 na 213 px); (3) v klidovém režimu pilulka skáče bez pružiny (`jump`),
 nic se neroztahuje ani nenadýmá.
 Zadávání úkolu v doku má **jednu stavovou řádku** (Termín / Klient /
 Projekt / Priorita — prázdný slot nabízí, vyplněný ukazuje hodnotu,

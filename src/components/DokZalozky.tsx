@@ -152,16 +152,28 @@ export function DokZalozky({
       clearTimeout(t)
     }
   }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Hlídač šířky pásu se zakládá JEDNOU. Dřív visel na `value` a při
+  // každém přepnutí se založil znovu — a ResizeObserver po `observe`
+  // zavolá callback hned, takže čočka skočila na cíl dřív, než pružina
+  // vyrazila; let nebyl nikdy vidět. První zavolání se přeskočí (polohu
+  // při montáži řeší layout effect výš), aktuální záložka se čte z ref.
+  const valueRef = useRef(value)
+  valueRef.current = value
   useEffect(() => {
     const p = pas.current
     if (!p || typeof ResizeObserver === 'undefined') return
+    let prvni = true
     const ro = new ResizeObserver(() => {
-      const s = stredIkony(value)
+      if (prvni) {
+        prvni = false
+        return
+      }
+      const s = stredIkony(valueRef.current)
       if (s !== null) skoc(s)
     })
     ro.observe(p)
     return () => ro.disconnect()
-  }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Gesto: stisk → (tah: pilulka jede s prstem) → puštění vybere nejbližší.
   const tah = useRef<{ id: number; x0: number; tahne: boolean } | null>(null)
