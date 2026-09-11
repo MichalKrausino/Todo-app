@@ -25,6 +25,7 @@ const GESTURES: Array<{ what: string; how: string }> = [
   { what: 'Ťukni na úkol', how: 'otevře detail — podúkoly, poznámky, opakování' },
   { what: 'Ťukni na jméno klienta nebo projektu', how: 'přejmenuje ho' },
   { what: 'Připnout v detailu úkolu', how: 'dá úkol mezi Top 3 dne' },
+  { what: 'Dvakrát ťukni na Dnes v doku', how: 'ukáže všechny otevřené úkoly, ne jen dnešek' },
 ]
 
 const NOTIFICATIONS: Array<{ when: string; what: string }> = [

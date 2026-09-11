@@ -337,6 +337,30 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await page.getByRole('button',{name:'Zpět'}).click(); await page.waitForTimeout(500)
   await page.keyboard.press('Escape'); await page.waitForTimeout(700)
   T_(await poTerminu() === po, 'zpět v triáži vrátí i zahozený úkol')
+
+  // --- dvojité ťuknutí na Dnes = všechny otevřené úkoly
+  // Skryté gesto, které se dá rozbít úplně tiše (dok posílá výběr přes
+  // pointerup s pointer capture, ne přes click). Proto se měří chování,
+  // ne kód: co dělá jedno ťuknutí, co dvě rychlá a co dvě pomalá.
+  const nadpis = async () => (await page.locator('main h1').first().innerText()).trim()
+  const zalozkaDnes = page.getByRole('button', { name: 'Dnes', exact: true })
+  await zalozkaDnes.click(); await page.waitForTimeout(700)
+  T_(await nadpis() === 'Dnes', 'jedno ťuknutí na vybranou záložku nic nemění')
+
+  await zalozkaDnes.dblclick(); await page.waitForTimeout(900)
+  T_(await nadpis() === 'Vše', 'dvojité ťuknutí na Dnes otevře Vše')
+  const vseUkolu = await page.evaluate(() => Number((document.body.innerText.match(/(\d+)\s+otevřen/) || [])[1]) || 0)
+  T_(vseUkolu > 300, 'Vše počítá všechny otevřené úkoly, ne jen dnešek (' + vseUkolu + ')')
+
+  // Přepnutí záložky nahlédnutí vždycky složí — v režimu se nesmí uvíznout.
+  await page.getByRole('button',{name:'Plán',exact:true}).click(); await page.waitForTimeout(900)
+  await zalozkaDnes.click(); await page.waitForTimeout(900)
+  T_(await nadpis() === 'Dnes', 'přepnutí záložky nahlédnutí složí zpátky')
+
+  // Dvě pomalá ťuknutí jsou dvě ťuknutí, ne gesto.
+  await zalozkaDnes.click(); await page.waitForTimeout(600)
+  await zalozkaDnes.click(); await page.waitForTimeout(700)
+  T_(await nadpis() === 'Dnes', 'pomalé dvojí ťuknutí gesto nespustí')
   await ctx.close()
 }
 

@@ -252,6 +252,9 @@ async function sirka(kde) {
 
 const obrazovky = [
   ['Dnes', async () => {}],
+  // Druhá poloha záložky Dnes (dvojité ťuknutí). Měří se hned za Dnes,
+  // aby ji další obrazovka (Plán) sama složila — přepnutí záložky ji ruší.
+  ['Vse', async () => { await page.getByRole('button', { name: 'Dnes', exact: true }).dblclick(); await page.waitForTimeout(600) }],
   ['Plán', async () => { await page.getByRole('button', { name: 'Plán' }).click(); await page.waitForTimeout(500) }],
   ['Klienti', async () => { await page.getByRole('button', { name: 'Klienti' }).click(); await page.waitForTimeout(500) }],
   // Zakládání klienta se dlouho neměřilo, a přitom je to formulář s nejvíc
@@ -307,20 +310,20 @@ const panely = [
 // takže se v něm dá pokazit čitelnost, aniž by se ve světlém cokoli hnulo.
 async function projdi(znacka, jenKontrast) {
   const jmeno = (kde) => (znacka ? znacka + ' ' + kde : kde)
-  await page.getByRole('button', { name: 'Dnes' }).click(); await page.waitForTimeout(400)
+  await page.getByRole('button', { name: 'Dnes', exact: true }).click(); await page.waitForTimeout(400)
   for (const [kde, jdi] of obrazovky) {
     await jdi()
     await zmer(jmeno(kde), 'main', jenKontrast)
     if (!jenKontrast) await sirka(jmeno(kde))
   }
-  await page.getByRole('button', { name: 'Dnes' }).click(); await page.waitForTimeout(400)
+  await page.getByRole('button', { name: 'Dnes', exact: true }).click(); await page.waitForTimeout(400)
   for (const [kde, otevri, kolikZavrit] of panely) {
     try {
       await otevri(); await page.waitForTimeout(600)
       await zmer(jmeno(kde), '.sheet-panel', jenKontrast)
       for (let i = 0; i < kolikZavrit; i++) { await page.keyboard.press('Escape'); await page.waitForTimeout(400) }
     } catch (e) { nalezy.push({ kde: jmeno(kde), typ: 'chyba', popis: 'neslo otevrit: ' + e.message.split('\n')[0], vlevo: 0, vpravo: 0 }) }
-    await page.getByRole('button', { name: 'Dnes' }).click(); await page.waitForTimeout(400)
+    await page.getByRole('button', { name: 'Dnes', exact: true }).click(); await page.waitForTimeout(400)
   }
   await page.getByRole('button', { name: 'Nový úkol' }).click(); await page.waitForTimeout(400)
   await zmer(jmeno('Dok'), 'footer', jenKontrast)
