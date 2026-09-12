@@ -15,7 +15,7 @@
 // hodin. Řádek má celou šířku: pruh je čitelný, popisek pod ním řekne
 // „2 úkoly · schůzka · ~3 h" a rozbalený den nemusí nikam odskakovat.
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { CalendarEvent, Task } from '../db/types'
 import {
@@ -98,85 +98,106 @@ export function UpcomingView({
   const pamet = useNavrhPamet()
   const clients = useLiveQuery(allClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []
-  const clientMap = new Map(clients.map((c) => [c.id, c]))
-  const projectMap = new Map(projects.map((p) => [p.id, p]))
+  const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients])
+  const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
 
-  const dny = Array.from({ length: dnu }, (_, i) => toISODate(addDays(fromISODate(today), i)))
+  const dny = useMemo(
+    () => Array.from({ length: dnu }, (_, i) => toISODate(addDays(fromISODate(today), i))),
+    [today, dnu],
+  )
   const konec = dny[dny.length - 1]
 
+  // CELÝ rozpočet Plánu v jednom `useMemo`. Nezávisí na rozbaleném dni ani
+  // na rozepsaném úkolu — a přesně to se dřív dělo: každé písmeno v poli
+  // „Nový úkol na sobotu…" přepočítalo schůzky, rozdělení úkolů po dnech
+  // i pruhy zátěže pro celé okno.
   // Schůzky pro celé okno. Vícedenní událost patří do KAŽDÉHO svého dne.
   const events = useLiveQuery(() => calendarEventsBetween(today, konec), [today, konec]) ?? []
-  const eventsPerDay = new Map<string, CalendarEvent[]>()
-  for (const e of events) {
-    if (e.isTodoBlock) continue
-    let d = e.startDay < today ? today : e.startDay
-    const end = (e.endDay ?? e.startDay) > konec ? konec : (e.endDay ?? e.startDay)
-    let guard = 0
-    while (d <= end && guard++ < 90) {
-      eventsPerDay.set(d, [...(eventsPerDay.get(d) ?? []), e])
-      d = toISODate(addDays(fromISODate(d), 1))
-    }
-  }
 
-  // Propadlé úkoly patří na dnešek — v Plánu se dívá dopředu, ne zpátky;
-  // triáž propadlých je na Dnes.
-  const podleDne = new Map<string, Task[]>()
-  for (const t of open) {
-    const d = effectiveDate(t)
-    if (!d) continue
-    const den = d < today ? today : d
-    podleDne.set(den, [...(podleDne.get(den) ?? []), t])
-  }
-  const bezTerminu = sortTasks(open.filter((t) => !effectiveDate(t)))
-
-  // Pruh dne: čas úkolů po klientech + délka schůzek (bez barvy).
-  const naloz = new Map<string, DenNaloz>()
-  for (const d of dny) {
-    const ukoly = podleDne.get(d) ?? []
-    const schuzky = eventsPerDay.get(d) ?? []
-    if (ukoly.length === 0 && schuzky.length === 0) continue
-    const podleKlienta = new Map<string, number>()
-    for (const t of ukoly) {
-      const k = t.clientId && clientMap.has(t.clientId) ? t.clientId : ''
-      podleKlienta.set(k, (podleKlienta.get(k) ?? 0) + plannedMinutes([t]))
+  const { eventsPerDay, podleDne, bezTerminu, naloz, souhrn, pondeli } = useMemo(() => {
+    const eventsPerDay = new Map<string, CalendarEvent[]>()
+    for (const e of events) {
+      if (e.isTodoBlock) continue
+      let d = e.startDay < today ? today : e.startDay
+      const end = (e.endDay ?? e.startDay) > konec ? konec : (e.endDay ?? e.startDay)
+      let guard = 0
+      while (d <= end && guard++ < 90) {
+        const uz = eventsPerDay.get(d)
+        if (uz) uz.push(e)
+        else eventsPerDay.set(d, [e])
+        d = toISODate(addDays(fromISODate(d), 1))
+      }
     }
-    let neutralni = podleKlienta.get('') ?? 0
-    for (const e of schuzky) {
-      if (e.allDay) continue
-      neutralni += Math.max(0, Math.round((Date.parse(e.end) - Date.parse(e.start)) / 60000))
-    }
-    const dily: DenNaloz['dily'] = [...podleKlienta]
-      .filter(([k]) => k !== '')
-      .map(([k, minuty]) => ({ barva: clientMap.get(k)!.color, minuty }))
-      .sort((a, b) => b.minuty - a.minuty)
-    if (neutralni > 0) dily.push({ minuty: neutralni })
-    naloz.set(d, {
-      ukoly: ukoly.length,
-      schuzky: schuzky.length,
-      minuty: dily.reduce((sum, x) => sum + x.minuty, 0),
-      dily,
-    })
-  }
 
-  // Souhrn tohoto týdne do hlavičky.
-  const pondeli = mondayOf(today)
-  const tyden = Array.from({ length: 7 }, (_, i) => toISODate(addDays(fromISODate(pondeli), i))).filter((d) => d >= today)
-  const tydenUkoly = tyden.flatMap((d) => podleDne.get(d) ?? [])
-  const tydenSchuzky = tyden.reduce((n, d) => n + (eventsPerDay.get(d)?.length ?? 0), 0)
-  const tydenMin = plannedMinutes(tydenUkoly)
-  const souhrn = [
-    'tento týden',
-    tydenUkoly.length > 0 ? `${tydenUkoly.length} ${plural(tydenUkoly.length, 'úkol', 'úkoly', 'úkolů')}` : 'bez úkolů',
-    tydenMin > 0 ? `~${minutesToLabel(tydenMin)}` : '',
-    tydenSchuzky > 0 ? `${tydenSchuzky} ${plural(tydenSchuzky, 'schůzka', 'schůzky', 'schůzek')}` : '',
-  ].filter(Boolean)
+    // Propadlé úkoly patří na dnešek — v Plánu se dívá dopředu, ne zpátky;
+    // triáž propadlých je na Dnes.
+    const podleDne = new Map<string, Task[]>()
+    for (const t of open) {
+      const d = effectiveDate(t)
+      if (!d) continue
+      const den = d < today ? today : d
+      // `push` do stávajícího pole, ne kopie celého pole při každém úkolu:
+      // to druhé je kvadratická práce a na dnešek padají všechny propadlé,
+      // takže se ta hromádka kopírovala pořád dokola.
+      const uz = podleDne.get(den)
+      if (uz) uz.push(t)
+      else podleDne.set(den, [t])
+    }
+    const bezTerminu = sortTasks(open.filter((t) => !effectiveDate(t)))
+
+    // Pruh dne: čas úkolů po klientech + délka schůzek (bez barvy).
+    const naloz = new Map<string, DenNaloz>()
+    for (const d of dny) {
+      const ukoly = podleDne.get(d) ?? []
+      const schuzky = eventsPerDay.get(d) ?? []
+      if (ukoly.length === 0 && schuzky.length === 0) continue
+      const podleKlienta = new Map<string, number>()
+      for (const t of ukoly) {
+        const k = t.clientId && clientMap.has(t.clientId) ? t.clientId : ''
+        podleKlienta.set(k, (podleKlienta.get(k) ?? 0) + plannedMinutes([t]))
+      }
+      let neutralni = podleKlienta.get('') ?? 0
+      for (const e of schuzky) {
+        if (e.allDay) continue
+        neutralni += Math.max(0, Math.round((Date.parse(e.end) - Date.parse(e.start)) / 60000))
+      }
+      const dily: DenNaloz['dily'] = [...podleKlienta]
+        .filter(([k]) => k !== '')
+        .map(([k, minuty]) => ({ barva: clientMap.get(k)!.color, minuty }))
+        .sort((a, b) => b.minuty - a.minuty)
+      if (neutralni > 0) dily.push({ minuty: neutralni })
+      naloz.set(d, {
+        ukoly: ukoly.length,
+        schuzky: schuzky.length,
+        minuty: dily.reduce((sum, x) => sum + x.minuty, 0),
+        dily,
+      })
+    }
+
+    // Souhrn tohoto týdne do hlavičky.
+    const pondeli = mondayOf(today)
+    const tyden = Array.from({ length: 7 }, (_, i) => toISODate(addDays(fromISODate(pondeli), i))).filter((d) => d >= today)
+    const tydenUkoly = tyden.flatMap((d) => podleDne.get(d) ?? [])
+    const tydenSchuzky = tyden.reduce((n, d) => n + (eventsPerDay.get(d)?.length ?? 0), 0)
+    const tydenMin = plannedMinutes(tydenUkoly)
+    const souhrn = [
+      'tento týden',
+      tydenUkoly.length > 0 ? `${tydenUkoly.length} ${plural(tydenUkoly.length, 'úkol', 'úkoly', 'úkolů')}` : 'bez úkolů',
+      tydenMin > 0 ? `~${minutesToLabel(tydenMin)}` : '',
+      tydenSchuzky > 0 ? `${tydenSchuzky} ${plural(tydenSchuzky, 'schůzka', 'schůzky', 'schůzek')}` : '',
+    ].filter(Boolean)
+
+    return { eventsPerDay, podleDne, bezTerminu, naloz, souhrn, pondeli }
+  }, [dny, today, konec, open, events, clientMap])
 
   // Neděle a pondělí — stejné okno, v jakém chodí nedělní push notifikace.
   const reviewDay = [0, 1].includes(fromISODate(today).getDay())
 
-  const toggle = (t: Task) => {
+  // Stabilní identita kvůli `memo` na `TaskRow` — nová funkce při každém
+  // překreslení by memoizaci zrušila a řádky by se překreslily všechny.
+  const toggle = useCallback((t: Task) => {
     void (t.status === 'done' ? reopenTask(t.id) : completeTask(t.id))
-  }
+  }, [])
   const row = (t: Task) => (
     <TaskRow
       key={t.id}

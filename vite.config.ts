@@ -16,9 +16,40 @@ const build = [
   .filter(Boolean)
   .join(' · ')
 
+// Knihovny do vlastních balíčků podle toho, jak často se mění.
+//
+// Dřív šlo všechno do jediného souboru (1,1 MB). Appka se nasazuje skoro
+// každý den a název souboru nese otisk obsahu, takže JEDNO písmeno ve
+// vlastním kódu změnilo otisk celku a servisní worker stáhl do telefonu
+// znovu celý megabajt — včetně Reactu, Dexie i motion, které se nezměnily.
+// Rozdělené balíčky mají vlastní otisky: mění se jen ten s kódem appky,
+// zbytek zůstane v cache. Na první návštěvě se nestahuje víc dat, jen se
+// stáhnou souběžně.
+const knihovny: Array<[string, string[]]> = [
+  ['react', ['react/', 'react-dom/', 'scheduler/', 'react/jsx-runtime']],
+  ['supabase', ['@supabase/']],
+  ['dexie', ['dexie/', 'dexie-react-hooks/']],
+  ['motion', ['motion/', 'motion-dom/', 'motion-utils/', 'framer-motion/']],
+  ['rrule', ['rrule/', 'tslib/']],
+  ['prvky', ['radix-ui/', '@radix-ui/', 'cmdk/', '@floating-ui/', 'react-remove-scroll', 'aria-hidden/', 'use-callback-ref/', 'use-sidecar/', 'get-nonce/']],
+]
+
 export default defineConfig({
   base,
   define: { __BUILD__: JSON.stringify(build) },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return
+          const cesta = id.split('node_modules/').pop() ?? ''
+          for (const [jmeno, vzory] of knihovny) {
+            if (vzory.some((v) => cesta.startsWith(v))) return jmeno
+          }
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),

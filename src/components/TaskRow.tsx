@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { memo, useRef, useState } from 'react'
 import type { Client, Priority, Project, Task } from '../db/types'
 import { updateTask } from '../db/repo'
 import { deleteBlockForTask } from '../sync/calendar'
@@ -30,7 +30,13 @@ const rubber = (v: number, limit: number) =>
 
 // Řádek seskupeného seznamu ve stylu iOS — oddělovače řeší rodičovský
 // <ul> přes divide-y, zaoblení a pozadí drží kontejner skupiny.
-export function TaskRow({
+//
+// Přes `memo`: v seznamu jich stojí třicet a bez něj se překreslily
+// všechny pokaždé, když se v rodiči cokoli hnulo — otevřený panel,
+// tiknutí minuty, rozbalená sekce. Vstupy jsou buď primitivy, nebo
+// reference z živého dotazu a memoizovaných map, takže mělké porovnání
+// sedí; volající ale musí držet i `onToggle`/`onOpen` (`useCallback`).
+export const TaskRow = memo(function TaskRow({
   task,
   client,
   project,
@@ -347,4 +353,4 @@ export function TaskRow({
       </div>
     </li>
   )
-}
+})

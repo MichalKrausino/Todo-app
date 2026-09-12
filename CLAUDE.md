@@ -252,6 +252,59 @@ Animace `rise`/`pop`/`sheet-*` respektují `prefers-reduced-motion`.
 Ikony PWA jsou v akcentní modré — **při změně akcentu přegenerovat**
 (SVG v `public/favicon.svg` je předloha, PNG se renderují z něj).
 
+## Výkon (měřit, ne hádat)
+
+Optimalizuje se proti **profilu**, ne proti dojmu — sonda se 400 úkoly,
+čtyřikrát zpomaleným procesorem a mediánem z několika opakování (jeden běh
+je šum). Čtyři věci, které se ukázaly, a jak jsou vyřešené:
+
+1. **Dok nesmí číst rozvržení za pohybu.** `DokZalozka` si počítala polohu
+   uvnitř `useTransform`, tedy při každém snímku letu čočky: tři ikony ×
+   dvě `getBoundingClientRect` × 60 fps, proložené zápisy stylů = vynucený
+   přepočet rozvržení. V profilu přepnutí záložky to byla **nejdražší
+   položka vůbec — 65 ms vlastního času**, víc než všechny funkce appky
+   dohromady. Poloha ikony přitom na pohybu čočky nezávisí. Teď se měří
+   při **změně rozvržení** (`preemer()` v `DokZalozky`): `ResizeObserver`
+   na pás **i na jednotlivé ikony** (Dock z magicui je pod kurzorem
+   zvětšuje a tím posune sousedy — posun sám o sobě RO nespustí, proto se
+   při každém hlášení přepočítají všechny) plus pojistné přeměření při
+   stisku. Transform je pak jen odečtení dvou čísel. Změřeno: tah čočkou
+   −21 %, `getBoundingClientRect` z profilu zmizel. Pozor: hlídač ikon má
+   **vlastní** `ResizeObserver` — kdyby sdílel příznak `prvni` s pásem,
+   spotřeboval by ho svým okamžitým prvním hlášením a čočka by po startu
+   skočila na cíl dřív, než pružina vyrazí.
+2. **Odvozená data patří do `useMemo`.** Obrazovky se překreslují i když
+   se jen otevře panel, tikne minuta nebo se píše do pole — a bez memoizace
+   se při každém takovém překreslení znovu procházelo a třídilo všech 400
+   úkolů, stavěly se mapy klientů a projektů a počítaly signály (nejdražší
+   průchod na Dnes). `useLiveQuery` vrací tutéž referenci, dokud se dotaz
+   znovu nespustí, takže závislosti drží. V Plánu je celý rozpočet dnů
+   v jednom `useMemo` — dřív každé písmeno v poli „Nový úkol na sobotu…"
+   přepočítalo schůzky, rozdělení úkolů po dnech i pruhy zátěže.
+   **Hooky musí stát nad podmíněnými `return null`** (v `ClientDetail` se
+   na tom dá shodit celá obrazovka: `client` je z živého dotazu, takže
+   první vykreslení skončí dřív a druhé už ne).
+3. **`TaskRow` je přes `memo`.** V seznamu jich stojí třicet a bez toho se
+   překreslily všechny pokaždé, když se v rodiči cokoli hnulo. Volající
+   proto musí držet stabilní `onToggle`/`onOpen` (`useCallback`) a klienta
+   s projektem podávat z **memoizované mapy**, ne přes `find` v každém
+   řádku. Změřeno: dobrání dalších řádků −31 %.
+4. **Nikdy `mapa.set(k, [...(mapa.get(k) ?? []), x])`.** Kopie celého pole
+   při každém přidání je kvadratická práce — a na dnešek v Plánu padají
+   všechny propadlé úkoly, takže se ta hromádka kopírovala pořád dokola.
+   Správně je `push` do stávajícího pole.
+
+**Balíček je rozdělený podle stability** (`manualChunks` ve `vite.config.ts`:
+react / supabase / dexie / motion / rrule / prvky). Dřív šlo všechno do
+jediného souboru (1,1 MB) a název nese otisk obsahu, takže jedno písmeno ve
+vlastním kódu znamenalo stáhnout do telefonu **znovu celý megabajt** včetně
+knihoven, které se nezměnily. Teď se mění jen balíček s kódem appky:
+změřeno **316 kB místo 1,1 MB (28 %)** — a první vykreslení na 4G se
+zrychlilo z **2018 na 1669 ms (−17 %)**, protože se balíčky stahují
+souběžně. Supabase (215 kB) je na startu zbytečná, ale odložit ji nejde
+bez `React.lazy` na `SyncSheet` — to by přidalo viditelný suspense, a na
+vzhled se nesahá.
+
 ## Datový model
 
 `src/db/types.ts`: Client (zároveň oblast: `client | internal | personal`) →
