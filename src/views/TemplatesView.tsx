@@ -261,7 +261,11 @@ function TemplateDetail({
       } catch {
         continue
       }
-      for (const d of dates) byDate.set(d, [...(byDate.get(d) ?? []), item.title])
+      for (const d of dates) {
+        const uz = byDate.get(d)
+        if (uz) uz.push(item.title)
+        else byDate.set(d, [item.title])
+      }
     }
     return [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b))
   }, [template.items, today])

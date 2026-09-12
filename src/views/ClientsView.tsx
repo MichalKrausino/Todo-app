@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { sharedClientIds } from '../sync/shares'
 import type { Client, ClientKind, Project, Task } from '../db/types'
@@ -101,7 +101,9 @@ function ClientList({
   const podleKlienta = new Map<string, Task[]>()
   for (const t of open) {
     if (!t.clientId) continue
-    podleKlienta.set(t.clientId, [...(podleKlienta.get(t.clientId) ?? []), t])
+    const uz = podleKlienta.get(t.clientId)
+    if (uz) uz.push(t)
+    else podleKlienta.set(t.clientId, [t])
   }
   const podtitul = (c: Client): React.ReactNode =>
     stavKlienta(c, podleKlienta.get(c.id) ?? [], { sdileno: sdilene.has(c.id) }, today).map((cast, i) => (
@@ -495,6 +497,19 @@ function ClientDetail({
 
   const todoistCount = everyTask.filter((t) => t.todoistId).length
 
+  // Oba hooky musí stát NAD podmíněným returnem níž: `client` je z živého
+  // dotazu, takže první vykreslení skončí dřív a druhé už ne — hook volaný
+  // podmíněně shodí celou obrazovku („Rendered more hooks than…").
+  //
+  // Stabilní identita kvůli `memo` na `TaskRow`: nová funkce při každém
+  // překreslení by memoizaci zrušila a řádky by se překreslily všechny.
+  const toggle = useCallback((t: Task) => {
+    void (t.status === 'done' ? reopenTask(t.id) : completeTask(t.id))
+  }, [])
+  // Mapa místo `find` v každém řádku — lineární hledání na řádek dělá
+  // ze seznamu kvadratickou práci, jen aby dohledalo jeden projekt.
+  const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
+
   if (!client || client.deletedAt) return null
 
   // Úkoly uzavřeného (archivovaného) projektu by jinak zmizely úplně —
@@ -519,12 +534,8 @@ function ClientDetail({
     .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))
     .slice(0, 30)
 
-  const toggle = (t: Task) => {
-    void (t.status === 'done' ? reopenTask(t.id) : completeTask(t.id))
-  }
-
   const row = (t: Task) => (
-    <TaskRow key={t.id} task={t} project={projects.find((p) => p.id === t.projectId)} onToggle={toggle} onOpen={onOpenTask} />
+    <TaskRow key={t.id} task={t} project={t.projectId ? projectMap.get(t.projectId) : undefined} onToggle={toggle} onOpen={onOpenTask} />
   )
 
   const submitTask = async (e: React.FormEvent) => {
