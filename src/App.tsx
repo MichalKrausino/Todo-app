@@ -19,9 +19,11 @@ import { Magnetic } from './components/ui/Magnetic'
 import { ProgressiveBlur } from './components/ui/ProgressiveBlur'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './components/ui/Tooltip'
 import { TodayView } from './views/TodayView'
+import { VseView } from './views/VseView'
 import { UpcomingView } from './views/UpcomingView'
 import { ClientsView } from './views/ClientsView'
 import { WeeklyReviewSheet } from './components/WeeklyReviewSheet'
+import { vyhodnotStisk, type Stisk } from './lib/dvojklik'
 
 type Tab = 'today' | 'upcoming' | 'clients'
 
@@ -89,6 +91,10 @@ const TABS: Array<{ id: Tab; label: string; icon: (on: boolean) => React.ReactNo
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('today')
+  // Druhá poloha záložky Dnes: dvojité ťuknutí na ni ukáže VŠECHNY
+  // otevřené úkoly (`VseView`). Je to nahlédnutí, ne režim — přepnutí
+  // záložky ho vždycky složí zpátky, takže se v něm nedá uvíznout.
+  const [vse, setVse] = useState(false)
   const [editing, setEditing] = useState<Task | null>(null)
   // Týdenní ohlédnutí bydlí v Plánu, ale sheet drží App: notifikace
   // otevře appku na Dnes, takže deep-link #review musí zabrat bez ohledu
@@ -125,6 +131,13 @@ export default function App() {
     setTab('clients')
   }
 
+  useEffect(() => {
+    setVse(false)
+  }, [tab])
+  // Aktuální záložka pro obsluhu klávesnice, která se věší jen jednou.
+  const tabRef = useRef<Tab>(tab)
+  tabRef.current = tab
+
   // Směr přechodu záložek: nový pohled přijíždí ze strany, kam se jde.
   const prevTab = useRef<Tab>(tab)
   const dir = TABS.findIndex((t) => t.id === tab) - TABS.findIndex((t) => t.id === prevTab.current)
@@ -132,6 +145,8 @@ export default function App() {
   // Spodní dok plave nad obsahem (aby přes sklo prosvítal), takže si
   // musí říct o odsazení — a jeho výška se mění (lišta, výběr termínu).
   const dockRef = useRef<HTMLElement>(null)
+  // Poslední stisk „1" (kvůli dvojímu — viz case 'dnes').
+  const klavesa = useRef<Stisk | null>(null)
   // Klávesnice na Macu: ⌘K hledá, N otevře zadávání, 1–3 přepínají
   // záložky, Esc složí zadávání. Co je zkratka a co psaní, rozhoduje
   // čistá logika v src/lib/shortcuts.ts; s otevřeným panelem mlčí.
@@ -158,7 +173,17 @@ export default function App() {
           if (el instanceof HTMLElement) el.blur()
           break
         case 'dnes':
-          setTab('today')
+          // Dvojí „1" dělá totéž co dvojité ťuknutí na záložku — jedno
+          // pravidlo pro prst i klávesnici (`src/lib/dvojklik.ts`).
+          if (e.repeat) break
+          if (tabRef.current !== 'today') {
+            klavesa.current = null
+            setTab('today')
+          } else {
+            const r = vyhodnotStisk(klavesa.current, 'today', performance.now())
+            klavesa.current = r.stav
+            if (r.dvojite) setVse((v) => !v)
+          }
           break
         case 'plan':
           setTab('upcoming')
@@ -294,7 +319,7 @@ export default function App() {
             scrolled ? 'opacity-100' : 'opacity-0'
           }`}
         >
-          {TABS.find((t) => t.id === tab)?.label}
+          {vse ? 'Vše' : TABS.find((t) => t.id === tab)?.label}
         </span>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -346,19 +371,20 @@ export default function App() {
             marže drží řádky chipů s -mx-4 dál až na hraně obrazovky. */}
         <div className="-mx-4 overflow-x-clip px-4">
         <BlurFade
-          key={tab}
+          key={vse ? `${tab}-vse` : tab}
           direction={dir === 0 ? 'up' : dir > 0 ? 'left' : 'right'}
           offset={14}
           blur="6px"
           duration={0.36}
         >
-          {tab === 'today' && (
+          {tab === 'today' && !vse && (
             <TodayView
               onOpenTask={setEditing}
               onOpenClient={openClient}
               onOpenInbox={() => setTab('upcoming')}
             />
           )}
+          {tab === 'today' && vse && <VseView onOpenTask={setEditing} onZpet={() => setVse(false)} />}
           {tab === 'upcoming' && (
             <UpcomingView
               onOpenTask={setEditing}
@@ -430,7 +456,12 @@ export default function App() {
             {/* DokZalozky (vlastní, po vzoru tab baru iOS 26): pilulka pod
                 ikonou se zvedne, překlouže a dosedne; když prst na doku zůstane a táhne,
                 jede s ním a puštění vybere nejbližší záložku. */}
-            <DokZalozky value={tab} onChange={(id) => setTab(id as Tab)} className="flex flex-1 items-center">
+            <DokZalozky
+              value={tab}
+              onChange={(id) => setTab(id as Tab)}
+              onReselect={(id) => id === 'today' && setVse((v) => !v)}
+              className="flex flex-1 items-center"
+            >
             <Dock className="flex-1 gap-5">
             {TABS.map((t, i) => (
               <Tooltip key={t.id}>

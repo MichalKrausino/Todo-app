@@ -45,6 +45,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { motion, useMotionValue, useSpring, useTransform, useVelocity, type MotionValue } from 'motion/react'
 import { klidovyRezim } from '../lib/motion'
+import { vyhodnotStisk, type Stisk } from '../lib/dvojklik'
 
 // Čočka pod vybranou záložkou: širší než ikona, skoro na výšku doku —
 // jako tab bar v iOS 26 (a GitHub či Instagram, které ho přebraly).
@@ -86,11 +87,14 @@ function stredVuciPasu(el: Element, p: HTMLElement): number {
 export function DokZalozky({
   value,
   onChange,
+  onReselect,
   children,
   className,
 }: {
   value: string
   onChange: (id: string) => void
+  // Dvojité ťuknutí na UŽ vybranou záložku — viz `src/lib/dvojklik.ts`.
+  onReselect?: (id: string) => void
   children: ReactNode
   className?: string
 }) {
@@ -204,6 +208,8 @@ export function DokZalozky({
   // Gesto: stisk (ikona se stlačí) → tah (čočka jede s prstem) →
   // puštění vybere nejbližší záložku.
   const tah = useRef<{ id: number; x0: number; tahne: boolean } | null>(null)
+  // Poslední ťuknutí na vybranou záložku (kvůli dvojitému).
+  const stisky = useRef<Stisk | null>(null)
   const [tahne, setTahne] = useState(false)
   const [stisknuto, setStisknuto] = useState<string | null>(null)
   const nejblizsi = (clientX: number): string | null => {
@@ -265,7 +271,15 @@ export function DokZalozky({
       // Zůstává, kde je: čočka jen dosedne zpátky na ikonu.
       if (let_.current) let_.current.od = performance.now()
       naSvou()
-    } else onChange(id)
+      // Druhé ťuknutí na tutéž vybranou záložku je vlastní gesto.
+      const r = vyhodnotStisk(stisky.current, id, performance.now())
+      stisky.current = r.stav
+      if (r.dvojite) onReselect?.(id)
+    } else {
+      // Přepnutí počítadlo nuluje: rychlé Klienti → Dnes → Dnes není dvojité.
+      stisky.current = null
+      onChange(id)
+    }
   }
   const zrusit = () => {
     konecTahu()
