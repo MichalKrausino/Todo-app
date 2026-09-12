@@ -53,16 +53,32 @@ function Tah({ d, on }: { d: string; on: boolean }) {
 // zadávání dostane celou šířku — pole a řádka slotů ji potřebují.
 const DOK_SIRKA = 6 + 3 * 64 + 2 * 20 + 20 + 40 + 8
 
-const TABS: Array<{ id: Tab; label: string; icon: (on: boolean) => React.ReactNode }> = [
+// Druhý argument je poloha záložky Dnes (false = dnešek, true = vše).
+// Jen první záložka ho používá — má dvě polohy, ostatní jednu.
+const TABS: Array<{ id: Tab; label: string; icon: (on: boolean, vse: boolean) => React.ReactNode }> = [
   {
     id: 'today',
     label: 'Dnes',
-    icon: (on) => (
-      <svg viewBox="0 0 24 24" className="h-full w-full transition-[stroke-width] duration-300" fill="none" stroke="currentColor" strokeWidth={on ? 2.1 : 1.7} strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="9" />
-        <Tah d="M8.5 12.2l2.4 2.4 4.8-5.2" on={on} />
-      </svg>
-    ),
+    // Dvě podoby téže ikony, ne dvě různé ikony: kroužek s fajfkou
+    // zůstává, ve druhé poloze se za něj postaví druhý kroužek —
+    // „ne jeden den, ale celá hromádka". Kdo se podívá na dok, pozná
+    // polohu bez čtení; kdo ji nezná, vidí pořád svoji záložku Dnes.
+    icon: (on, vse) =>
+      vse ? (
+        <svg viewBox="0 0 24 24" className="h-full w-full transition-[stroke-width] duration-300" fill="none" stroke="currentColor" strokeWidth={on ? 2.1 : 1.7} strokeLinecap="round" strokeLinejoin="round">
+          {/* Zadní kroužek je oblouk ukončený PŘESNĚ v průsečíku s předním
+              (r 7,6, středy 10,6 a 14,0 → průsečíky v 12,30 ± 7,41), takže
+              mizí za ním a nevypadá jako závorka vedle. */}
+          <path d="M12.3 4.59A7.6 7.6 0 1 0 12.3 19.41" opacity="0.5" />
+          <circle cx="14" cy="12" r="7.6" />
+          <Tah d="M11.04 12.17l2.03 2.03 4.05-4.4" on={on} />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" className="h-full w-full transition-[stroke-width] duration-300" fill="none" stroke="currentColor" strokeWidth={on ? 2.1 : 1.7} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="9" />
+          <Tah d="M8.5 12.2l2.4 2.4 4.8-5.2" on={on} />
+        </svg>
+      ),
   },
   {
     id: 'upcoming',
@@ -137,6 +153,9 @@ export default function App() {
   // Aktuální záložka pro obsluhu klávesnice, která se věší jen jednou.
   const tabRef = useRef<Tab>(tab)
   tabRef.current = tab
+  // Vracíme se z Vše? Jen tehdy se obrazovka snáší shora.
+  const prevVse = useRef(vse)
+  const zVse = prevVse.current && !vse
 
   // Směr přechodu záložek: nový pohled přijíždí ze strany, kam se jde.
   const prevTab = useRef<Tab>(tab)
@@ -253,6 +272,9 @@ export default function App() {
       window.removeEventListener('orientationchange', apply)
     }
   }, [])
+  useEffect(() => {
+    prevVse.current = vse
+  }, [vse])
   useEffect(() => {
     prevTab.current = tab
     // nová záložka začíná nahoře, ne uprostřed předchozího seznamu
@@ -372,7 +394,12 @@ export default function App() {
         <div className="-mx-4 overflow-x-clip px-4">
         <BlurFade
           key={vse ? `${tab}-vse` : tab}
-          direction={dir === 0 ? 'up' : dir > 0 ? 'left' : 'right'}
+          // Vše je vrstva POD Dneškem: vytahuje se zespoda ('up') a při
+          // návratu se dnešek snese shora ('down'). Mezi záložkami se
+          // pořád jede do strany, kam se v doku šlo — a start appky
+          // zůstává nájezdem zespoda, proto se 'down' dává jen při
+          // opravdovém návratu z Vše, ne pokaždé, když `dir` vyjde nula.
+          direction={dir === 0 ? (zVse ? 'down' : 'up') : dir > 0 ? 'left' : 'right'}
           offset={14}
           blur="6px"
           duration={0.36}
@@ -460,6 +487,7 @@ export default function App() {
               value={tab}
               onChange={(id) => setTab(id as Tab)}
               onReselect={(id) => id === 'today' && setVse((v) => !v)}
+              poloha={vse ? 'vse' : 'dnes'}
               className="flex flex-1 items-center"
             >
             <Dock className="flex-1 gap-5">
@@ -477,8 +505,12 @@ export default function App() {
                     <DockIcon className="relative rounded-full">
                       {/* ikona bere 60 % pilulky, takže se zvětšuje s ní;
                           podpis ikony se při vybrání dokreslí tahem */}
-                      <DokZalozka id={t.id} on={tab === t.id}>
-                        {t.icon(tab === t.id)}
+                      <DokZalozka
+                        id={t.id}
+                        on={tab === t.id}
+                        podoba={t.id === 'today' ? (vse ? 'vse' : 'dnes') : t.id}
+                      >
+                        {t.icon(tab === t.id, vse)}
                       </DokZalozka>
                     </DockIcon>
                   </button>
