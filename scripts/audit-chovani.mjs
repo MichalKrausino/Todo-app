@@ -30,6 +30,14 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
     .filter(a=>a.playState==='running')
     .map(a=>({jmeno:a.animationName||'transition', d:a.effect?.getTiming().duration})))
   T_(bezici.length===0, 'v klidovém režimu neběží žádná animace'+(bezici.length?' — běží: '+JSON.stringify(bezici):''))
+
+  // Dvojité ťuknutí přepne i v klidu — jen bez pulzu čočky a bez nájezdu
+  // ikony. Gesto je ovládání, ne ozdoba; vypnout se smí pohyb, ne funkce.
+  await page.getByRole('button',{name:'Dnes',exact:true}).click(); await page.waitForTimeout(300)
+  await page.getByRole('button',{name:'Dnes',exact:true}).dblclick(); await page.waitForTimeout(400)
+  T_((await page.locator('main h1').first().innerText()).trim() === 'Vše', 'gesto přepne i v klidovém režimu')
+  const poGestu = await page.evaluate(() => document.getAnimations().filter(a=>a.playState==='running').length)
+  T_(poGestu === 0, 'pulz doku v klidovém režimu neběží (běží: ' + poGestu + ')')
   await ctx.close()
 }
 
@@ -361,6 +369,19 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await zalozkaDnes.click(); await page.waitForTimeout(600)
   await zalozkaDnes.click(); await page.waitForTimeout(700)
   T_(await nadpis() === 'Dnes', 'pomalé dvojí ťuknutí gesto nespustí')
+
+  // Polohu musí nést i DOK, ne jen titulek obrazovky: kdo se na něj
+  // podívá, pozná ji bez rolování nahoru. Ikona má dvě podoby —
+  // ve druhé stojí za kroužkem s fajfkou druhý kroužek.
+  const kresba = () => page.locator('footer [data-pas] button').first().locator('svg').innerHTML()
+  const dnesIkona = await kresba()
+  await zalozkaDnes.dblclick(); await page.waitForTimeout(900)
+  const vseIkona = await kresba()
+  T_(await nadpis() === 'Vše', 'dvojité ťuknutí přepne i podruhé')
+  T_(vseIkona !== dnesIkona, 'ikona v doku má pro každou polohu vlastní podobu')
+  T_(/<path[^>]*A7\.6/.test(vseIkona), 'v poloze Vše stojí za kroužkem druhý kroužek')
+  await zalozkaDnes.dblclick(); await page.waitForTimeout(900)
+  T_(await kresba() === dnesIkona, 'návrat na Dnes vrátí i původní ikonu')
   await ctx.close()
 }
 

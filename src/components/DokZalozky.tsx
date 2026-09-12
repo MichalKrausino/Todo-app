@@ -43,7 +43,7 @@
 // audit chování počítá běžící animace.
 
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { motion, useMotionValue, useSpring, useTransform, useVelocity, type MotionValue } from 'motion/react'
+import { animate, motion, useMotionValue, useSpring, useTransform, useVelocity, type MotionValue } from 'motion/react'
 import { klidovyRezim } from '../lib/motion'
 import { vyhodnotStisk, type Stisk } from '../lib/dvojklik'
 
@@ -59,6 +59,12 @@ const PRAH_KLIDU = 30
 const ROZJEZD_MS = 90
 // Pojistka: dosednout nejpozději za tolik ms, i kdyby rychlost nešla číst.
 const LET_MAX_MS = 900
+// Pulz: zdvih a přejezd odlesku, když se změní POLOHA vybrané záložky
+// (Dnes ⇄ Vše). Čočka nikam nejede, takže se nemá o co opřít odlesk
+// tažený rychlostí — dostane vlastní průjezd. 380 ms je tak akorát:
+// ikona vyjíždí zespoda 550 ms pružinou se zpožděním 120, sklo má
+// dosednout dřív, než se dokreslí podpis.
+const PULZ_MS = 380
 // Kolik pixelů je ještě ťuknutí; nad tím se čočka odlepí od záložky.
 const PRAH_TAHU = 6
 
@@ -88,6 +94,7 @@ export function DokZalozky({
   value,
   onChange,
   onReselect,
+  poloha,
   children,
   className,
 }: {
@@ -95,6 +102,10 @@ export function DokZalozky({
   onChange: (id: string) => void
   // Dvojité ťuknutí na UŽ vybranou záložku — viz `src/lib/dvojklik.ts`.
   onReselect?: (id: string) => void
+  // Poloha vybrané záložky (Dnes ⇄ Vše). Když se změní, aniž by se
+  // změnila záložka, čočka to řekne pulzem — jinak by se obrazovka
+  // přepnula a dok by o tom mlčel.
+  poloha?: string
   children: ReactNode
   className?: string
 }) {
@@ -122,6 +133,13 @@ export function DokZalozky({
   const lesk = useTransform(rychlost, (v: number) => sevri(-v * 0.014, -22, 22))
   const leskJas = useTransform(rychlost, (v: number) => sevri(Math.abs(v) / 500, 0, 1))
 
+  // Odlesk při pulzu: vlastní průjezd, protože čočka stojí a rychlost je
+  // nula. Sečte se s tím, co dává let — nikdy neběží obojí naráz.
+  const pulzX = useMotionValue(0)
+  const pulzJas = useMotionValue(0)
+  const leskX = useTransform([lesk, pulzX], ([a, b]: number[]) => a + b)
+  const leskO = useTransform([leskJas, pulzJas], ([a, b]: number[]) => Math.max(a, b))
+
   const [leti, setLeti] = useState(false)
   const let_ = useRef<{ od: number; pojistka: ReturnType<typeof setTimeout> | null } | null>(null)
   const dosedni = () => {
@@ -139,6 +157,27 @@ export function DokZalozky({
     cilZdvihu.set(ZDVIH)
     setLeti(true)
   }
+  // Změna polohy vybrané záložky: zdvih v místě + jeden přejezd odlesku.
+  // Žádná deformace — dok se nikdy neroztahuje, jen se nadzvedne a chytí
+  // světlo, přesně jako když letí.
+  const polohaRef = useRef(poloha)
+  useEffect(() => {
+    if (polohaRef.current === poloha) return
+    polohaRef.current = poloha
+    if (klid) return
+    vzlet()
+    const t = setTimeout(dosedni, PULZ_MS)
+    pulzX.jump(-26)
+    const a = animate(pulzX, 26, { duration: 0.42, ease: [0.3, 0, 0.2, 1] })
+    const b = animate(pulzJas, [0, 1, 0], { duration: 0.42, times: [0, 0.45, 1], ease: 'easeOut' })
+    return () => {
+      clearTimeout(t)
+      a.stop()
+      b.stop()
+      pulzJas.jump(0)
+    }
+  }, [poloha]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const tahneRef = useRef(false)
   useEffect(
     () =>
@@ -312,7 +351,7 @@ export function DokZalozky({
             marginTop: -PILULKA_V / 2,
           }}
         >
-          {!klid && <motion.span className="tab-lesk" style={{ x: lesk, opacity: leskJas }} />}
+          {!klid && <motion.span className="tab-lesk" style={{ x: leskX, opacity: leskO }} />}
         </motion.span>
         {children}
       </div>
@@ -322,7 +361,20 @@ export function DokZalozky({
 
 // Ikona záložky: hlásí svou polohu pásu, stlačí se pod prstem, nadzvedne
 // se, když kolem ní jede čočka, a při vybrání vyjede zespoda.
-export function DokZalozka({ id, on, children }: { id: string; on: boolean; children: ReactNode }) {
+export function DokZalozka({
+  id,
+  on,
+  podoba,
+  children,
+}: {
+  id: string
+  on: boolean
+  // Identita kresby. Když se změní, aniž by se změnilo `on` (Dnes ⇄ Vše),
+  // ikona se vymění týmž pohybem jako při vybrání — `replace.downUp`
+  // u SF Symbols: stará zmizí, nová vyjede zespoda a dokreslí se tahem.
+  podoba?: string
+  children: ReactNode
+}) {
   const ctx = useContext(Ctx)
   const ref = useRef<HTMLSpanElement>(null)
   const registruj = ctx?.registruj
@@ -355,6 +407,12 @@ export function DokZalozka({ id, on, children }: { id: string; on: boolean; chil
   // se navíc nadzvedne — v klidu stojí přesně na středu.
   const scale = useTransform([blizkost, stisk], ([b, s]: number[]) => (1 + 0.06 * b) * s)
   const y = useTransform([blizkost, ctx?.zdvih ?? fallbackZdvih], ([b, z]: number[]) => (-3 * b * (z - 1)) / (ZDVIH - 1))
+  // První vykreslení se nerozjíždí: dok při startu vyjíždí zespoda celý
+  // a ikona, která si k tomu přidá vlastní nájezd, z něj vypadne.
+  const prvniPodoba = useRef(true)
+  useEffect(() => {
+    prvniPodoba.current = false
+  }, [])
   // Lom: obraz pod sklem se o pár pixelů přitáhne k čočce.
   const lom = useTransform(odstup, (d: number) => {
     const a = Math.abs(d)
@@ -366,9 +424,14 @@ export function DokZalozka({ id, on, children }: { id: string; on: boolean; chil
       {ctx?.klid ? (
         <span className="block h-full w-full">{children}</span>
       ) : (
+        // `key` na podobě: výměna kresby při stejné záložce musí pohyb
+        // přehrát znovu. Motion spouští `animate` jen při změně hodnoty
+        // a ta je pokaždé stejný literál — bez remountu by nová ikona
+        // jen tiše probliskla a podpis by se nedokreslil.
         <motion.span
+          key={podoba}
           className="block h-full w-full"
-          initial={false}
+          initial={prvniPodoba.current ? false : { y: 5, scale: 0.88, opacity: 0 }}
           animate={
             on
               ? { y: [5, 0], scale: [0.88, 1], opacity: [0.6, 1] }
