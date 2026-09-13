@@ -11,7 +11,7 @@
     <!-- Jediná theme-color: režim si od téhle chvíle řídí appka (dá se
          v nastavení přepnout napevno), takže barvu stavového řádku
          přepisuje skript níž, ne media dotaz. -->
-    <meta name="theme-color" content="#f6f6f4" />
+    <meta name="theme-color" content="#f4f4f1" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <!-- default + theme-color: stavový řádek přebírá barvu pozadí appky
          v obou režimech (black-translucent by nutil bílý text i na světlé) -->
@@ -33,7 +33,7 @@
             (volba !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
           document.documentElement.dataset.theme = tmavy ? 'dark' : 'light'
           var meta = document.querySelector('meta[name="theme-color"]')
-          if (meta) meta.setAttribute('content', tmavy ? '#0e0e11' : '#f6f6f4')
+          if (meta) meta.setAttribute('content', tmavy ? '#0e0e11' : '#f4f4f1')
         } catch (e) {
           document.documentElement.dataset.theme = 'light'
         }

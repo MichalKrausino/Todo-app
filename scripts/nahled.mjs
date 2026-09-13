@@ -49,22 +49,29 @@ const SCREENS = [
 // takže úkoly vypadají jako doopravdy zadané (termíny, priority, klient).
 // Dnešních je schválně tolik, aby seznam přetekl a při scrollu procházel
 // POD dokem — jinak by sklo nemělo co lámat a snímek by o něm nic neřekl.
+// Klienti musí v náhledu být: barva klienta je štítek na řádku úkolu
+// a hlavně **díly pruhu dne** — bez nich je pruh na Dnes i v Plánu jedna
+// šedá kolej a snímky neukážou zrovna to, co appka umí navíc. Zakládají
+// se přes rozhraní jako všechno ostatní, aby náhled procházel touž cestou
+// jako člověk; parser pak úkoly zařadí přes `@jméno`.
+const KLIENTI = ['Alza', 'Panelora', 'V Bílém']
+
 const UKOLY = [
-  'dnes poslat report Alze !!',
-  'dnes zavolat Pepovi do 14:00',
-  'dnes dodělat bannery !!',
-  'dnes revize textů na web',
-  'dnes kontrola kampaně Meta',
+  'dnes poslat report @alza !!',
+  'dnes zavolat Pepovi do 14:00 @vbilem',
+  'dnes dodělat bannery @panelora !!',
+  'dnes revize textů na web @vbilem',
+  'dnes kontrola kampaně Meta @alza',
   'dnes odpovědět na maily',
-  'dnes sesumírovat výsledky',
-  'dnes návrh rozpočtu',
+  'dnes sesumírovat výsledky @panelora',
+  'dnes návrh rozpočtu @alza',
   'dnes briefing týmu',
-  'dnes korektura newsletteru',
+  'dnes korektura newsletteru @vbilem',
   'dnes export podkladů pro tisk',
   'dnes schůzka k webu ve 16:00',
-  'zítra fakturace za srpen',
-  'zítra příprava podkladů na schůzku',
-  'v pátek cenová nabídka',
+  'zítra fakturace za srpen @alza',
+  'zítra příprava podkladů na schůzku @panelora',
+  'v pátek cenová nabídka @vbilem',
 ]
 
 const cekej = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -107,6 +114,17 @@ async function spustPreview() {
 }
 
 async function zaloz(page) {
+  for (const jmeno of KLIENTI) {
+    await page.getByRole('button', { name: 'Klienti', exact: true }).click()
+    await cekej(400)
+    await page.getByRole('button', { name: '+ Nový' }).first().click()
+    await cekej(350)
+    await page.getByRole('textbox', { name: 'Jméno klienta nebo oblasti' }).fill(jmeno)
+    await page.getByRole('button', { name: 'Vytvořit' }).click()
+    await cekej(550)
+  }
+  await page.getByRole('button', { name: 'Dnes', exact: true }).click()
+  await cekej(450)
   for (const t of UKOLY) {
     await page.click('button[aria-label="Nový úkol"]')
     await cekej(200)

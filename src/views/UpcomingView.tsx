@@ -33,11 +33,13 @@ import { addDays, formatEventRange, formatFullDate, formatFullDateNa, fromISODat
 import { minutesToLabel } from '../lib/freeSlot'
 import { plural } from '../lib/labels'
 import { klidovyRezim } from '../lib/motion'
+import { PLNY_DEN_MIN, dilyDne, minutyDilu, type Dil } from '../lib/pruhDne'
 import { parseQuickAdd } from '../lib/quickAdd'
 import { ukazToast } from '../lib/toast'
 import { useNavrhPamet } from '../lib/navrhPamet'
 import { TaskRow } from '../components/TaskRow'
 import { DlouhySeznam } from '../components/DlouhySeznam'
+import { PruhDne } from '../components/PruhDne'
 import { Chip } from '../components/Chip'
 import { BezTerminuSheet } from '../components/BezTerminuSheet'
 import { DisclosureContent } from '../components/ui/Disclosure'
@@ -48,8 +50,6 @@ const effectiveDate = (t: Task): string | undefined => {
   return dates.sort()[0]
 }
 
-// Celý pruh = osm hodin; víc se do řádku nevejde a řekne to popisek.
-const PLNY_DEN_MIN = 8 * 60
 // Kolik dní se ukáže napoprvé a o kolik se dobírá.
 const DAVKA_DNI = 28
 const DNY = ['po', 'út', 'st', 'čt', 'pá', 'so', 'ne']
@@ -60,7 +60,7 @@ interface DenNaloz {
   ukoly: number
   schuzky: number
   minuty: number
-  dily: { barva?: string; minuty: number }[]
+  dily: Dil[]
 }
 
 export function UpcomingView({
@@ -151,25 +151,16 @@ export function UpcomingView({
       const ukoly = podleDne.get(d) ?? []
       const schuzky = eventsPerDay.get(d) ?? []
       if (ukoly.length === 0 && schuzky.length === 0) continue
-      const podleKlienta = new Map<string, number>()
-      for (const t of ukoly) {
-        const k = t.clientId && clientMap.has(t.clientId) ? t.clientId : ''
-        podleKlienta.set(k, (podleKlienta.get(k) ?? 0) + plannedMinutes([t]))
-      }
-      let neutralni = podleKlienta.get('') ?? 0
-      for (const e of schuzky) {
-        if (e.allDay) continue
-        neutralni += Math.max(0, Math.round((Date.parse(e.end) - Date.parse(e.start)) / 60000))
-      }
-      const dily: DenNaloz['dily'] = [...podleKlienta]
-        .filter(([k]) => k !== '')
-        .map(([k, minuty]) => ({ barva: clientMap.get(k)!.color, minuty }))
-        .sort((a, b) => b.minuty - a.minuty)
-      if (neutralni > 0) dily.push({ minuty: neutralni })
+      const schuzkyMinuty = schuzky.reduce(
+        (soucet, e) =>
+          soucet + (e.allDay ? 0 : Math.max(0, Math.round((Date.parse(e.end) - Date.parse(e.start)) / 60000))),
+        0,
+      )
+      const dily = dilyDne(ukoly, schuzkyMinuty, (id) => clientMap.get(id)?.color)
       naloz.set(d, {
         ukoly: ukoly.length,
         schuzky: schuzky.length,
-        minuty: dily.reduce((sum, x) => sum + x.minuty, 0),
+        minuty: minutyDilu(dily),
         dily,
       })
     }
@@ -310,8 +301,6 @@ export function UpcomingView({
     const vikend = [0, 6].includes(d.getDay())
     const celkem = n?.minuty ?? 0
     const preteklo = celkem > PLNY_DEN_MIN
-    // Šířky dílů v procentech pruhu; přetečený den se stlačí na celý pruh.
-    const zaklad = Math.max(celkem, PLNY_DEN_MIN)
     const dayTasks = sortTasks(podleDne.get(iso) ?? [])
     const dayEvents = [...(eventsPerDay.get(iso) ?? [])].sort(
       (a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start),
@@ -339,19 +328,7 @@ export function UpcomingView({
           <span className="min-w-0 flex-1">
             {/* Pruh: délka je čas, barvy klienti. Prázdný den má jen
                 tichou kolej — graf s nulou má pořád osu. */}
-            <span className={`flex h-2.5 w-full gap-px overflow-hidden rounded-full ${n ? 'bg-well' : 'bg-well/60'}`}>
-              {n?.dily.map((dil, i) => (
-                <span
-                  key={i}
-                  className={`h-full ${dil.barva ? '' : 'bg-ink-faint'} ${klid ? '' : 'pruh-roste'}`}
-                  style={{
-                    width: `${Math.max(2, (dil.minuty / zaklad) * 100)}%`,
-                    background: dil.barva,
-                    animationDelay: klid ? undefined : `${i * 60}ms`,
-                  }}
-                />
-              ))}
-            </span>
+            <PruhDne dily={n?.dily ?? []} klid={klid} />
             <span className={`mt-1.5 block truncate text-[13px] ${n ? 'text-ink-soft' : 'text-ink-faint'}`}>
               {n ? popisDne(n) : 'volno'}
               {preteklo && <span className="text-danger"> · přes 8 h</span>}

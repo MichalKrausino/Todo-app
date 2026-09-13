@@ -13,6 +13,9 @@ import {
   sortTasks,
 } from '../db/repo'
 import { isOverloaded, plannedMinutes } from '../lib/capacity'
+import { klidovyRezim } from '../lib/motion'
+import { dilyDne } from '../lib/pruhDne'
+import { PruhDne } from '../components/PruhDne'
 import { formatFullDate, todayISO } from '../lib/dates'
 import { WORK_END, WORK_START, freeGaps, freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { computeSignals } from '../lib/signals'
@@ -197,7 +200,18 @@ export function TodayView({
   // nemá smysl hlásit celodenních osm hodin. Po pracovní době je nula.
   const restStart = Math.min(Math.max(nowMin, WORK_START), WORK_END)
   const freeMin = events.length > 0 ? freeMinutes(busy, restStart) : null
+  const klid = klidovyRezim()
   const workMin = useMemo(() => plannedMinutes(unfinished), [unfinished])
+  // Díly pruhu dne — táž čistá funkce, jakou počítá Plán, aby se ta dvě
+  // místa nerozešla v tom, co se do dne počítá.
+  const schuzkyMin = useMemo(
+    () => busy.reduce((soucet, b) => soucet + Math.max(0, b.endMin - b.startMin), 0),
+    [busy],
+  )
+  const dilyDnes = useMemo(
+    () => dilyDne(unfinished, schuzkyMin, (id) => clientMap.get(id)?.color),
+    [unfinished, schuzkyMin, clientMap],
+  )
   const overloaded = isOverloaded(workMin, freeMin)
   // Volná okna zbývající do konce pracovní doby (pro panel kalendáře).
   const gaps = freeGaps(busy, restStart).filter((g) => g.endMin - g.startMin >= MIN_GAP_MIN && g.endMin > nowMin)
@@ -351,15 +365,20 @@ export function TodayView({
           )}
         </div>
         {unfinished.length > 0 && (
-          <p className={`mt-1 flex items-start gap-1.5 text-[13px] leading-snug ${overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'}`}>
-            {/* tečka drží u první řádky i při zalomení na úzkém displeji */}
-            <span className={`mt-[6px] inline-block h-1.5 w-1.5 shrink-0 rounded-full ${overloaded ? 'bg-note-ink' : 'bg-moss'}`} />
-            <span>
-            {overloaded && <>na den je toho moc · </>}
-            práce ~{minutesToLabel(workMin)}
-            {freeMin !== null && <> · zbývá ~{minutesToLabel(freeMin)}</>}
-            </span>
-          </p>
+          /* Tvar dne: týž pruh jako v Plánu — délka je čas, barvy klienti.
+             Dřív tu stála jen věta a před ní barevná tečka: tečka říkala
+             „je toho moc / je to v pohodě" a to je přesně to, co pruh
+             ukáže sám, a navíc řekne, komu dnešek patří. Není to nový
+             blok — je to tatáž řádka, která dostala svůj obrázek, a věta
+             pod ním zůstala jako popisek, stejně jako u dne v Plánu. */
+          <div className="mt-2">
+            <PruhDne dily={dilyDnes} klid={klid} className="h-1.5" />
+            <p className={`mt-1.5 text-[13px] leading-snug ${overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'}`}>
+              {overloaded && <>na den je toho moc · </>}
+              práce ~{minutesToLabel(workMin)}
+              {freeMin !== null && <> · zbývá ~{minutesToLabel(freeMin)}</>}
+            </p>
+          </div>
         )}
       </header>
 

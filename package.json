@@ -12,7 +12,8 @@
     "overit:todoist": "node scripts/overit-todoist.mjs",
     "nahled": "node scripts/nahled.mjs",
     "audit:ui": "node scripts/audit-ui.mjs",
-    "audit:chovani": "node scripts/audit-chovani.mjs"
+    "audit:chovani": "node scripts/audit-chovani.mjs",
+    "ikony": "node scripts/ikony.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",

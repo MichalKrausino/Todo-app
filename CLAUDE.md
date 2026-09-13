@@ -30,13 +30,18 @@ zdůvodnění rozhodnutí a roadmapa fází: **`docs/PLAN.md`** — před větš
   přes CDP — rychlost tahu je součást gesta, švihnutí zavírá, pomalé
   lízmutí ne) a zároveň musí jít obsah panelu pořád rolovat prstem.
   Chce hotový `npm run build`.
+- `npm run ikony` — ikony appky z jedné předlohy (`public/favicon.svg`,
+  PNG se renderují z něj). Pusť po každé změně značky nebo palety.
 - `npm run nahled` — obrázky appky do `.snimky/` (obě schémata, rozměr iPhonu).
   **Vzhled posuzuj z nich, ne odhadem.** Chromium bez GPU vykresluje
   `backdrop-filter` po dlaždicích — sklo doku by vyšlo rozmazané jen v pruhu
   uprostřed, proto skript vynucuje softwarový ANGLE/SwiftShader. Ten je ale
   pomalý, takže se před každým snímkem čeká na doběhnutí animací
   (`document.getAnimations()`), ne na stopky — jinak snímek chytne panel
-  v půlce výjezdu a straší na něm druhá patička.
+  v půlce výjezdu a straší na něm druhá patička. **Ukázková data mají
+  klienty** (zakládají se přes rozhraní, úkoly se zařadí přes `@jméno`) —
+  bez nich je pruh dne jen šedá kolej a snímky neukážou zrovna to, čím
+  appka vypadá jako ona sama.
 
 ## Architektonická pravidla (neporušovat)
 
@@ -199,6 +204,39 @@ hlavička Dnes je titulek + **jedna řádka** s kroužkem postupu (SVG, animuje
 `stroke-dashoffset`), dny v Plánu jsou řádky s pruhem času na papíře, ne dlaždice v kartě,
 primární akce mimo dok jsou tiché pilulky `well`, prázdné stavy prostý
 text bez tečkovaného rámečku.
+
+**Pruh dne je jazyk appky, ne ozdoba jedné obrazovky**
+(`src/lib/pruhDne.ts` — čisté funkce s testy, `src/components/PruhDne.tsx`).
+Délka je čas (celý pruh = osm hodin), barvy jsou klienti, **neutrální díl
+je `edge`** — schůzky a práce bez klienta. Kreslí se u každého dne v Plánu
+a na Dnes pod hlavičkou. Na Dnes nahradil barevnou tečku před větou
+„na den je toho moc · práce ~11,5 h": tečka říkala jen „je toho moc / je
+to dobré", což pruh ukáže sám — a navíc řekne, **komu dnešek patří**.
+Není to nový blok, je to tatáž řádka, která dostala svůj obrázek; věta
+pod ním zůstala jako popisek, stejně jako u dne v Plánu. Neutrální díl
+byl dřív `ink-faint`: to je barva textu a na pruhu přes celou šířku z ní
+byla černá lišta — pod titulkem Dnes nejhlasitější prvek obrazovky.
+Barevná je práce pro klienta, všechno ostatní je podklad.
+
+**Značka je ten pruh, ne fajfka.** Ikona byla bílá fajfka v modrém
+čtverci — to má na ploše každá druhá appka a neřeklo to nic. Teď jsou to
+**tři pruhy pod sebou, Plán v malém**, v barvách, které appka sama rozdá
+prvním třem klientům (`AUTO_ORDER`). Dlaždice je `--color-paper`, ne
+akcentní modrá, a **splash z manifestu má touž barvu**, takže ikona
+a startovní plocha jsou jedna souvislá plocha. Tři podoby a každá z jiného
+důvodu: zaoblená dlaždice pro PWA, **bez zaoblení pro `apple-touch-icon`**
+(iOS si maskuje sám a přes předem zakulacené rohy by zůstaly tmavé cípy)
+a **maskable se staženým obsahem** do bezpečného kruhu. Jedna sada se
+ověřovala okem na 120 / 60 / 32 / 16 px — jeden pruh se v malém rozpadl
+na čárku, tři drží.
+
+**Barva startu je `--color-paper`, jedna jediná.** Než se to srovnalo,
+šly na cestě dovnitř tři šedé: `#f2f2f7` ze splashe (**studená iOS šeď**,
+kterou tenhle design odmítá), `#f6f6f4` ze statické `theme-color` a teprve
+pak skutečný papír `#f4f4f1`. Appka se při startu z plochy dvakrát
+převlékla a v světlém režimu stavový řádek nikdy neseděl s obrazovkou pod
+ním. Hodnota je na třech místech (`vite.config.ts` manifest, `index.html`
+i jeho ranní ozvěna, `PAPER` v `src/lib/theme.ts`) — **musí být stejná**.
 
 **Jedna svislice přes celou obrazovku.** Nadpis sekce (`.section-label`),
 hlavička měsíce v Plánu, hrana karty i řádka dne začínají na **16 px**,
@@ -374,7 +412,7 @@ Pravidelná připomínka kontroly klienta = opakující se úkol s markerem
 - [x] Klienti jako přehled stavu: řádek klienta nese jednu stavovou řádku v pořadí důležitosti — kolik hoří („2 po termínu", danger) → ticho („ticho 12 dní", note) → kdy je další práce (jen z toho, co teprve přijde; dřív se do „nejbližšího dne" započítal i propadlý termín a četlo se to jako plán) → druh → sdíleno. Pořadí je záměrné kvůli ořezu zprava na 320 px. Ticho bývalo samostatný odznak vpravo — tři prvky vedle sebe (odznak, počet, šipka) ořízly právě „po termínu".
 - [x] **Detail klienta = hlavička, chipy, jeden seznam.** Obrazovka dřív skládala pod sebe napojení na Todoist, pole pro úkol, šablony, úkoly, každý projekt jako sekci s trvale viditelným „Uzavřít · Smazat", formulář projektu, hlídání, sdílení a mazání — nastavení mezi polem a seznamem, do kterého úkol padá. Teď: (1) hlavička s tečkou, jménem a **touž stavovou řádkou jako v seznamu** (`src/lib/clientStatus.ts`, čistá funkce `stavKlienta`); (2) řádka chipů (`Chip`): „Upravit" otevírá `KlientSheet` (jméno, barva, druh, pravidelná kontrola, hlídání zanedbání, šablony přepínači, Todoist, sdílení, archivace, smazání — vše se ukládá hned), ostatní chipy (Kontrola, Šablony · N, Todoist · N) jen říkají, co je zapnuté, a vedou tamtéž; (3) tiché pole pro nový úkol, plusko se vynoří až s textem; (4) **jeden seznam v jedné kartě**: úkoly bez projektu, pak každý projekt jako skupinová řádka (název, cíl, termín, „1 z 3", šipka) — ťuknutí otevře `ProjektSheet` (název, cíl, termín, uzavřít, smazat; obojí vratné toastem); „hotovo · N" sbalené na konci. Ze šablonových instancí je v detailu jen **nejbližší výskyt** každé položky — reconciler jich generuje na 90 dní dopředu a stejné řádky pod sebou byly šum (zbytek je v Plánu). Audit chování maže klienta přes „Upravit" → „Smazat klienta".
 - [x] **Detail úkolu = titulek, poznámka, jedna stavová řádka.** Dřív formulář s osmi popsanými poli v rozbalovátkách; když pole potřebuje popisek a `<select>`, je to nastavení, ne úkol. Název je teď titulek (rostoucí `textarea`, Enter přeskočí do poznámky), poznámka pod ním bez rámečku, odkazy jako čipy, a všechno ostatní nese **stejná řádka slotů jako zadávání v doku** (`SlotChip`, sdílené v `src/components/SlotChip.tsx`): Termín (rychlé dny + `MonthPicker` + čas), Klient, Projekt, Priorita, Opakování, Naplánovat na jiný den. Panel s výběrem se rozbaluje pod řádkou; u úkolu z Todoistu slot Klient/Projekt jen řekne toastem, že zařazení patří Todoistu. **Opakování = frekvence + den**: pravidlo je explicitní (`RuleParts` v `src/lib/rrule.ts`: `partsFromRule`/`ruleFromParts`), u týdenních se volí dny v týdnu (i víc naráz), u měsíčních den v měsíci (mřížka 1–28), u ročních ještě měsíc. Dřív si předvolba brala den z termínu a „každou neděli" znamenalo napřed přesunout termín na neděli. Změna pravidla **srovná termín na první výskyt od dneška** (`alignDueDate`): stávající termín zůstane jen když pravidlo trefuje a ještě nenastal; bez termínu ho úkol dostane, protože respawn po odškrtnutí (`respawnRecurring`) se odvíjí od `dueDate`. Pravidlo mimo předvolby (z parseru, „každé 3 týdny") se nechá být a jen ukáže. Šablony (`RecurrencePicker`) stojí na týchž částech. Checklist je jedna karta s polem pro další krok uvnitř. Ukládá se tlačítkem a ⌘↩; checklist, špendlík a „kdo úkol vidí" hned. Audit chování plní `#pole-ukol` (teď `textarea`).
-- [x] Triáž propadlých (`TriageSheet`): sekce „po termínu" umí narůst do stovek (změřeno 134 na roční hromádce) a jako seznam je to slepá ulička. Nadpis je proto akce — průchod po jednom se **žebříkem dnů**: Dnes → Zítra → Volnější den → Už neplatí, a oba odkladové dny nesou pod sebou konkrétní datum („ne 13. 9."), takže je vidět, kam to půjde. Dřív tu stálo jediné „Příští týden (pondělí)" — jedno tlačítko, jedno datum, takže sto propadlých úkolů skončilo na témž pondělí; to je tatáž zeď, jen o týden dál. „Volnější den" je nejbližší pracovní den s nejmenší zátěží do **sedmi dnů** (`src/lib/volnyDen.ts`, strop je úmyslný — odložit o měsíc není odložení) a počítá se **živě**: každý odložený úkol tam přibude, takže další stisk najde jiný den a hromádka se rozprostře (změřeno: tři stisky po sobě daly st 16., čt 17., pá 18.). Souhrn na konci vypisuje jen odpovědi s nenulovým počtem. Fronta se snímá při otevření, jinak by živý dotaz pod rukama přerovnával pořadí. Termín se posouvá stejně jako všude jinde (`scheduledFor`, a když ho úkol nemá, `dueDate`) — pevný termín se nikdy nepřepisuje potichu. „Už neplatí" nastaví `status: 'dropped'`, ne tombstone: úkol zmizí z otevřených seznamů, ale zahozená práce zůstane v datech. „Zpět" vrací i to.
+- [x] Triáž propadlých (`TriageSheet`): sekce „po termínu" umí narůst do stovek (změřeno 134 na roční hromádce) a jako seznam je to slepá ulička. Nadpis je proto akce — průchod po jednom se **žebříkem dnů**: Dnes → Zítra → Volnější den → Už neplatí, a oba odkladové dny nesou pod sebou konkrétní datum („ne 13. 9."), takže je vidět, kam to půjde. Dřív tu stálo jediné „Příští týden (pondělí)" — jedno tlačítko, jedno datum, takže sto propadlých úkolů skončilo na témž pondělí; to je tatáž zeď, jen o týden dál. „Volnější den" je nejbližší pracovní den s nejmenší zátěží do **sedmi dnů** (`src/lib/volnyDen.ts`, strop je úmyslný — odložit o měsíc není odložení) a počítá se **živě**: každý odložený úkol tam přibude, takže další stisk najde jiný den a hromádka se rozprostře (změřeno: tři stisky po sobě daly st 16., čt 17., pá 18.). Souhrn na konci vypisuje jen odpovědi s nenulovým počtem. Fronta se snímá při otevření, jinak by živý dotaz pod rukama přerovnával pořadí. Termín se posouvá stejně jako všude jinde (`scheduledFor`, a když ho úkol nemá, `dueDate`) — pevný termín se nikdy nepřepisuje potichu. „Už neplatí" nastaví `status: 'dropped'`, ne tombstone: úkol zmizí z otevřených seznamů, ale zahozená práce zůstane v datech. „Zpět" vrací i to. Tlačítko dole vlevo je **„Přeskočit"**, ne „Nechat být": není to odpověď — úkol nechá propadlý a jen posune frontu na další. „Nechat být" znělo jako rozhodnutí („tenhle už řešit nebudu"), tedy skoro jako „Už neplatí" o dvě řádky výš, a nešlo je od sebe poznat; sloveso říká přesně ten mechanismus a tvoří dvojici se „Zpět" vedle.
 - [x] Fáze 7 — týdenní zpětná vazba (`src/lib/weekReview.ts`, čisté funkce): nedělní/pondělní karta na Dnes otevírá `WeeklyReviewSheet` — hotové úkoly a rozpad podle klientů, plán vs. realita, nejodkládanější úkoly, tiší klienti, výhled na 7 dní. Porovnání odhadu a skutečnosti času přibude s Fází 5 (estimateMinutes). Až bude Fáze 6 (push), nedělní notifikace má vést sem.
 - [x] Fáze 8 — Todoist: sdílené projekty klientů a jejich úkoly do appky. API token žije na serveru (`public.todoist_tokens`, RLS bez policies, write-only RPC `store_todoist_token`), do Todoistu sahá jen edge funkce `todoist` (projects/pull/close/reopen). Mapování polí je čistá logika (`src/lib/todoistMap.ts`), srovnání s lokální DB taky (`src/db/todoistImport.ts`) — projekt → klient (párování na `Client.todoistProjectIds`; za cizí se bere `is_shared || workspace_id`, jinak by týmové projekty nešly napojit), sekce → projekt, `deadline` → `dueDate`, `due` → `scheduledFor`, podúkoly → checklist (odškrtnutí kroku zavře podúkol i tam, nový krok tam vznikne, vlastní kroky stažení přežijí); lokální id deterministicky z todoistího. Todoist vlastní název, prioritu a termín; naplánování dne, odhad a špendlík zůstávají naše, poznámku a checklist si bere jen když je sám má. Zpátky letí odškrtnutí, znovuotevření, úpravy (`todoistDirty` = neodeslaná změna, stažení ji nepřepíše) a — po zapnutí u klienta (`todoistPushSince`) — i nové úkoly. Zamčené je jen zařazení. Opakovaný úkol se v Todoistu odškrtnutím posouvá, ne zavírá: nový termín se bere jako nový výskyt, hotový spadne do lokální historie (jinak by druhý `close` posunul úkol podruhé). Do appky chodí **jen úkoly, na kterých je uživatel označený**
   (`isMine`) — i z projektů, které nejsou spárované s klientem (server je
