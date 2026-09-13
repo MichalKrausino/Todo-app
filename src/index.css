@@ -164,10 +164,35 @@ body {
   font-weight: 500;
   letter-spacing: -0.005em;
   color: var(--color-ink-soft);
-  padding-inline: 4px;
 }
 .section-label::first-letter {
   text-transform: uppercase;
+}
+
+/* Vodorovně scrollující řádka pilulek: obsah, který ujede za okraj
+   displeje, se nesmí uříznout nožem — poslední pilulka se rozplyne a
+   tím řekne „tudy to pokračuje". Fade sedí přesně na přesahu záporné
+   marže (16 px, `-mx-4 px-4`), takže **dokud se neroluje, není vidět**:
+   v přesahu nic nestojí a maska průhledné plochy nic nezmění. Proto se
+   dává jen řádkám, které k okraji schválně přetékají; řádka zapuštěná
+   v panelu by si zprůhlednila první i poslední pilulku.
+   Měřeno: slot „Opakování" v detailu úkolu mizel na 208 px skrytého
+   obsahu bez jediného náznaku, chipy na Dnes na 55 px. */
+.radka-mizi {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 16px,
+    #000 calc(100% - 16px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 16px,
+    #000 calc(100% - 16px),
+    transparent 100%
+  );
 }
 
 /* Řádek úkolu v seskupeném seznamu: oddělovač vede od textu, ne od
@@ -189,10 +214,25 @@ body {
   pointer-events: none;
 }
 
-:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-  border-radius: 6px;
+/* Prstenec zaměření patří do `base`, ne nad utility. Když stál mimo
+   vrstvy, přebil `outline-none`, které si o sebe říká každé pole v appce
+   — navržený stav (obrys v akcentu, světlejší podklad) se nikdy neukázal
+   a místo něj vyskočil tvrdý dvojitý prstenec. A hlavně: pravidlo tu
+   přepisovalo `border-radius` samotného prvku na 6 px, takže se kulaté
+   tlačítko i pilulka hledání při zaměření **změnily na obdélník** (panel
+   hledání se zaměřuje sám, takže to bylo vidět pokaždé). Obrys sleduje
+   zaoblení prvku sám od sebe, deklarace byla zbytečná i škodlivá. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  /* Měkký roh prstence tam, kde si prvek žádné zaoblení neurčil. Přes
+     `:where()`, tedy s nulovou specifičností — každé `rounded-*` z markupu
+     ho přebije, takže pilulka zůstane pilulkou a kolečko kolečkem. */
+  :where(a, button, summary, [role='button']):focus-visible {
+    border-radius: 6px;
+  }
 }
 
 input,

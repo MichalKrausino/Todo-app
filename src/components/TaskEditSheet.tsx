@@ -404,7 +404,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
             k okraji panelu. Naplánováno je vrstva navrch termínu (ranní
             návrh, uzávěrka) — proto stojí až na konci a vysvětluje se jen
             v otevřeném panelu, ne pod každým úkolem. */}
-        <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4" style={{ scrollbarWidth: 'none' }}>
+        <div className="radka-mizi -mx-4 flex gap-1.5 overflow-x-auto px-4" style={{ scrollbarWidth: 'none' }}>
           <SlotChip
             slot="date"
             label="Termín"

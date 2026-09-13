@@ -627,14 +627,25 @@ function ClientDetail({
         Klienti
       </button>
 
-      {/* Hlavička se uhýbá plovoucím ikonám vpravo nahoře (pr-24), aby
-          jméno neběželo pod lupu a obláček. Pod jménem je jedna stavová
-          řádka — táž, co v seznamu — a jedna řádka chipů: „Upravit" vede
-          do nastavení, ostatní jen říkají, co je zapnuté, a vedou tamtéž. */}
-      <header className="pr-24">
-        <div className="flex items-center gap-3">
-          <span className="h-4 w-4 shrink-0 rounded-full" style={{ background: client.color }} />
-          <h1 className="min-w-0 truncate display text-[2.1rem] font-semibold leading-tight">{client.name}</h1>
+      {/* Hlavička se uhýbá plovoucím ikonám vpravo nahoře — ale místo si
+          bere jen PRVNÍ řádka jména (plovoucí rozpěrka vysoká 1 px), ne
+          celá hlavička. Dokud se uhýbalo `pr-24`, ubíralo se 96 px i tam,
+          kde žádná ikona není: „Ondra Fréhar" se na 320 px zalomil na dvě
+          řádky a druhá zůstala z poloviny prázdná. Pod jménem je jedna
+          stavová řádka — táž, co v seznamu — a jedna řádka chipů:
+          „Upravit" vede do nastavení, ostatní jen říkají, co je zapnuté. */}
+      <header>
+        {/* Jméno se zalomí, neuřízne. Uříznuté („Ondra Fré…") je jméno
+            člověka zmrzačené kvůli 20 px, a to na obrazovce, kde je jinak
+            místa dost — na 390 px se do jediné řádky vedle plovoucích
+            ikon vejde 234 px. Tečka se drží první řádky, ne středu
+            dvouřádkového jména. */}
+        <div className="flex items-start gap-3">
+          <span className="mt-[13px] h-4 w-4 shrink-0 rounded-full" style={{ background: client.color }} />
+          <h1 className="display min-w-0 text-[2.1rem] font-semibold leading-tight [overflow-wrap:anywhere]">
+            <span aria-hidden="true" className="float-right h-px w-[84px]" />
+            {client.name}
+          </h1>
         </div>
         <p className="mt-0.5 truncate text-sm text-ink-soft">
           {stav.map((cast, i) => (
@@ -650,7 +661,7 @@ function ClientDetail({
         </p>
       </header>
 
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 py-1" style={{ scrollbarWidth: 'none' }}>
+      <div className="radka-mizi -mx-4 flex gap-2 overflow-x-auto px-4 py-1" style={{ scrollbarWidth: 'none' }}>
         <Chip onClick={() => setNastaveni(true)}>
           <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-soft" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17z" />

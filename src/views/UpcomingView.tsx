@@ -444,7 +444,7 @@ export function UpcomingView({
 
       {/* Co není den: úkoly bez termínu a ohlédnutí. */}
       {(bezTerminu.length > 0 || (onOpenReview && reviewDay)) && (
-        <div className="rise -mx-4 flex gap-2 overflow-x-auto px-4 py-1" style={{ scrollbarWidth: 'none' }}>
+        <div className="radka-mizi rise -mx-4 flex gap-2 overflow-x-auto px-4 py-1" style={{ scrollbarWidth: 'none' }}>
           {bezTerminu.length > 0 && (
             <Chip onClick={() => setInbox({})}>
               <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-soft" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -470,7 +470,7 @@ export function UpcomingView({
           className={`rise ${i > 0 ? 'pt-3' : ''}`}
           style={{ '--stagger': Math.min(i + 1, 6) } as React.CSSProperties}
         >
-          <div className="flex items-baseline justify-between gap-3 px-1">
+          <div className="flex items-baseline justify-between gap-3">
             <h2 className="display text-[19px] font-semibold leading-tight first-letter:uppercase">
               {stitekMesice(m.kotva)}
             </h2>
