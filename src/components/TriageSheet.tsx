@@ -179,11 +179,17 @@ export function TriageSheet({
               </div>
 
               <div className="flex items-center justify-between">
+                {/* „Přeskočit", ne „Nechat být". Tohle tlačítko není odpověď —
+                    úkol nechá propadlý a jen posune frontu na další. „Nechat
+                    být" ale zní jako rozhodnutí („tenhle už řešit nebudu"),
+                    tedy skoro jako „Už neplatí" o dvě řádky výš, a nešlo je
+                    od sebe poznat. Sloveso říká přesně ten mechanismus a
+                    tvoří dvojici se „Zpět" vedle. */}
                 <button
                   onClick={() => setHotovo((h) => [...h, { task, odpoved: 'preskoceno', pred: {} as Krok['pred'] }])}
                   className="px-2 py-2 text-sm font-medium text-ink-soft transition-transform duration-150 active:scale-95"
                 >
-                  Nechat být
+                  Přeskočit
                 </button>
                 <button
                   onClick={zpet}
@@ -210,7 +216,7 @@ export function TriageSheet({
                       ['zitra', 'zítra'],
                       ['volny', 'volnější den'],
                       ['neplati', 'už neplatí'],
-                      ['preskoceno', 'beze změny'],
+                      ['preskoceno', 'přeskočeno'],
                     ] as [Odpoved, string][]
                   )
                     .filter(([o]) => spocitej(o) > 0)
