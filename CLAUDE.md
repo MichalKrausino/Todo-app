@@ -30,13 +30,18 @@ zdůvodnění rozhodnutí a roadmapa fází: **`docs/PLAN.md`** — před větš
   přes CDP — rychlost tahu je součást gesta, švihnutí zavírá, pomalé
   lízmutí ne) a zároveň musí jít obsah panelu pořád rolovat prstem.
   Chce hotový `npm run build`.
+- `npm run ikony` — ikony appky z jedné předlohy (`public/favicon.svg`,
+  PNG se renderují z něj). Pusť po každé změně značky nebo palety.
 - `npm run nahled` — obrázky appky do `.snimky/` (obě schémata, rozměr iPhonu).
   **Vzhled posuzuj z nich, ne odhadem.** Chromium bez GPU vykresluje
   `backdrop-filter` po dlaždicích — sklo doku by vyšlo rozmazané jen v pruhu
   uprostřed, proto skript vynucuje softwarový ANGLE/SwiftShader. Ten je ale
   pomalý, takže se před každým snímkem čeká na doběhnutí animací
   (`document.getAnimations()`), ne na stopky — jinak snímek chytne panel
-  v půlce výjezdu a straší na něm druhá patička.
+  v půlce výjezdu a straší na něm druhá patička. **Ukázková data mají
+  klienty** (zakládají se přes rozhraní, úkoly se zařadí přes `@jméno`) —
+  bez nich je pruh dne jen šedá kolej a snímky neukážou zrovna to, čím
+  appka vypadá jako ona sama.
 
 ## Architektonická pravidla (neporušovat)
 
@@ -199,6 +204,39 @@ hlavička Dnes je titulek + **jedna řádka** s kroužkem postupu (SVG, animuje
 `stroke-dashoffset`), dny v Plánu jsou řádky s pruhem času na papíře, ne dlaždice v kartě,
 primární akce mimo dok jsou tiché pilulky `well`, prázdné stavy prostý
 text bez tečkovaného rámečku.
+
+**Pruh dne je jazyk appky, ne ozdoba jedné obrazovky**
+(`src/lib/pruhDne.ts` — čisté funkce s testy, `src/components/PruhDne.tsx`).
+Délka je čas (celý pruh = osm hodin), barvy jsou klienti, **neutrální díl
+je `edge`** — schůzky a práce bez klienta. Kreslí se u každého dne v Plánu
+a na Dnes pod hlavičkou. Na Dnes nahradil barevnou tečku před větou
+„na den je toho moc · práce ~11,5 h": tečka říkala jen „je toho moc / je
+to dobré", což pruh ukáže sám — a navíc řekne, **komu dnešek patří**.
+Není to nový blok, je to tatáž řádka, která dostala svůj obrázek; věta
+pod ním zůstala jako popisek, stejně jako u dne v Plánu. Neutrální díl
+byl dřív `ink-faint`: to je barva textu a na pruhu přes celou šířku z ní
+byla černá lišta — pod titulkem Dnes nejhlasitější prvek obrazovky.
+Barevná je práce pro klienta, všechno ostatní je podklad.
+
+**Značka je ten pruh, ne fajfka.** Ikona byla bílá fajfka v modrém
+čtverci — to má na ploše každá druhá appka a neřeklo to nic. Teď jsou to
+**tři pruhy pod sebou, Plán v malém**, v barvách, které appka sama rozdá
+prvním třem klientům (`AUTO_ORDER`). Dlaždice je `--color-paper`, ne
+akcentní modrá, a **splash z manifestu má touž barvu**, takže ikona
+a startovní plocha jsou jedna souvislá plocha. Tři podoby a každá z jiného
+důvodu: zaoblená dlaždice pro PWA, **bez zaoblení pro `apple-touch-icon`**
+(iOS si maskuje sám a přes předem zakulacené rohy by zůstaly tmavé cípy)
+a **maskable se staženým obsahem** do bezpečného kruhu. Jedna sada se
+ověřovala okem na 120 / 60 / 32 / 16 px — jeden pruh se v malém rozpadl
+na čárku, tři drží.
+
+**Barva startu je `--color-paper`, jedna jediná.** Než se to srovnalo,
+šly na cestě dovnitř tři šedé: `#f2f2f7` ze splashe (**studená iOS šeď**,
+kterou tenhle design odmítá), `#f6f6f4` ze statické `theme-color` a teprve
+pak skutečný papír `#f4f4f1`. Appka se při startu z plochy dvakrát
+převlékla a v světlém režimu stavový řádek nikdy neseděl s obrazovkou pod
+ním. Hodnota je na třech místech (`vite.config.ts` manifest, `index.html`
+i jeho ranní ozvěna, `PAPER` v `src/lib/theme.ts`) — **musí být stejná**.
 
 **Jedna svislice přes celou obrazovku.** Nadpis sekce (`.section-label`),
 hlavička měsíce v Plánu, hrana karty i řádka dne začínají na **16 px**,

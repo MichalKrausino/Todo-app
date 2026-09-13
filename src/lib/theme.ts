@@ -14,7 +14,7 @@ const KEY = 'todo.theme'
 
 // Musí sedět s tokeny --color-paper v src/index.css, jinak stavový řádek
 // na iPhonu nesedí s pozadím appky.
-const PAPER = { light: '#f6f6f4', dark: '#0e0e11' }
+const PAPER = { light: '#f4f4f1', dark: '#0e0e11' }
 
 const subs = new Set<() => void>()
 let choice: ThemeChoice = read()
