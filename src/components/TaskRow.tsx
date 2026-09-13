@@ -5,13 +5,19 @@ import { deleteBlockForTask } from '../sync/calendar'
 import { addDays, formatDayLabel, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { najdiOdkazy } from '../lib/links'
 
-// Priorita jako tečka před názvem, ne barevná pilulka v metadatech:
-// pilulka byla na každém druhém řádku a seznam s ní vypadal jako
-// formulář. Tečka nese totéž (červená kritická, oranžová vysoká), jméno
-// priority zůstává pro čtečku. Nízká priorita se říká tiše slovem.
-const PRIO_DOT: Partial<Record<Priority, { label: string; cls: string }>> = {
-  critical: { label: 'kritická priorita', cls: 'bg-danger' },
-  high: { label: 'vysoká priorita', cls: 'bg-amber' },
+// Priorita jako barva prstence zaškrtávátka, ne tečka před názvem.
+// Barevná pilulka v metadatech dělala ze seznamu formulář; tečka před
+// názvem ji nahradila, jenže stála v toku textu a odsouvala název o svou
+// šířku — v seznamu o čtyřech řádcích pak začínaly názvy na třech různých
+// místech (změřeno 70 / 85 / 103 px). Prstenec nese totéž, ale nestojí
+// nikde v cestě: levá hrana textu zůstane jedna jediná. Kolečko je navíc
+// to, kam se u prioritního úkolu stejně míří prstem.
+// Oranžová je `note-ink`, ne plná `amber`: plná má na bílé kartě 2,2 : 1,
+// což je pod prahem 3 : 1 pro prvek, který něco znamená (změřeno).
+// Nízká priorita se dál říká tiše slovem v metadatech.
+const PRIO_DOT: Partial<Record<Priority, { label: string; ring: string }>> = {
+  critical: { label: 'kritická priorita', ring: 'border-danger' },
+  high: { label: 'vysoká priorita', ring: 'border-note-ink' },
 }
 
 // Prodleva mezi ťuknutím a skutečným dokončením (jako iOS Připomínky):
@@ -161,6 +167,7 @@ export const TaskRow = memo(function TaskRow({
     (task.dueDate < todayISO() ||
       (task.dueDate === todayISO() && !!task.dueTime && task.dueTime <= nowHM))
   const prio = PRIO_DOT[task.priority]
+  const pinned = task.pinnedFor === todayISO() && !visualDone && showPin
   // První odkaz z názvu nebo poznámky jde otevřít rovnou z řádku —
   // „schválit banner" je jedno ťuknutí od Canvy, ne detail + kopírování.
   const odkaz = najdiOdkazy(task.title, task.notes)[0]
@@ -238,7 +245,7 @@ export const TaskRow = memo(function TaskRow({
             className={`relative flex h-6 w-6 items-center justify-center rounded-full border-[1.25px] transition-colors duration-200 ${
               visualDone
                 ? 'check-drawn pop border-accent bg-accent text-card'
-                : 'border-edge text-transparent'
+                : `text-transparent ${prio?.ring ?? 'border-edge'}`
             }`}
           >
             {/* záblesk prstence při dokončení (nový element na každé odškrtnutí) */}
@@ -249,32 +256,38 @@ export const TaskRow = memo(function TaskRow({
           </span>
         </button>
 
-        <button className="min-w-0 flex-1 text-left" onClick={() => onOpen(task)}>
+        <button className="relative min-w-0 flex-1 text-left" onClick={() => onOpen(task)}>
+          {/* Tečka priority stojí v mezeře mezi zaškrtávátkem a textem,
+              ne v toku titulku. Dokud byla v toku, odsunula název o svou
+              šířku a název na prioritním řádku začínal jinde než na
+              ostatních — v seznamu o čtyřech řádcích vycházely tři různé
+              levé hrany (změřeno 70 / 85 / 103 px). Levá hrana textu je
+              v seznamu ta nejsilnější linka, kterou tam typografie má.
+              Mezera je 22 px (14 px `gap-3.5` + 8 px z `-m-2 p-2`
+              zaškrtávátka), tečka v ní sedí blíž textu, ke kterému patří. */}
           <div
             className={`title-strike text-[16px] leading-snug ${
               visualDone ? 'is-done text-ink-faint' : 'text-ink'
             }`}
           >
-            {/* špendlík „Top 3 dne" — jen mimo sekci Na čem záleží,
-                tam by se opakoval u každého řádku */}
-            {task.pinnedFor === todayISO() && !visualDone && showPin && (
-              <svg viewBox="0 0 24 24" className="mr-1 inline-block h-3.5 w-3.5 -translate-y-px text-accent" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 3.5h6l-.8 5.2 3.3 3.1H6.5l3.3-3.1z" />
-                <path d="M12 11.8V20.5" />
-              </svg>
-            )}
-            {prio && !visualDone && (
-              <span
-                className={`mr-2 inline-block h-[7px] w-[7px] -translate-y-px rounded-full align-middle ${prio.cls}`}
-                title={prio.label}
-              >
-                <span className="sr-only">{prio.label}: </span>
-              </span>
-            )}
+            {prio && !visualDone && <span className="sr-only">{prio.label}: </span>}
             {task.title}
           </div>
-          {(client || project || (showDate && task.dueDate) || task.dueTime || subs.length > 0 || task.priority === 'low' || task.recurrenceRule || task.sourceTemplateItemId || task.todoistId || task.todoistUnread) && (
+          {(pinned || client || project || (showDate && task.dueDate) || task.dueTime || subs.length > 0 || task.priority === 'low' || task.recurrenceRule || task.sourceTemplateItemId || task.todoistId || task.todoistUnread) && (
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
+              {/* špendlík „Top 3 dne" — jen mimo sekci Na čem záleží, tam by
+                  stál u každého řádku. Stojí mezi ostatními značkami úkolu
+                  (checklist, opakování, Todoist), ne před názvem: před názvem
+                  odsouval text a lámal levou hranu seznamu stejně jako tečka. */}
+              {pinned && (
+                <span className="inline-flex items-center text-accent-deep" title="Top 3 dne">
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 3.5h6l-.8 5.2 3.3 3.1H6.5l3.3-3.1z" />
+                    <path d="M12 11.8V20.5" />
+                  </svg>
+                  <span className="sr-only">připnuto na dnešek</span>
+                </span>
+              )}
               {client && (
                 <span className="inline-flex items-center gap-1.5 text-ink-soft">
                   <span className="h-2 w-2 rounded-full" style={{ background: client.color }} />

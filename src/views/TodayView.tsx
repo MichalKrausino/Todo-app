@@ -368,7 +368,7 @@ export function TodayView({
           se dnes mění: návrh (ráno), schůzka (během dne), uzávěrka
           (večer), signály a inbox (kdykoli). */}
       {(navrhy.length > 0 || events.length > 0 || (isEvening && unfinished.length > 0) || signaly.length > 0 || inbox.length > 0) && (
-        <div className="rise -mx-4 flex gap-2 overflow-x-auto px-4 pb-1" style={{ scrollbarWidth: 'none', ...stagger(1) }}>
+        <div className="radka-mizi rise -mx-4 flex gap-2 overflow-x-auto px-4 pb-1" style={{ scrollbarWidth: 'none', ...stagger(1) }}>
           {navrhy.length > 0 && (
             <Chip tone="accent" className="relative overflow-hidden" onClick={() => setNavrhOpen(true)}>
               {/* BorderBeam (magicui): světlo obíhá jediný chip, který napsal server */}

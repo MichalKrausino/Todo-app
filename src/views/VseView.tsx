@@ -154,7 +154,7 @@ export function VseView({
       {/* Cesta zpátky je vidět. Dvojité ťuknutí na Dnes vrátí totéž, ale
           na skryté gesto se nikdo nespoléhá — kdo sem spadl omylem, musí
           ven bez hádání. */}
-      <div className="rise -mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1" style={{ scrollbarWidth: 'none', ...stagger(1) }}>
+      <div className="radka-mizi rise -mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1" style={{ scrollbarWidth: 'none', ...stagger(1) }}>
         {/* Vlastní aria-label: viditelné „Dnes" je v něm obsažené (WCAG
             label-in-name), ale pro čtečku i pro testy je řádka doku
             jednoznačná — jinak jsou v dokumentu dvě tlačítka „Dnes". */}

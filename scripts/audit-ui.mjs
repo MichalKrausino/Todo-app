@@ -211,6 +211,39 @@ async function zmer(kde, root = 'main', jenKontrast = false) {
       }
     }
 
+    // J) Názvy úkolů v jednom seznamu musí začínat na téže levé hraně.
+    //    Levá hrana textu je v seznamu ta nejsilnější linka, kterou tam
+    //    typografie má, a rozbije se nenápadně: stačí dát před název
+    //    cokoli v toku (tečka priority, špendlík) a řádek se odsune o
+    //    šířku té značky. Změřeno se třemi různými hranami v seznamu o
+    //    čtyřech řádcích (70 / 85 / 103 px). Bere se první řádka textu,
+    //    ne rám celého uzlu — zalomený název má levou hranu u druhé řádky.
+    for (const ul of jenKontrast ? [] : oblast.querySelectorAll('ul')) {
+      const hranyNazvu = new Map()
+      for (const li of ul.children) {
+        const t = li.querySelector('.title-strike')
+        if (!t || !videt(t)) continue
+        const w = document.createTreeWalker(t, NodeFilter.SHOW_TEXT)
+        let n, uzel = null
+        while ((n = w.nextNode())) {
+          const rodic = n.parentElement
+          if (rodic && rodic.classList.contains('sr-only')) continue
+          if (n.textContent.trim()) { uzel = n; break }
+        }
+        if (!uzel) continue
+        const rg = document.createRange(); rg.selectNodeContents(uzel)
+        const prvni = rg.getClientRects()[0]
+        if (!prvni || prvni.width === 0) continue
+        const k = Math.round(prvni.left)
+        hranyNazvu.set(k, [...(hranyNazvu.get(k) || []), uzel.textContent.trim().slice(0, 18)])
+      }
+      if (hranyNazvu.size > 1) {
+        const rozpis = [...hranyNazvu.entries()].sort((a, b) => a[0] - b[0])
+          .map(([k, v]) => k + 'px "' + v[0] + '"').join('   |   ')
+        out.push({ typ: 'hrana nazvu', popis: rozpis, vlevo: 0, vpravo: 0 })
+      }
+    }
+
     const okraje = new Map()
     // sekce obrazovky: sestoupit přes obaly s jediným dítětem (clip obal
     // a BlurFade v App.tsx) až ke kořeni pohledu, který má sekce pod sebou
@@ -338,9 +371,31 @@ await page.evaluate(() => {
 await page.waitForTimeout(400)
 await projdi('[tma]', true)
 
-// Vědomé výjimky: hlavička detailu klienta se uhýbá plovoucím ikonám
-// vpravo nahoře (header má pr-24), aby jméno neběželo pod lupu a obláček.
-const povoleno = (n) => n.kde === 'Detail klienta' && n.typ === 'v ramecku' && n.vpravo === 96
+// Zaměření nesmí prvek přetvarovat. Pravidlo `:focus-visible` dřív
+// nastavovalo `border-radius: 6px` na prvek samotný, takže se pilulka
+// hledání při zaměření změnila na obdélník — a panel hledání se zaměřuje
+// sám, takže to nebyla teoretická vada, ale to první, co člověk viděl
+// pokaždé, když si otevřel hledání. Obrys sleduje zaoblení prvku sám.
+await page.getByRole('button', { name: 'Dnes', exact: true }).click(); await page.waitForTimeout(400)
+await page.getByRole('button', { name: 'Hledat' }).click(); await page.waitForTimeout(700)
+const tvar = await page.evaluate(() => {
+  const el = document.activeElement
+  if (!el || el.tagName !== 'INPUT') return null
+  const s = getComputedStyle(el)
+  return { r: parseFloat(s.borderTopLeftRadius), v: el.getBoundingClientRect().height }
+})
+if (!tvar) {
+  nalezy.push({ kde: 'Hledani', typ: 'tvar pri fokusu', popis: 'pole hledani se nezaostrilo', vlevo: 0, vpravo: 0 })
+} else if (tvar.r < tvar.v / 2 - 1) {
+  nalezy.push({ kde: 'Hledani', typ: 'tvar pri fokusu', popis: 'pilulka se pri zaostreni zmenila na obdelnik (radius ' + tvar.r + ' pri vysce ' + Math.round(tvar.v) + ')', vlevo: 0, vpravo: 0 })
+}
+await page.keyboard.press('Escape'); await page.waitForTimeout(300)
+
+// Vědomých výjimek tu žádná není. Dřív jedna platila pro hlavičku detailu
+// klienta, která se celá uhýbala plovoucím ikonám (`pr-24`) — od chvíle,
+// kdy si místo bere jen první řádka jména plovoucí rozpěrkou, se hlavička
+// drží okraje stránky jako všechno ostatní a výjimka není na co.
+const povoleno = () => false
 for (const k of konzole) nalezy.push({ kde: 'Konzole', typ: 'konzole', popis: k, vlevo: 0, vpravo: 0 })
 const zbyva = nalezy.filter((n) => !povoleno(n))
 console.log(zbyva.length === 0 ? 'Vse symetricke a na prst dost velke.' : 'Nalezy (' + zbyva.length + '):')

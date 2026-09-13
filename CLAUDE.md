@@ -9,9 +9,10 @@ zdůvodnění rozhodnutí a roadmapa fází: **`docs/PLAN.md`** — před větš
 - `npm run build` — typecheck (`tsc`) + produkční build
 - `npm test` — vitest (hlavně parser rychlého zadávání)
 - `npm run typecheck` — jen typecheck
-- `npm run audit:ui` — proměří symetrii, hrany prvků nad sebou, velikost
-  cílů pro prst, přístupné názvy polí a **kontrast textu** (WCAG AA) na
-  všech obrazovkách i v panelech, ve světlém i tmavém režimu.
+- `npm run audit:ui` — proměří symetrii, hrany prvků nad sebou, **levou
+  hranu názvů v seznamu**, velikost cílů pro prst, přístupné názvy polí,
+  **kontrast textu** (WCAG AA) a to, že **zaměření prvek nepřetvaruje**,
+  na všech obrazovkách i v panelech, ve světlém i tmavém režimu.
   **Odsazení, mezery i barvy posuzuj z něj, ne okem.** Šířku bere
   `--sirka=320` (iPhone SE) / `390` / `430` — na úzkém displeji se rozsype
   to, co na širokém projde, takže před commitem projeď aspoň 320 a 390.
@@ -182,12 +183,55 @@ opravdový stín má to, co plave (`--shadow-float`: plusko, toast). Dřív měl
 obrys každý prvek — karty, kulatá tlačítka nahoře, dok — a když má obrys
 všechno, nezvedá se nic. Stejně tak: oddělovače v seznamu úkolů vedou
 **od textu, ne od kraje** (`.task-li` v `index.css`, rodič dál dává
-`divide-y`), priorita je **tečka před názvem** (červená kritická, oranžová
-vysoká; jméno zůstává pro čtečku), zaškrtávátko má 24 px a obrys `edge`,
+`divide-y`), zaškrtávátko má 24 px a obrys `edge` — a **jeho obrys nese
+prioritu** (`border-danger` kritická, `border-note-ink` vysoká; jméno
+zůstává pro čtečku). Dřív to byla tečka před názvem, jenže stála v toku
+textu a odsouvala název o svou šířku: v seznamu o čtyřech řádcích pak
+názvy začínaly na třech různých místech (změřeno 70 / 85 / 103 px) a
+totéž dělal špendlík „Top 3 dne" (ten je teď mezi ostatními značkami
+úkolu). **Levá hrana textu je v seznamu ta nejsilnější linka, kterou tam
+typografie má** — před název nepatří v toku nic; hlídá to audit
+rozhraní (`hrana nazvu`) na každém `ul`, po první řádce textu, ne po
+rámu uzlu. Oranžová je `note-ink`, ne plná `amber`: plná má na bílé
+kartě 2,2 : 1, což je pod prahem 3 : 1 pro prvek, který něco znamená
+(změřeno). Dál platí:
 hlavička Dnes je titulek + **jedna řádka** s kroužkem postupu (SVG, animuje
 `stroke-dashoffset`), dny v Plánu jsou řádky s pruhem času na papíře, ne dlaždice v kartě,
 primární akce mimo dok jsou tiché pilulky `well`, prázdné stavy prostý
 text bez tečkovaného rámečku.
+
+**Jedna svislice přes celou obrazovku.** Nadpis sekce (`.section-label`),
+hlavička měsíce v Plánu, hrana karty i řádka dne začínají na **16 px**,
+tedy na okraji stránky. Dřív měl `.section-label` `padding-inline: 4px`
+a hlavička měsíce `px-1`, takže „Září" stálo na 20 a „13" pod ním na 16 —
+čtyři pixely, které oko nepojmenuje, ale vidí je jako nepořádek. Stejná
+kázeň platí pro hlavičku detailu klienta: **místo pro plovoucí lupu
+a obláček si bere jen první řádka jména** (plovoucí rozpěrka 84 × 1 px
+uvnitř `h1`), ne celá hlavička. Dokud se uhýbalo `pr-24`, ubíralo se
+96 px i tam, kde žádná ikona není, a jméno se **uřízlo** („Ondra Fré…")
+na obrazovce, kde bylo místa dost. Jméno člověka se zalomí, neuřízne.
+
+**Co ujede za okraj, se rozplyne** (`.radka-mizi` v `index.css`).
+Vodorovně scrollující řádky pilulek — chipy na Dnes, v Plánu, ve Vše
+a u klienta, řádka slotů v detailu úkolu — mizely pod hranou displeje
+řezem, bez jediného náznaku, že tam něco je (změřeno: slot „Opakování"
+skrýval 208 px, chipy na Dnes 55 px). Maska sedí **přesně na přesahu
+záporné marže** (16 px, `-mx-4 px-4`), takže dokud se neroluje, není
+vidět: v přesahu nic nestojí a maska průhledné plochy nic nezmění.
+Proto ji dostávají jen řádky, které k okraji schválně přetékají —
+řádka zapuštěná v panelu by si zprůhlednila první i poslední pilulku.
+
+**Prstenec zaměření nesmí prvek přetvarovat.** `:focus-visible` bydlí
+v `@layer base`, aby ho přebilo `outline-none`, o které si říká každé
+pole v appce — teprve pak je vidět stav, který si pole samo navrhlo
+(obrys v akcentu, světlejší podklad). A hlavně: pravidlo **nesmí nastavovat
+`border-radius`**. Dokud ho nastavovalo (na 6 px), měnila se při zaměření
+kulatá pilulka hledání na obdélník — a protože se panel hledání zaměřuje
+sám, bylo to první, co člověk viděl pokaždé, když si hledání otevřel.
+Obrys sleduje zaoblení prvku sám od sebe. Měkký roh tam, kde si prvek
+žádné zaoblení neurčil, dává `:where(a, button, summary, [role=button])`
+— nulová specifičnost, takže každé `rounded-*` z markupu vyhraje.
+Obojí hlídá audit rozhraní (`tvar pri fokusu`).
 
 **Knihovny pohybu a prvků** (`src/components/ui/`, motor `motion` 13):
 každá komponenta nese v hlavičce původ a je přepsaná do tokenů appky —
