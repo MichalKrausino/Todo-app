@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Client, Task } from '../db/types'
 import {
@@ -154,36 +154,50 @@ export function TodayView({
   const pamet = useNavrhPamet()
   const events = useLiveQuery(() => calendarEventsOn(today), [today]) ?? []
 
-  const clientMap = new Map(clients.map((c) => [c.id, c]))
-  const projectMap = new Map(projects.map((p) => [p.id, p]))
+  // Odvozená data se počítají ze VSTUPŮ, ne při každém překreslení.
+  // Obrazovka se překresluje i když se jen otevře panel nebo tikne minuta —
+  // a bez `useMemo` se při každém takovém překreslení znovu procházelo
+  // a třídilo všech 400 úkolů. `useLiveQuery` vrací tutéž referenci,
+  // dokud se dotaz znovu nespustí, takže závislosti drží.
+  const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients])
+  const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
 
-  const overdue = sortTasks(
-    open.filter((t) => {
-      const d = effectiveDate(t)
-      return d !== undefined && d < today
+  const { overdue, todays, inbox } = useMemo(
+    () => ({
+      overdue: sortTasks(
+        open.filter((t) => {
+          const d = effectiveDate(t)
+          return d !== undefined && d < today
+        }),
+      ),
+      todays: sortTasks(open.filter((t) => effectiveDate(t) === today)),
+      inbox: sortTasks(open.filter((t) => !effectiveDate(t))),
     }),
+    [open, today],
   )
-  const todays = sortTasks(open.filter((t) => effectiveDate(t) === today))
-  const inbox = sortTasks(open.filter((t) => !effectiveDate(t)))
 
   const planned = todays.length + done.length
   const progress = planned > 0 ? done.length / planned : 0
   const allDone = planned > 0 && done.length === planned && overdue.length === 0
 
   // Kapacita dne: tichý součet odhadů vs. volno v kalendáři (když je).
-  const unfinished = [...overdue, ...todays]
-  const busy: BusyInterval[] = events
-    .filter((e) => !e.allDay)
-    .map((e) => {
-      const s = new Date(e.start)
-      const en = new Date(e.end)
-      return { startMin: s.getHours() * 60 + s.getMinutes(), endMin: en.getHours() * 60 + en.getMinutes() }
-    })
+  const unfinished = useMemo(() => [...overdue, ...todays], [overdue, todays])
+  const busy: BusyInterval[] = useMemo(
+    () =>
+      events
+        .filter((e) => !e.allDay)
+        .map((e) => {
+          const s = new Date(e.start)
+          const en = new Date(e.end)
+          return { startMin: s.getHours() * 60 + s.getMinutes(), endMin: en.getHours() * 60 + en.getMinutes() }
+        }),
+    [events],
+  )
   // Volno se počítá od TEĎ do konce pracovní doby — ve dvě odpoledne
   // nemá smysl hlásit celodenních osm hodin. Po pracovní době je nula.
   const restStart = Math.min(Math.max(nowMin, WORK_START), WORK_END)
   const freeMin = events.length > 0 ? freeMinutes(busy, restStart) : null
-  const workMin = plannedMinutes(unfinished)
+  const workMin = useMemo(() => plannedMinutes(unfinished), [unfinished])
   const overloaded = isOverloaded(workMin, freeMin)
   // Volná okna zbývající do konce pracovní doby (pro panel kalendáře).
   const gaps = freeGaps(busy, restStart).filter((g) => g.endMin - g.startMin >= MIN_GAP_MIN && g.endMin > nowMin)
@@ -216,9 +230,12 @@ export function TodayView({
     setDayClosed(true)
   }
 
-  const toggle = (t: Task) => {
+  // Stabilní obsluha: `TaskRow` je přes `memo`, takže nová funkce při
+  // každém překreslení by mu memoizaci zrušila a překreslilo by se všech
+  // třicet řádků kvůli otevření panelu.
+  const toggle = useCallback((t: Task) => {
     void (t.status === 'done' ? reopenTask(t.id) : completeTask(t.id))
-  }
+  }, [])
 
   const row = (t: Task, showDate = true) => (
     <TaskRow
@@ -235,27 +252,38 @@ export function TodayView({
   // Pořadí v seznamu: připnuté (Top 3 dne), propadlé, dnešní. Připnuté
   // nese špendlík na řádku, propadlé červené datum — vlastní sekce
   // s nadpisem k tomu nepotřebují.
-  const isPinned = (t: Task) => t.pinnedFor === today
-  const pinned = sortTasks(unfinished.filter(isPinned))
-  const visOverdue = overdue.filter((t) => !isPinned(t))
-  const visTodays = todays.filter((t) => !isPinned(t))
-  const poradi: Polozka[] = [
-    ...pinned.map((t) => ({ task: t, showDate: effectiveDate(t) !== today })),
-    ...visOverdue.map((t) => ({ task: t, showDate: true })),
-    ...visTodays.map((t) => ({ task: t, showDate: false })),
-  ]
+  const { visOverdue, poradi } = useMemo(() => {
+    const isPinned = (t: Task) => t.pinnedFor === today
+    const pinned = sortTasks(unfinished.filter(isPinned))
+    const vo = overdue.filter((t) => !isPinned(t))
+    const vt = todays.filter((t) => !isPinned(t))
+    return {
+      visOverdue: vo,
+      poradi: [
+        ...pinned.map((t) => ({ task: t, showDate: effectiveDate(t) !== today })),
+        ...vo.map((t) => ({ task: t, showDate: true })),
+        ...vt.map((t) => ({ task: t, showDate: false })),
+      ] as Polozka[],
+    }
+  }, [unfinished, overdue, todays, today])
   const otevrene = poradi.length
-  const viditelne = poradi.slice(0, limit)
+  const viditelne = useMemo(() => poradi.slice(0, limit), [poradi, limit])
   const zbyva = otevrene - viditelne.length
 
   // Seskupení po klientech (jen když jich dnes je víc než jeden).
-  const klientiDnes = [...new Set(poradi.map((p) => p.task.clientId).filter((id): id is string => !!id && clientMap.has(id)))]
-  const skupiny: Array<{ client?: Client; polozky: Polozka[] }> = (() => {
+  const klientiDnes = useMemo(
+    () => [...new Set(poradi.map((p) => p.task.clientId).filter((id): id is string => !!id && clientMap.has(id)))],
+    [poradi, clientMap],
+  )
+  const skupiny: Array<{ client?: Client; polozky: Polozka[] }> = useMemo(() => {
     if (razeni !== 'klient' || klientiDnes.length < 2) return [{ polozky: viditelne }]
     const map = new Map<string, Polozka[]>()
     for (const p of viditelne) {
       const k = p.task.clientId && clientMap.has(p.task.clientId) ? p.task.clientId : ''
-      map.set(k, [...(map.get(k) ?? []), p])
+      // `push`, ne kopie celého pole při každé položce — to je kvadratické.
+      const uz = map.get(k)
+      if (uz) uz.push(p)
+      else map.set(k, [p])
     }
     return [...map.entries()]
       .sort((a, b) => {
@@ -264,10 +292,10 @@ export function TodayView({
         return clientMap.get(a[0])!.name.localeCompare(clientMap.get(b[0])!.name, 'cs')
       })
       .map(([id, polozky]) => ({ client: id ? clientMap.get(id) : undefined, polozky }))
-  })()
+  }, [razeni, klientiDnes, viditelne, clientMap])
 
   // Kontext: ranní návrh, nejbližší schůzka, uzávěrka, signály, inbox.
-  const taskById = new Map(open.map((t) => [t.id, t]))
+  const taskById = useMemo(() => new Map(open.map((t) => [t.id, t])), [open])
   const navrhy = (dayPlan?.suggestions ?? [])
     .filter((s) => s.decision === 'ignored' && taskById.has(s.taskId))
     .map((s) => ({ task: taskById.get(s.taskId)!, reason: s.reason }))
@@ -280,11 +308,14 @@ export function TodayView({
   const dalsi = events
     .filter((e) => !e.allDay && minutesOfDay(e.start) > nowMin)
     .sort((a, b) => minutesOfDay(a.start) - minutesOfDay(b.start))[0]
-  const signaly = signalRadky(computeSignals(clients, projects, [...open, ...done], today), {
-    onOpenClient,
-    onOpenTask,
-    onOpenInbox,
-  })
+  // `computeSignals` projde několikrát všechny úkoly i klienty — nejdražší
+  // výpočet obrazovky. Na otevřeném panelu ani na tiknutí minuty nezávisí,
+  // takže se drží stranou od překreslení.
+  const signalyData = useMemo(
+    () => computeSignals(clients, projects, [...open, ...done], today),
+    [clients, projects, open, done, today],
+  )
+  const signaly = signalRadky(signalyData, { onOpenClient, onOpenTask, onOpenInbox })
   const timeFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
 
   return (

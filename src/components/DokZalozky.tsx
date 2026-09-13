@@ -42,7 +42,7 @@
 // Klidový režim: čočka skáče bez pružiny, nic se nezvedá ani nesvítí —
 // audit chování počítá běžící animace.
 
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { animate, motion, useMotionValue, useSpring, useTransform, useVelocity, type MotionValue } from 'motion/react'
 import { klidovyRezim } from '../lib/motion'
 import { vyhodnotStisk, type Stisk } from '../lib/dvojklik'
@@ -70,6 +70,18 @@ const PRAH_TAHU = 6
 
 type Kontext = {
   registruj: (id: string, el: HTMLElement | null) => void
+  /**
+   * Střed ikony vůči pásu — ČTE SE Z CACHE, neměří se.
+   * Dřív si ho každá ikona počítala uvnitř `useTransform`, tedy při každém
+   * snímku pohybu čočky: tři ikony × dvě `getBoundingClientRect` × 60 fps,
+   * proložené zápisy stylů = vynucený přepočet rozvržení. V profilu
+   * přepnutí záložky to byla nejdražší položka vůbec (65 ms vlastního času,
+   * víc než všechny funkce appky dohromady). Poloha ikony přitom na pohybu
+   * čočky vůbec nezávisí — mění se jen se ZMĚNOU ROZVRŽENÍ, a tu hlásí
+   * `ResizeObserver` (pás i jednotlivé ikony, kvůli zvětšování pod kurzorem)
+   * plus přeměření při stisku.
+   */
+  stredIkony: (id: string) => number | null
   /** střed čočky vůči pásu — pro ikony, kolem kterých projíždí */
   stred: MotionValue<number>
   /** zdvih čočky 1…ZDVIH — ikony se pod letícím sklem nadzvednou */
@@ -112,10 +124,23 @@ export function DokZalozky({
   const klid = klidovyRezim()
   const pas = useRef<HTMLDivElement>(null)
   const ikony = useRef(new Map<string, HTMLElement>())
-  const registruj = (id: string, el: HTMLElement | null) => {
-    if (el) ikony.current.set(id, el)
-    else ikony.current.delete(id)
-  }
+  // Změřené středy ikon. Přepočítávají se při změně rozvržení, ne za pohybu.
+  const stredy = useRef(new Map<string, number>())
+  // Hlídač velikosti JEDNOTLIVÝCH ikon: Dock z magicui je pod kurzorem
+  // zvětšuje, čímž posune i své sousedy — a posun sám o sobě `ResizeObserver`
+  // nespustí, proto se při každém hlášení přepočítají všechny.
+  const roIkony = useRef<ResizeObserver | null>(null)
+  const registruj = useCallback((id: string, el: HTMLElement | null) => {
+    const stary = ikony.current.get(id)
+    if (stary && stary !== el) roIkony.current?.unobserve(stary)
+    if (el) {
+      ikony.current.set(id, el)
+      roIkony.current?.observe(el)
+    } else {
+      ikony.current.delete(id)
+      stredy.current.delete(id)
+    }
+  }, [])
 
   // Poloha: jedna pružina na střed čočky. Tvar se nemění — šířka je
   // pevná, čočka jen klouže.
@@ -194,11 +219,28 @@ export function DokZalozky({
   // přijíždí zmenšený (scale 0,94) a čočka se usazuje ještě během
   // nájezdu — bez přepočtu by z rectů vyšla poloha o 6 % blíž ke kraji
   // a čočka by po každém startu stála o 2 px vedle.
+  // Přeměří VŠECHNY ikony naráz — jeden rect pásu na celou dávku místo
+  // jednoho na ikonu. Volá se jen při změně rozvržení a při stisku.
+  const preemer = () => {
+    const p = pas.current
+    if (!p) return
+    const rp = p.getBoundingClientRect()
+    const meritko = p.offsetWidth > 0 && rp.width > 0 ? rp.width / p.offsetWidth : 1
+    for (const [id, el] of ikony.current) {
+      const r = el.getBoundingClientRect()
+      stredy.current.set(id, (r.left - rp.left + r.width / 2) / meritko)
+    }
+  }
   const stredIkony = (id: string): number | null => {
+    const z = stredy.current.get(id)
+    if (z !== undefined) return z
+    // Ještě se neměřilo (první vykreslení) — změřit teď a zapamatovat.
     const el = ikony.current.get(id)
     const p = pas.current
     if (!el || !p) return null
-    return stredVuciPasu(el, p)
+    const v = stredVuciPasu(el, p)
+    stredy.current.set(id, v)
+    return v
   }
   const skoc = (s: number) => {
     cil.jump(s)
@@ -230,6 +272,8 @@ export function DokZalozky({
     if (!p || typeof ResizeObserver === 'undefined') return
     let prvni = true
     const ro = new ResizeObserver(() => {
+      // Měřit VŽDYCKY — přeskakuje se jen skok čočky, ne obnova cache.
+      preemer()
       if (prvni) {
         prvni = false
         return
@@ -238,8 +282,16 @@ export function DokZalozky({
       if (s !== null) skoc(s)
     })
     ro.observe(p)
+    // Vlastní hlídač na ikony: ten smí jen přeměřit. Kdyby sdílel `prvni`
+    // s pásem, spotřeboval by ho svým okamžitým prvním hlášením a čočka by
+    // po startu skočila na cíl dřív, než pružina vyrazí (přesně ta chyba,
+    // kvůli které nebyl let nikdy vidět).
+    roIkony.current = new ResizeObserver(() => preemer())
+    for (const el of ikony.current.values()) roIkony.current.observe(el)
     return () => {
       ro.disconnect()
+      roIkony.current?.disconnect()
+      roIkony.current = null
       if (let_.current?.pojistka) clearTimeout(let_.current.pojistka)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -277,6 +329,9 @@ export function DokZalozky({
   }
   const stisk = (e: React.PointerEvent) => {
     if (e.button !== 0) return
+    // Pojistka proti zastaralé cache: stisk je lidské tempo, jedno
+    // přeměření tu nic nestojí a gesto pak stojí na čerstvých polohách.
+    preemer()
     tah.current = { id: e.pointerId, x0: e.clientX, tahne: false }
     pas.current?.setPointerCapture(e.pointerId)
     setStisknuto(nejblizsi(e.clientX))
@@ -327,7 +382,7 @@ export function DokZalozky({
   }
 
   return (
-    <Ctx.Provider value={{ registruj, stred, zdvih, stisknuto, klid }}>
+    <Ctx.Provider value={{ registruj, stredIkony, stred, zdvih, stisknuto, klid }}>
       <div
         ref={pas}
         className={`relative ${className ?? ''}`}
@@ -385,12 +440,14 @@ export function DokZalozka({
   const fallback = useMotionValue(0)
   const fallbackZdvih = useMotionValue(1)
   // Vzdálenost středu čočky od středu ikony (kladná = čočka je vpravo).
+  // Jen odečtení dvou čísel. Dřív se tu při každém snímku prošel DOM
+  // (`closest`) a četlo rozvržení (dva `getBoundingClientRect`) — poloha
+  // ikony přitom na pohybu čočky nezávisí, viz `stredIkony` v kontextu.
+  const stredIkony = ctx?.stredIkony
   const odstup = useTransform(ctx?.stred ?? fallback, (s: number) => {
-    const el = ref.current
-    if (!el || ctx?.klid) return Infinity
-    const p = el.closest<HTMLElement>('[data-pas]')
-    if (!p) return Infinity
-    return s - stredVuciPasu(el, p)
+    if (ctx?.klid || !stredIkony) return Infinity
+    const c = stredIkony(id)
+    return c === null ? Infinity : s - c
   })
   const DOSAH = 64
   const blizkost = useTransform(odstup, (d: number) => {

@@ -55,7 +55,10 @@ export function vseSkupiny(ukoly: Task[], dnes: string, serad: (t: Task[]) => Ta
   const mapa = new Map<KosId, Task[]>()
   for (const t of ukoly) {
     const id = zaradDoKose(denUkolu(t), dnes)
-    mapa.set(id, [...(mapa.get(id) ?? []), t])
+    // `push`, ne kopie pole na každý úkol — to je kvadratická práce.
+    const uz = mapa.get(id)
+    if (uz) uz.push(t)
+    else mapa.set(id, [t])
   }
   return PORADI.filter((id) => (mapa.get(id)?.length ?? 0) > 0).map((id) => ({
     id,

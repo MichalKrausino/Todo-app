@@ -16,7 +16,7 @@
 // přisypaly sem, byl by z „vše" archiv a číslo v hlavičce by lhalo o tom,
 // kolik práce zbývá. Podtitulek to říká nahlas, ne mezi řádky.
 
-import { Fragment, useState } from 'react'
+import { Fragment, useCallback, useState, useMemo } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Task } from '../db/types'
 import { allClients, allProjects, completeTask, openTasks, reopenTask, sortTasks } from '../db/repo'
@@ -73,18 +73,24 @@ export function VseView({
   const open = openRaw ?? []
   const clients = useLiveQuery(allClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []
-  const clientMap = new Map(clients.map((c) => [c.id, c]))
-  const projectMap = new Map(projects.map((p) => [p.id, p]))
+  const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients])
+  const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
 
-  const propadle = vseSkupiny(open, dnes, sortTasks).find((k) => k.id === 'poTerminu')?.ukoly ?? []
+  // Koše se počítaly dvakrát za překreslení — jednou kvůli propadlým
+  // a podruhé kvůli seznamu. Je to týž průchod všemi úkoly.
+  const kose = useMemo(() => vseSkupiny(open, dnes, sortTasks), [open, dnes])
+  const propadle = useMemo(() => kose.find((k) => k.id === 'poTerminu')?.ukoly ?? [], [kose])
 
-  const skupiny: Skupina[] =
-    razeni === 'klient'
+  const skupiny: Skupina[] = useMemo(
+    () =>
+      razeni === 'klient'
       ? (() => {
           const map = new Map<string, Task[]>()
           for (const t of open) {
             const k = t.clientId && clientMap.has(t.clientId) ? t.clientId : ''
-            map.set(k, [...(map.get(k) ?? []), t])
+            const uz = map.get(k)
+            if (uz) uz.push(t)
+            else map.set(k, [t])
           }
           return [...map.entries()]
             .sort((a, b) => {
@@ -100,7 +106,9 @@ export function VseView({
               ukoly: sortTasks(ukoly),
             }))
         })()
-      : vseSkupiny(open, dnes, sortTasks).map((k) => ({ klic: k.id, jmeno: k.jmeno, ukoly: k.ukoly }))
+      : kose.map((k) => ({ klic: k.id, jmeno: k.jmeno, ukoly: k.ukoly })),
+    [razeni, open, kose, clientMap],
+  )
 
   // Strop platí na CELÝ seznam, ne na každou skupinu zvlášť — jinak by
   // šest košů po třiceti řádcích bylo sto osmdesát řádků místo třiceti.
@@ -114,9 +122,11 @@ export function VseView({
     .filter((s) => s.ukoly.length > 0)
   const zbyva = open.length - Math.min(open.length, limit)
 
-  const toggle = (t: Task) => {
+  // Stabilní identita kvůli `memo` na `TaskRow` — nová funkce při každém
+  // překreslení by memoizaci zrušila a řádky by se překreslily všechny.
+  const toggle = useCallback((t: Task) => {
     void (t.status === 'done' ? reopenTask(t.id) : completeTask(t.id))
-  }
+  }, [])
 
   const row = (t: Task) => (
     <TaskRow
