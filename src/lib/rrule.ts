@@ -96,17 +96,43 @@ export function presetFromRule(ruleStr: string): RecurrencePreset | 'custom' {
     if (interval === 2) return 'biweekly'
     return 'custom'
   }
+  // Měsíční a roční předvolby umí jen den v měsíci (BYMONTHDAY). Pravidlo
+  // s dnem v týdnu — „každé první pondělí v měsíci", BYDAY=1MO — do nich
+  // nepatří: `partsFromRule` by z něj vzalo jen „pondělí", zahodilo pořadí
+  // a `ruleFromParts` by ho přepsalo na „každého 1. v měsíci". Úkol by se
+  // tiše přestal opakovat tehdy, kdy má. Takové pravidlo je „custom" —
+  // nechá se být a jen se ukáže.
+  const vTydnu = Array.isArray(o.byweekday) ? o.byweekday.length > 0 : o.byweekday != null
   if (o.freq === RRule.MONTHLY) {
+    if (vTydnu) return 'custom'
     if (interval === 1) return 'monthly'
     if (interval === 3) return 'quarterly'
     return 'custom'
   }
-  if (o.freq === RRule.YEARLY) return interval === 1 ? 'yearly' : 'custom'
+  if (o.freq === RRule.YEARLY) return interval === 1 && !vTydnu ? 'yearly' : 'custom'
   return 'custom'
 }
 
 const dayNumber = (v: unknown): number =>
   typeof v === 'number' ? v : (v as { weekday: number }).weekday
+
+// Plná jména pro pořadové dny (rrule čísluje 0=PO..6=NE). Zkratka by
+// v „1. po" vypadala jako překlep; ve výčtu „(po, čt)" naopak sedí.
+const DAY_NAMES = ['pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota', 'neděle'] as const
+
+// „1. pondělí", „poslední pátek" — pořadový den v měsíci (BYDAY=1MO,
+// BYDAY=-1FR). Bez čísla (BYDAY=MO u měsíčního pravidla) zůstane jen den.
+function poradoveDny(o: Partial<Options>): string | undefined {
+  const dny = Array.isArray(o.byweekday) ? o.byweekday : o.byweekday != null ? [o.byweekday] : []
+  if (!dny.length) return undefined
+  return dny
+    .map((w) => {
+      const n = typeof w === 'object' && w !== null ? (w as { n?: number | null }).n : undefined
+      const rad = n === -1 ? 'poslední ' : n ? `${n}. ` : ''
+      return rad + DAY_NAMES[dayNumber(w)]
+    })
+    .join(', ')
+}
 
 // Krátký český popis pravidla, např. „každé 2 týdny (pá)", „měsíčně 15."
 export function humanizeRule(ruleStr: string): string {
@@ -130,13 +156,16 @@ export function humanizeRule(ruleStr: string): string {
     return `každé ${interval} týdny${day}`
   }
   if (o.freq === RRule.MONTHLY) {
-    const day = dom ? ` ${dom}.` : ''
+    const rady = poradoveDny(o)
+    const day = rady ? ` (${rady})` : dom ? ` ${dom}.` : ''
     if (interval === 1) return `měsíčně${day}`
     if (interval === 3) return `čtvrtletně${day}`
     return `každé ${interval} měsíce${day}`
   }
   if (o.freq === RRule.YEARLY) {
     const month = Array.isArray(o.bymonth) ? o.bymonth[0] : o.bymonth
+    const rady = poradoveDny(o)
+    if (rady) return month ? `ročně ${rady} v ${month}. měsíci` : `ročně ${rady}`
     return dom && month ? `ročně ${dom}. ${month}.` : 'ročně'
   }
   return ruleStr
