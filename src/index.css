@@ -104,6 +104,12 @@
   --vvh: 100dvh;
   --vv-bottom: 0px;
   --dock-safe: env(safe-area-inset-bottom);
+
+  /* Podklad řádku úkolu. Řádek musí být neprůhledný — pod ním leží
+     barvy, které odkrývá tah prstem — ale na kterou plochu je položený,
+     rozhoduje místo: uvnitř karty je bílý, na papíře je papír
+     (viz `.seznam-na-papire`). */
+  --radek-podklad: var(--color-card);
 }
 
 html,
@@ -250,6 +256,58 @@ body {
   height: 1px;
   background: var(--color-line);
   pointer-events: none;
+}
+
+/* Seznam úkolů není krabice.
+   Dnes, Vše i detail klienta mají jeden seznam přes celou obrazovku
+   a karta kolem něj nic neoddělovala — jen ubírala 16 px z každé
+   strany a přidávala další obrys tam, kde už jeden je (hairline mezi
+   řádky). Rozdíl papír × karta má smysl u toho, co je vsazené DO
+   stránky (souhrn, nastavení, agenda jednoho dne v Plánu); u seznamu,
+   který stránkou JE, je to krabice kolem všeho.
+
+   Pravidlo je jedno a platí na každém patře: KAŽDÝ box jde k hraně
+   displeje a odsazení 16 px si nese sám. Díky tomu sahá pozadí řádku,
+   stisk i barva pod taženým prstem až tam, kam sahá prst, ale text
+   všude stojí na téže svislici — a audit rozhraní, který u boxu se
+   zápornou marží měří hranu OBSAHU, dostane na každém patře touž
+   odpověď. Když to patro chybělo (`ul` bez odsazení), hlásil rozdíl
+   mezi seznamem (0/320) a řádkou triáže (16/304), i když obojí bylo
+   vidět stejně.
+   Šířku je nutné přepočítat: `w-full` je `width: 100 %` počítaných
+   z ŠÍŘKY RODIČE, tedy bez těch dvakrát šestnácti pixelů — řádka
+   triáže i „hotovo" pak dojely vlevo ke kraji, ale vpravo skončily
+   o 32 px dřív (změřeno 0/320 proti 16/272). A `auto` to nespraví:
+   u `<button>` je `width: auto` šířka OBSAHU, ne rodiče, i s
+   `display: flex` — `hotovo · 1` bylo pak 123 px široké.
+   Řádky (`li`) odsazení nedostanou: uvnitř nich ho nese ten box, který
+   při tahu jede přes odkryté barvy, a ten musí zůstat přes celou šířku,
+   jinak by po stranách prosvítaly. Hlavička skupiny proto taky nosí
+   `px-4` až uvnitř — aby řádky byly navzájem stejné.
+   Podklad řádku je proměnná, ne pevná barva: TaskRow stojí i uvnitř
+   karty (rozbalený den v Plánu) a tam musí zůstat bílý. Přepisovat mu
+   pozadí selektorem nejde — nevrstvené CSS přebíjí utility, takže by
+   spolklo i `hover:` a `active:`, tedy odezvu na stisk. */
+.seznam-na-papire {
+  margin-inline: -16px;
+  padding-inline: 16px;
+  --radek-podklad: var(--color-paper);
+}
+.seznam-na-papire > * {
+  margin-inline: -16px;
+  width: calc(100% + 32px);
+  padding-inline: 16px;
+}
+.seznam-na-papire li {
+  margin-inline: -16px;
+  width: calc(100% + 32px);
+}
+
+/* Hlavička skupiny v seznamu (klient na Dnes, projekt u klienta) je
+   nadpis, ne řádek: linka pod ní by oddělila nadpis od toho, co
+   pojmenovává. Odděluje ji mezera nad ní — typografie místo rámečků. */
+.skupina-li {
+  border-bottom-color: transparent;
 }
 
 /* Prstenec zaměření patří do `base`, ne nad utility. Když stál mimo
