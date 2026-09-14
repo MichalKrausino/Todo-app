@@ -336,6 +336,15 @@ const panely = [
     await otevriKlienta()
     await page.getByRole('button', { name: 'Projekt Meta Ads' }).click()
   }, 1],
+  // Rozbalený rozpad na kroky. Ukázková data mají „Google Ads" a „Meta
+  // Ads", takže si druhý projekt najde kroky v prvním — sbalená řádka
+  // by se změřila jako jeden řádek a seznam s volbami vůbec.
+  ['Projekt (kroky)', async () => {
+    await otevriKlienta()
+    await page.getByRole('button', { name: 'Projekt Meta Ads' }).click(); await page.waitForTimeout(500)
+    const rozpad = page.getByRole('button', { name: /Rozepsat na kroky/ })
+    if (await rozpad.count()) { await rozpad.click(); await page.waitForTimeout(600) }
+  }, 1],
   ['Sablony', async () => { await page.getByRole('button', { name: 'Klienti' }).click(); await page.waitForTimeout(450); await page.getByRole('button', { name: /Šablony/ }).click() }, 1],
 ]
 // Celý průchod se pouští dvakrát: světlá paleta se měří celá, tmavá jen

@@ -236,6 +236,73 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 4b. rozpad projektu na kroky (Fáze 5) ---
+// Nabídka smí čerpat JEN z vlastní historie, takže se musí ověřit celý
+// řetěz: úkol zařazený do jednoho projektu → podobně pojmenovaný druhý
+// projekt → nabídka → přidání → vratnost. A hlavně že se u projektu,
+// kterému se nic nepodobá, nenabízí vůbec nic — ticho je tu odpověď.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  await page.getByRole('button',{name:'Klienti',exact:true}).click(); await page.waitForTimeout(500)
+  await page.getByRole('button',{name:'+ Nový'}).first().click(); await page.waitForTimeout(400)
+  await page.getByRole('textbox',{name:'Jméno klienta nebo oblasti'}).fill('Rozpad')
+  await page.getByRole('button',{name:'Vytvořit'}).click(); await page.waitForTimeout(700)
+  await page.locator('main button').filter({hasText:'Rozpad'}).first().click(); await page.waitForTimeout(600)
+
+  const zalozProjekt = async (jmeno) => {
+    await page.getByRole('button',{name:'+ Projekt'}).click(); await page.waitForTimeout(350)
+    await page.getByRole('textbox',{name:'Název nového projektu'}).fill(jmeno)
+    await page.getByRole('button',{name:'Založit'}).click(); await page.waitForTimeout(700)
+  }
+  await zalozProjekt('Rebranding webu')
+  await zalozProjekt('Rebranding webu pro e-shop')
+
+  // Úkol do prvního projektu — zařazení bydlí ve slotu v detailu úkolu.
+  await page.getByRole('textbox',{name:'Nový úkol pro klienta'}).fill('Analýza současného webu')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(700)
+  await page.locator('main').getByText('Analýza současného webu').first().click(); await page.waitForTimeout(700)
+  // Slot „Projekt" má i zadávání v doku — hledá se jen uvnitř panelu.
+  const panel = page.locator('.sheet-panel')
+  await panel.getByRole('button',{name:'Projekt',exact:true}).click(); await page.waitForTimeout(400)
+  // Volba nese značku „▸" a „Rebranding webu" je předponou toho druhého
+  // projektu — proto přesná shoda i se značkou.
+  await panel.getByRole('button',{name:'▸ Rebranding webu',exact:true}).click(); await page.waitForTimeout(400)
+  await panel.getByRole('button',{name:'Uložit'}).click(); await page.waitForTimeout(800)
+
+  // Druhý projekt teď má z čeho čerpat.
+  await page.locator('main button').filter({hasText:'Rebranding webu pro e-shop'}).first().click()
+  await page.waitForTimeout(800)
+  const nabidka = page.getByRole('button',{name:/Rozepsat na kroky/})
+  T_(await nabidka.count() > 0, 'podobný projekt nabídne rozpad na kroky')
+  if (await nabidka.count()) {
+    T_(/Rozepsat na kroky · 1/.test(await nabidka.textContent()), 'nabídne právě kroky zdrojového projektu')
+    // Rozbalení je animace na výšku — než se dojede, tlačítko dole se hýbe.
+    await nabidka.click(); await page.waitForTimeout(1200)
+    T_(await page.getByText('podle „Rebranding webu"').count() > 0, 'u kroku je vidět, odkud pochází')
+    const pridat = page.getByRole('button',{name:/^Přidat ·/})
+    await pridat.scrollIntoViewIfNeeded()
+    await pridat.click(); await page.waitForTimeout(1000)
+    T_(await page.locator('main').getByText('Analýza současného webu').count() > 0,
+       'přijatý krok se založil jako úkol projektu')
+    // Panel se musí zavřít sám: toast má z-40, plachta panelu z-50 —
+    // pod otevřeným panelem by „Vrátit" nešlo stisknout.
+    T_(await page.locator('.sheet-panel').count() === 0, 'po přidání se panel zavře, ať je „Vrátit" dosažitelné')
+  }
+  const vratit = page.getByRole('button',{name:'Vrátit'})
+  T_(await vratit.count() > 0, 'přidání kroků jde vrátit')
+  if (await vratit.count()) { await vratit.click(); await page.waitForTimeout(800) }
+
+  // Projekt, kterému se nic nepodobá, nesmí nabízet nic.
+  await zalozProjekt('Focení produktů')
+  await page.locator('main button').filter({hasText:'Focení produktů'}).first().click()
+  await page.waitForTimeout(800)
+  T_(await page.getByRole('button',{name:/Rozepsat na kroky/}).count() === 0,
+     'bez podobného projektu se nenabízí nic (ani prázdný stav)')
+  await ctx.close()
+}
+
 // --- 5. po startu neproblikne prázdný stav ---
 // „Čistý stůl" na plném dni je první, co člověk po otevření vidí — a je
 // to nepravda. `useLiveQuery` vrací undefined, dokud dotaz nedoběhne,
