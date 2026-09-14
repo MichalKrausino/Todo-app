@@ -131,3 +131,41 @@ describe('části pravidla (frekvence + den)', () => {
     expect(nextOccurrence('FREQ=WEEKLY;BYDAY=MO,TH', '2026-09-14', '2026-09-14')).toBe('2026-09-17')
   })
 })
+
+// „Každé první pondělí v měsíci" je BYDAY=1MO. Předvolby umí u měsíčního
+// pravidla jen den v měsíci, takže kdyby se takové pravidlo tvářilo jako
+// předvolba „měsíčně", `partsFromRule` by z něj vzalo pouhé „pondělí",
+// zahodilo pořadí a první uložení detailu by ho přepsalo na „každého 1.".
+// Úkol by se tiše přestal opakovat tehdy, kdy má — proto je to „custom".
+describe('pořadový den v měsíci se nepřepíše na den v měsíci', () => {
+  it('pravidlo s dnem v týdnu není měsíční ani roční předvolba', () => {
+    expect(presetFromRule('FREQ=MONTHLY;BYDAY=1MO')).toBe('custom')
+    expect(presetFromRule('FREQ=MONTHLY;BYDAY=-1FR')).toBe('custom')
+    expect(presetFromRule('FREQ=MONTHLY;INTERVAL=3;BYDAY=1MO')).toBe('custom')
+    expect(presetFromRule('FREQ=YEARLY;BYMONTH=3;BYDAY=2TU')).toBe('custom')
+  })
+
+  it('běžné měsíční a roční pravidlo předvolbou zůstává', () => {
+    expect(presetFromRule('FREQ=MONTHLY;BYMONTHDAY=15')).toBe('monthly')
+    expect(presetFromRule('FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=1')).toBe('quarterly')
+    expect(presetFromRule('FREQ=YEARLY;BYMONTH=9;BYMONTHDAY=1')).toBe('yearly')
+  })
+
+  it('rozklad na části takové pravidlo odmítne, takže se nedá přepsat', () => {
+    expect(partsFromRule('FREQ=MONTHLY;BYDAY=1MO')).toBeNull()
+    expect(partsFromRule('FREQ=YEARLY;BYMONTH=3;BYDAY=2TU')).toBeNull()
+  })
+
+  it('popis řekne pořadí i den, ne holé „měsíčně"', () => {
+    expect(humanizeRule('FREQ=MONTHLY;BYDAY=1MO')).toBe('měsíčně (1. pondělí)')
+    expect(humanizeRule('FREQ=MONTHLY;BYDAY=-1FR')).toBe('měsíčně (poslední pátek)')
+    expect(humanizeRule('FREQ=MONTHLY;INTERVAL=3;BYDAY=2WE')).toBe('čtvrtletně (2. středa)')
+    expect(humanizeRule('FREQ=MONTHLY;BYMONTHDAY=15')).toBe('měsíčně 15.')
+  })
+
+  it('výskyty takového pravidla sedí na první pondělí v měsíci', () => {
+    expect(
+      occurrencesBetween('FREQ=MONTHLY;BYDAY=1MO', RULE_EPOCH, '2026-09-01', '2026-11-30'),
+    ).toEqual(['2026-09-07', '2026-10-05', '2026-11-02'])
+  })
+})

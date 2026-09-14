@@ -181,7 +181,7 @@ export function VseView({
 
       <section className="rise" style={stagger(2)}>
         {open.length > 0 ? (
-          <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+          <div className="seznam-na-papire">
             {propadle.length > 0 && (
               // Táž řádka triáže jako na Dnes: kde jsou propadlé vidět,
               // tam musí být i cesta ven po jednom.
@@ -209,11 +209,13 @@ export function VseView({
                       pod sebou, jen jednou červeně. Řádka triáže JE jeho
                       hlavička — a navíc nabízí cestu ven. */}
                   {!(razeni === 'termin' && s.klic === 'poTerminu') && (
-                    <li className="flex items-center gap-1.5 bg-well/40 px-4 py-1.5 text-[12px] font-medium text-ink-soft first-letter:uppercase">
-                      {razeni === 'klient' && (
-                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.barva ?? 'var(--color-edge)' }} />
-                      )}
-                      {s.jmeno} · {s.ukoly.length}
+                    <li className="skupina-li">
+                      <span className="flex items-center gap-1.5 px-4 pb-1 pt-3 text-[12px] font-medium text-ink-soft first-letter:uppercase">
+                        {razeni === 'klient' && (
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.barva ?? 'var(--color-edge)' }} />
+                        )}
+                        {s.jmeno} · {s.ukoly.length}
+                      </span>
                     </li>
                   )}
                   {s.ukoly.map(row)}

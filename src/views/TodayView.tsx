@@ -476,7 +476,7 @@ export function TodayView({
               )}
             </div>
 
-            <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+            <div className="seznam-na-papire">
               {visOverdue.length > 0 && (
                 // Řádka triáže: u stovky propadlých je seznam slepá ulička —
                 // průchod po jednom je jediná cesta ven.
@@ -500,9 +500,11 @@ export function TodayView({
                 {skupiny.map((sk, i) => (
                   <Fragment key={sk.client?.id ?? `bez-${i}`}>
                     {skupiny.length > 1 && (
-                      <li className="flex items-center gap-1.5 bg-well/40 px-4 py-1.5 text-[12px] font-medium text-ink-soft">
-                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: sk.client?.color ?? 'var(--color-edge)' }} />
-                        {sk.client?.name ?? 'bez klienta'}
+                      <li className="skupina-li">
+                        <span className="flex items-center gap-1.5 px-4 pb-1 pt-3 text-[12px] font-medium text-ink-soft">
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: sk.client?.color ?? 'var(--color-edge)' }} />
+                          {sk.client?.name ?? 'bez klienta'}
+                        </span>
                       </li>
                     )}
                     {sk.polozky.map((p) => row(p.task, p.showDate))}

@@ -176,7 +176,7 @@ export const TaskRow = memo(function TaskRow({
   const fullPull = dragging && dx < -SWIPE_FULL // Zítra expanduje přes celou šířku
 
   return (
-    <li className="task-li rise relative overflow-hidden bg-card" style={{ touchAction: 'pan-y' }}>
+    <li className="task-li rise relative overflow-hidden bg-[var(--radek-podklad)]" style={{ touchAction: 'pan-y' }}>
       {/* podklad swipe doprava — fajfka roste s jistotou gesta */}
       {dx > 0 && (
         <div className="absolute inset-0 flex items-center bg-moss px-5 text-card">
@@ -225,7 +225,7 @@ export const TaskRow = memo(function TaskRow({
       )}
 
       <div
-        className="press-row relative flex items-start gap-3.5 bg-card px-4 py-3.5 hover:bg-well/40 active:bg-well/60"
+        className="press-row relative flex items-start gap-3.5 bg-[var(--radek-podklad)] px-4 py-3.5 hover:bg-well/40 active:bg-well/60"
         style={{
           transform: `translateX(${dx}px)`,
           transition: dragging ? 'none' : 'transform 0.35s var(--ease-spring)',

@@ -145,12 +145,12 @@ export function ClientDetail({
     const late = Boolean(p.dueDate && p.dueDate < today && hotovo < celkem)
     const zbyva = otevrene.filter((t) => t.projectId === p.id).length
     return (
-      <li key={`p:${p.id}`} className="bg-well/50">
+      <li key={`p:${p.id}`} className="skupina-li">
         <button
           type="button"
           onClick={() => setProjekt(p.id)}
           aria-label={`Projekt ${p.name}`}
-          className="flex w-full items-center gap-2 px-4 py-2 text-left"
+          className="flex w-full items-center gap-2 px-4 pb-1.5 pt-3 text-left active:bg-well/50"
         >
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] font-medium text-ink-soft first-letter:uppercase">{p.name}</span>
@@ -301,13 +301,15 @@ export function ClientDetail({
           </form>
         )}
 
-        <div className="overflow-hidden rounded-2xl bg-card shadow-card">
+        <div className="seznam-na-papire">
           {nic ? (
             <p className="px-4 py-5 text-sm text-ink-faint">Zatím nic. Napiš první úkol nahoře — rozumí i „zítra" a „v pátek".</p>
           ) : (
             <ul className="divide-y divide-line">
               {noProject.length > 0 && projects.length > 0 && (
-                <li className="bg-well/50 px-4 py-2 text-[13px] font-medium text-ink-soft">Bez projektu</li>
+                <li className="skupina-li">
+                  <span className="block px-4 pb-1 pt-3 text-[13px] font-medium text-ink-soft">Bez projektu</span>
+                </li>
               )}
               {noProject.map(row)}
               {projects.map((p) => [
