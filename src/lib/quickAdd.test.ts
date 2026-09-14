@@ -305,3 +305,38 @@ describe('řeč, kterou člověk píše doopravdy', () => {
     expect(parseQuickAdd('poslat podklady po obědě', [], TODAY).title).toBe('poslat podklady')
   })
 })
+
+// „Každé první pondělí v měsíci" je pravidlo, které předvolby opakování
+// neumí (měsíční pravidlo v nich nese den v měsíci, ne den v týdnu).
+// Napsat si ho je tedy jediná cesta, jak takový úkol v appce založit —
+// a je to běžný markeťácký rytmus: měsíční reporting.
+describe('pořadový den v měsíci', () => {
+  it('vyrobí BYDAY s pořadím a termín na první výskyt od dneška', () => {
+    const r = parseQuickAdd('každé první pondělí v měsíci reporting', [], TODAY)
+    expect(r.recurrenceRule).toBe('FREQ=MONTHLY;BYDAY=1MO')
+    // první pondělí v červenci (6. 7.) už bylo — platí to srpnové
+    expect(r.dueDate).toBe('2026-08-03')
+    expect(r.title).toBe('reporting')
+  })
+
+  it('poslední den v měsíci umí taky', () => {
+    const r = parseQuickAdd('každý poslední pátek v měsíci fakturace', [], TODAY)
+    expect(r.recurrenceRule).toBe('FREQ=MONTHLY;BYDAY=-1FR')
+    expect(r.dueDate).toBe('2026-07-31')
+  })
+
+  it('skloňování podle rodu dne i vynechané „v měsíci"', () => {
+    expect(parseQuickAdd('každou druhou středu porada', [], TODAY).recurrenceRule).toBe(
+      'FREQ=MONTHLY;BYDAY=2WE',
+    )
+    expect(parseQuickAdd('každé čtvrté úterý v měsíci revize', [], TODAY).recurrenceRule).toBe(
+      'FREQ=MONTHLY;BYDAY=4TU',
+    )
+  })
+
+  it('obyčejné „každé pondělí" zůstává týdenní', () => {
+    expect(parseQuickAdd('každé pondělí standup', [], TODAY).recurrenceRule).toBe(
+      'FREQ=WEEKLY;BYDAY=MO',
+    )
+  })
+})
