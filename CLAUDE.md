@@ -447,21 +447,23 @@ skript v `index.html`, aby tmavá appka neproblikla bíle; volba je lokální
 místě — nová barva se přidává jen jednou. Podklad je teplá téměř-čerň
 (`#0e0e11`), ne plná čerň. Jediná `theme-color` meta v `index.html` se
 přepisuje z JS a musí sedět s `paper`. **Stavový řádek na iPhonu jde za
-appkou, ne za systémem**: s `apple-mobile-web-app-status-bar-style:
-default` si pruh nahoře kreslí iOS sám podle vzhledu SYSTÉMU, takže kdo
-má systém světlý a appku přepnutou na tmavou, kouká na bílý pruh nad
-černou appkou (viděno na telefonu). Do appky iOS nevidí, takže jediná
-cesta, jak tam dostat její barvu, je nechat stránku kreslit až pod něj —
-`black-translucent`, proto `viewport-fit=cover` a `env(safe-area-inset-top)`
-v layoutu. Přepíná se to **jen do tmavého režimu**: `black-translucent`
-píše hodiny bíle a na světlém papíře by zmizely; kdyby iOS dynamickou
-hodnotu nevzal, zůstane `default`, tedy dnešní stav. Hodnotu musí nastavit
-**skript v hlavičce, ne až `theme.ts`** — iOS čte značky při startu appky,
-dřív než doběhne balíček s Reactem. Audit chování to proto měří dvakrát
-a to druhé měření je to podstatné: se zablokovaným balíčkem vidí jen to,
-co stihla hlavička. Ověřeno vrácenou vadou — průchod, který se dívá až na
-hotovou appku, projde i s rozbitou hlavičkou, protože ji mezitím srovná
-`theme.ts`. Barvy klientů zůstávají
+appkou, ne za systémem**, a `apple-mobile-web-app-status-bar-style` má
+proto **tři stavy, ne dva** — každý ověřený na telefonu. `default` se
+nepoužívá vůbec: s ním si pruh kreslí iOS podle vzhledu SYSTÉMU, do appky
+nevidí, a při rozladěném systému a appce vyjde naopak — nejdřív bílý pruh
+nad tmavou appkou, po první opravě černý nad světlou. V **tmavém** režimu
+je `black-translucent`: pruh je průhledný, kreslí ho stránka svým papírem
+(proto `viewport-fit=cover` a `env(safe-area-inset-top)` v layoutu) a bílé
+hodiny na tmavém papíři sedí. Ve **světlém** se značka **smaže** —
+`black-translucent` by bílé hodiny položil na světlý papír a bez značky
+řídí pruh `theme-color`, tedy táž barva jako papír. Mazání znamená, že
+`theme.ts` ji musí umět zase vyrobit a nesmí se množit (hlídá audit
+přepnutím tam a zpátky). Hodnotu musí nastavit **skript v hlavičce, ne až
+`theme.ts`** — iOS čte značky při startu appky, dřív než doběhne balíček
+s Reactem. Audit chování to proto měří dvakrát a to druhé měření je to
+podstatné: se zablokovaným balíčkem vidí jen to, co stihla hlavička.
+Ověřeno vrácenou vadou — průchod, který se dívá až na hotovou appku,
+projde i s rozbitou hlavičkou, protože ji mezitím srovná `theme.ts`. Barvy klientů zůstávají
 systémová paleta iOS (`CLIENT_COLORS`) — jsou to štítky, ne brand.
 Animace `rise`/`pop`/`sheet-*` respektují `prefers-reduced-motion`.
 Ikony appky stojí na `paper` a barvách klientů (viz „Značka je ten pruh")
