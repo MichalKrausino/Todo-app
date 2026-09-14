@@ -331,8 +331,10 @@ místě — nová barva se přidává jen jednou. Podklad je teplá téměř-če
 přepisuje z JS a musí sedět s `paper`. Barvy klientů zůstávají
 systémová paleta iOS (`CLIENT_COLORS`) — jsou to štítky, ne brand.
 Animace `rise`/`pop`/`sheet-*` respektují `prefers-reduced-motion`.
-Ikony PWA jsou v akcentní modré — **při změně akcentu přegenerovat**
-(SVG v `public/favicon.svg` je předloha, PNG se renderují z něj).
+Ikony appky stojí na `paper` a barvách klientů (viz „Značka je ten pruh")
+— **po každé změně palety je přegeneruj** (`npm run ikony`; předloha je
+`public/favicon.svg`, PNG se renderují z něj). Akcentní modré už nejsou:
+dlaždice musí sedět se splashem z manifestu, tedy s `--color-paper`.
 
 ## Výkon (měřit, ne hádat)
 
