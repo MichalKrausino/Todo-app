@@ -403,6 +403,46 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 5b. nájezd obrazovky dosedne, i když se během něj překreslí ---
+//
+// Tohle `audit:ui` změřit neumí: seje data přímo do IndexedDB ještě před
+// načtením, takže živé dotazy doběhnou dřív, než se někam naviguje, a po
+// nájezdu už nic nepřekresluje. Tady se data zakládají PŘES ROZHRANÍ za
+// běhu, takže se rozpočet dnů v Plánu dopočítá až po příjezdu — a právě
+// to je ten okamžik, kdy se směr nájezdu přepočítá z osy x na y.
+//
+// Když varianta `visible` vrací na nulu jen tu osu, po které se zrovna
+// jede, zůstane ta druhá zmrzlá a CELÁ obrazovka stojí o `offset` vedle
+// svislice (změřeno: Plán na 30 px místo 16). Nic se nerozbije, nic
+// nespadne — obrazovka je jen posunutá napořád.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(700)
+  for (const t of ['dnes poslat report', 'zítra dodělat bannery', 'v pátek revize textů']) {
+    const novy = page.getByRole('button',{name:'Nový úkol'})
+    if (await novy.count()) { await novy.click(); await page.waitForTimeout(200) }
+    await page.locator('input[placeholder]').first().fill(t)
+    await page.keyboard.press('Enter'); await page.waitForTimeout(400)
+  }
+
+  // Obal nájezdu, ne titulek: ten v detailu klienta legitimně stojí až
+  // za barevnou tečkou, takže by na něm kontrola hlásila planý poplach.
+  const hrana = () => page.evaluate(() => {
+    const clip = document.querySelector('main > div.overflow-x-clip')
+    const obal = clip?.firstElementChild
+    return obal ? Math.round(obal.getBoundingClientRect().x * 10) / 10 : null
+  })
+
+  for (const [jmeno, zalozka] of [['Plán','Plán'], ['Klienti','Klienti'], ['Dnes','Dnes']]) {
+    await page.getByRole('button',{name:zalozka, exact:true}).click()
+    await page.waitForTimeout(1600)
+    const x = await hrana()
+    T_(x === 16, `${jmeno}: obsah stojí na svislici po nájezdu (${x} px)`)
+  }
+  await ctx.close()
+}
+
 // --- 6. dlouhé seznamy se nevykreslují celé ---
 // Změřeno na 1200 úkolech: appka vykreslovala 760 řádků na Dnes a 1 080
 // v Plánu, takže přepnutí obrazovky trvalo na pomalejším telefonu přes

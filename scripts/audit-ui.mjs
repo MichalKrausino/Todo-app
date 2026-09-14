@@ -283,6 +283,43 @@ async function sirka(kde) {
   }
 }
 
+// Stojí obsah obrazovky na svislici stránky (16 px)?
+//
+// Sem se nedá dojít měřením symetrie: když se posune CELÁ obrazovka,
+// všechno na ní zůstane vůči sobě srovnané a všechny ostatní kontroly
+// projdou. Přesně to se stalo — nájezd `BlurFade` nechal na Plánu
+// zmrzlý `translateX(14px)` a obsah stál o 14 px vedle, zatímco audit
+// hlásil čistý výsledek.
+//
+// Měří se OBAL NÁJEZDU, ne titulek. Titulek se k tomu nehodí: v detailu
+// klienta stojí až za barevnou tečkou (16 + 16 + 12 = 44 px) a kontrola
+// na něm hlásila planý poplach. Obal je naproti tomu na každé obrazovce
+// týž prvek a právě on ten posun nese.
+//
+// POCTIVĚ: tenhle audit ten konkrétní závod NEREPRODUKUJE. Seje data
+// přímo do IndexedDB ještě před načtením, takže živé dotazy doběhnou
+// dřív, než se někam naviguje, a po nájezdu už nic nepřekresluje —
+// s vrácenou vadou proto průchod projde. Reprodukuje ho `npm run nahled`,
+// který data zakládá přes rozhraní za běhu (změřeno: Plán 30 px místo 16
+// ve světlém i tmavém režimu). Kontrola je tedy pojistka na TRVALÝ posun,
+// ne důkaz proti tomuhle závodu.
+async function svislice(kde) {
+  const x = await page.evaluate(() => {
+    const clip = document.querySelector('main > div.overflow-x-clip')
+    const obal = clip?.firstElementChild
+    if (!obal) return null
+    return Math.round(obal.getBoundingClientRect().x * 10) / 10
+  })
+  if (x === null) return
+  if (Math.abs(x - 16) > 1) {
+    nalezy.push({
+      kde, typ: 'svislice',
+      popis: `obsah obrazovky stoji na ${x} px misto 16 — posunula se cela`,
+      vlevo: x, vpravo: 16,
+    })
+  }
+}
+
 const obrazovky = [
   ['Dnes', async () => {}],
   // Druhá poloha záložky Dnes (dvojité ťuknutí). Měří se hned za Dnes,
@@ -357,6 +394,7 @@ async function projdi(znacka, jenKontrast) {
     await jdi()
     await zmer(jmeno(kde), 'main', jenKontrast)
     if (!jenKontrast) await sirka(jmeno(kde))
+    if (!jenKontrast) await svislice(jmeno(kde))
   }
   await page.getByRole('button', { name: 'Dnes', exact: true }).click(); await page.waitForTimeout(400)
   for (const [kde, otevri, kolikZavrit] of panely) {

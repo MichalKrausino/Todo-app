@@ -283,6 +283,35 @@ uvnitř `h1`), ne celá hlavička. Dokud se uhýbalo `pr-24`, ubíralo se
 96 px i tam, kde žádná ikona není, a jméno se **uřízlo** („Ondra Fré…")
 na obrazovce, kde bylo místa dost. Jméno člověka se zalomí, neuřízne.
 
+**Nájezd obrazovky musí dosednout na OBOU osách** (`BlurFade`, `App.tsx`).
+Plán stál natrvalo o 14 px vpravo — celá obrazovka mimo svislici, na které
+stojí zbytek appky. Řetěz příčiny: směr nájezdu počítá `App` z `prevTab`
+ref, takže hned po přepnutí vyjde `dir ≠ 0` → `'left'` → osa **x**, nájezd
+z `+offset` (14 px). Jakmile efekt `prevTab` srovná, vyjde při dalším
+překreslení `dir === 0` → `'up'` → osa **y**. Varianta `visible`
+nastavovala jen `[osa]: 0`, takže se z ní klíč `x` ztratil — a motion
+nechal x **zmrzlé** tam, kde zrovna bylo. Na Plánu se to trefí pokaždé:
+živé dotazy (rozpočet dnů, kalendář) obrazovku překreslí hned po nájezdu.
+Proto `visible` vrací na nulu `x` i `y` a `hidden` nastavuje druhou osu
+na nulu — vzhled se nemění, jen se zaručí dosednutí.
+
+**Posun celé obrazovky žádná míra symetrie nechytí**, protože vůči sobě
+zůstane všechno srovnané; audit rozhraní hlásil čistý výsledek, zatímco
+obsah stál na 30 px. Hlídá to teď kontrola, která měří **absolutní**
+polohu obalu nájezdu proti 16 px. Měří se obal, ne titulek: ten v detailu
+klienta legitimně stojí až za barevnou tečkou (44 px) a kontrola na něm
+hlásila planý poplach.
+
+**Ta kontrola musí být v `audit:chovani`, ne (jen) v `audit:ui`** — je to
+rozdíl mezi pojistkou a testem. `audit:ui` seje data přímo do IndexedDB
+ještě před načtením, takže živé dotazy doběhnou dřív, než se někam
+naviguje, a po nájezdu už nic nepřekresluje: **ten závod tam nenastane
+a s vrácenou vadou průchod projde.** `audit:chovani` zakládá data přes
+rozhraní za běhu, takže se rozpočet dnů v Plánu dopočítá až po příjezdu —
+a to je přesně ten okamžik, kdy se osa přepne. Ověřeno oběma směry:
+s opravou 16 px na všech třech obrazovkách, s vrácenou vadou **spadne
+jen Plán, na 30 px**.
+
 **Co ujede za okraj, se rozplyne** (`.radka-mizi` v `index.css`).
 Vodorovně scrollující řádky pilulek — chipy na Dnes, v Plánu, ve Vše
 a u klienta, řádka slotů v detailu úkolu — mizely pod hranou displeje
