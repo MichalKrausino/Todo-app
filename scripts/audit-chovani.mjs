@@ -677,7 +677,7 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
     const out = await page.evaluate(() => ({
       theme: document.documentElement.dataset.theme,
       barva: document.querySelector('meta[name="theme-color"]')?.getAttribute('content'),
-      lista: document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.getAttribute('content'),
+      lista: document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.getAttribute('content') ?? null,
       paper: getComputedStyle(document.documentElement).getPropertyValue('--color-paper').trim(),
       pocet: document.querySelectorAll('meta[name="theme-color"]').length,
     }))
@@ -692,12 +692,44 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
       T_(o.theme === cekany, kde + ' → režim ' + cekany + ' (je ' + o.theme + ')')
       T_(o.pocet === 1, kde + ' → jediná značka theme-color (je ' + o.pocet + ')')
       T_(o.barva === o.paper, kde + ' → theme-color sedí s papírem (' + o.barva + ' vs ' + o.paper + ')')
+      // Ve světlém režimu značka CHYBÍ schválně: `black-translucent` by
+      // na světlý papír položil bílé hodiny a bez značky řídí pruh
+      // `theme-color`. `default` je špatně v obou režimech — s ním jde
+      // pruh za systémem, ne za appkou.
       T_(
-        o.lista === (cekany === 'dark' ? 'black-translucent' : 'default'),
-        kde + ' → stavový řádek ' + (cekany === 'dark' ? 'kreslí stránka' : 'nechá iOS') + ' (' + o.lista + ')',
+        o.lista === (cekany === 'dark' ? 'black-translucent' : null),
+        kde + ' → stavový řádek ' + (cekany === 'dark' ? 'kreslí stránka' : 'řídí theme-color') + ' (' + (o.lista ?? 'bez značky') + ')',
       )
     }
   }
+}
+
+// Přepnutí režimu za běhu: ve světlém se značka MAŽE, takže se při
+// návratu do tmavého musí umět vyrobit znovu — a nesmí se přitom
+// množit. Tam a zpátky dvakrát, ať je vidět i druhé kolo.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}, colorScheme:'light'})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(700)
+  const stav = () => page.evaluate(() => ({
+    theme: document.documentElement.dataset.theme,
+    barva: document.querySelector('meta[name="theme-color"]')?.getAttribute('content') ?? null,
+    lista: document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.getAttribute('content') ?? null,
+    pocet: document.querySelectorAll('meta[name="apple-mobile-web-app-status-bar-style"]').length,
+  }))
+  await page.locator('button[aria-label^="Synchronizace"]').first().click(); await page.waitForTimeout(600)
+  for (const [tlacitko, cekanyRezim] of [['Tmavý','dark'], ['Světlý','light'], ['Tmavý','dark']]) {
+    await page.getByRole('button',{name:tlacitko,exact:true}).click(); await page.waitForTimeout(450)
+    const o = await stav()
+    const kde = 'přepnutí na ' + tlacitko.toLowerCase()
+    T_(o.theme === cekanyRezim, kde + ' → režim ' + cekanyRezim + ' (je ' + o.theme + ')')
+    T_(
+      o.lista === (cekanyRezim === 'dark' ? 'black-translucent' : null),
+      kde + ' → značka ' + (cekanyRezim === 'dark' ? 'se vyrobí' : 'se smaže') + ' (' + (o.lista ?? 'bez značky') + ')',
+    )
+    T_(o.pocet <= 1, kde + ' → značka se nemnoží (je jich ' + o.pocet + ')')
+  }
+  await ctx.close()
 }
 
 await b.close(); server.close()

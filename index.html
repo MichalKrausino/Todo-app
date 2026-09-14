@@ -13,17 +13,25 @@
          přepisuje skript níž, ne media dotaz. -->
     <meta name="theme-color" content="#f4f4f1" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <!-- Stavový řádek na iPhonu. Hodnota se přepisuje skriptem níž podle
-         režimu a NENÍ to kosmetika: s `default` si pruh nahoře kreslí iOS
-         sám podle vzhledu SYSTÉMU, ne podle appky. Kdo má systém světlý
-         a appku přepnutou na tmavou, kouká na bílý pruh nad černou appkou.
-         Do appky iOS nevidí, takže jediná cesta, jak tam dostat její
-         barvu, je nechat stránku kreslit až pod něj (`black-translucent`,
-         proto `viewport-fit=cover` a `env(safe-area-inset-top)` v layoutu).
-         Přepíná se to jen do tmavého režimu: `black-translucent` píše text
-         hodin bíle a na světlém papíře by zmizel. Když by iOS dynamickou
-         hodnotu nevzal, zůstane `default`, tedy dnešní stav — tahle změna
-         nemá jak nic zhoršit. -->
+    <!-- Stavový řádek na iPhonu. Značku řídí skript níž podle režimu
+         a jsou to TŘI stavy, ne dva — každý ověřený na telefonu:
+
+         `default` = pruh si kreslí iOS sám podle vzhledu SYSTÉMU, do appky
+         nevidí. Kdo má systém a appku rozladěné, dostane pruh naopak:
+         nejdřív bílý nad tmavou appkou, po první opravě černý nad světlou.
+         Proto se `default` nepoužívá vůbec.
+
+         `black-translucent` (tmavý režim) = pruh je průhledný a kreslí ho
+         stránka svým papírem; text hodin píše iOS bíle, což na tmavém
+         papíři sedí. Na telefonu ověřeno, že tuhle hodnotu iOS opravdu
+         čte, i když ji nastaví až tenhle skript.
+
+         Světlý režim značku NEMÁ — smaže se. `black-translucent` by tu
+         bílý text položil na světlý papír a hodiny by zmizely; a jakmile
+         značka chybí, řídí pruh `theme-color`, tedy táž barva jako papír,
+         a barvu textu si iOS dopočítá z jejího jasu. Kdyby to tenhle iOS
+         neuměl, spadne to zpátky na chování `default` — tedy na dnešek,
+         ne na hůř. -->
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Todo" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -44,7 +52,10 @@
           var meta = document.querySelector('meta[name="theme-color"]')
           if (meta) meta.setAttribute('content', tmavy ? '#0e0e11' : '#f4f4f1')
           var lista = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
-          if (lista) lista.setAttribute('content', tmavy ? 'black-translucent' : 'default')
+          if (lista) {
+            if (tmavy) lista.setAttribute('content', 'black-translucent')
+            else lista.remove()
+          }
         } catch (e) {
           document.documentElement.dataset.theme = 'light'
         }
