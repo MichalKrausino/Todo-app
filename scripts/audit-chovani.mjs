@@ -655,6 +655,30 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 11a. značky v hlavičce nesmí mít statickou hodnotu ---
+// Tohle je ta jediná vlastnost, kterou v prohlížeči změřit NELZE: v DOMu
+// vypadá zapsaná značka stejně jako přepsaná, ale iOS čte hlavičku při
+// parsování, takže statickou hodnotu vidí a pozdější `setAttribute` už
+// ne. Změřeno na telefonu: pruh nahoře šel pokaždé za vzhledem systému,
+// i když skript hned po parsování nastavil `black-translucent`. Proto se
+// kontroluje ZDROJ stránky — mimo skript nesmí být ani jedna z nich.
+{
+  const html = await new Promise((res, rej) => {
+    http.get('http://localhost:4194/Todo-app/index.html', (r) => {
+      let t = ''
+      r.on('data', (c) => (t += c))
+      r.on('end', () => res(t))
+    }).on('error', rej)
+  })
+  const bezSkriptu = html.replace(/<script[\s\S]*?<\/script>/g, '')
+  T_(!/<meta[^>]+name="theme-color"/.test(bezSkriptu), 'theme-color není v hlavičce napevno')
+  T_(
+    !/<meta[^>]+name="apple-mobile-web-app-status-bar-style"/.test(bezSkriptu),
+    'styl stavového řádku není v hlavičce napevno',
+  )
+  T_(/document\.write/.test(html), 'značky se píšou do proudu parseru (document.write)')
+}
+
 // --- 11. stavový řádek na iPhonu jde za appkou, ne za systémem ---
 // Obě značky v hlavičce musí sedět s tím, co je opravdu vykreslené —
 // a hlavně i tehdy, když se appka a systém NESHODNOU (světlý iOS, tmavá
