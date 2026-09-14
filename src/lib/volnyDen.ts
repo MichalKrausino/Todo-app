@@ -31,12 +31,25 @@ const rozhodneDatum = (t: Task): string | undefined =>
 
 /**
  * Zátěž po dnech v minutách: odhad otevřených úkolů s datem v tom dni
- * (propadlé se počítají na dnešek) + délka schůzek (vícedenní patří do
+ * (propadlé se počítají na `dnes`) + délka schůzek (vícedenní patří do
  * každého svého dne, celodenní se nepočítají — nemají délku).
  * Stejná logika jako pruh v Plánu.
+ *
+ * `dnes` je parametr, ne `todayISO()` uvnitř. Dokud si funkce brala
+ * dnešek ze systémových hodin, nebyla čistá, i když tak byla vedená —
+ * a test, který porovnával dnešek s pevným datem, fungoval přesně do
+ * chvíle, než na to datum došla řada. Spadl v CI po půlnoci (255 místo
+ * 210), aniž by se čehokoli dotkla změna, která běh spustila. Volající
+ * dnešek stejně v ruce má.
  */
-export function minutyPoDnech(tasks: Task[], events: CalendarEvent[], od: string, doDne: string): Map<string, number> {
-  const today = todayISO()
+export function minutyPoDnech(
+  tasks: Task[],
+  events: CalendarEvent[],
+  od: string,
+  doDne: string,
+  dnes: string,
+): Map<string, number> {
+  const today = dnes
   const out = new Map<string, number>()
   for (const t of tasks) {
     if (t.status !== 'active' && t.status !== 'inbox') continue
@@ -90,7 +103,7 @@ export function useNaloz(dnu = 14): Map<string, number> {
   return (
     useLiveQuery(async () => {
       const [tasks, events] = await Promise.all([openTasks(), calendarEventsBetween(today, konec)])
-      return minutyPoDnech(tasks, events, today, konec)
+      return minutyPoDnech(tasks, events, today, konec, today)
     }, [today, konec]) ?? new Map()
   )
 }
