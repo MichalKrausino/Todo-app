@@ -127,13 +127,22 @@ const RE_NUMDATE = /(?<=^|\s)(?:do\s+)?(\d{1,2})\.\s?(\d{1,2})\.?(?:\s?(\d{4}))?
 const RE_MONTHDATE = new RegExp(
   `(?<=^|\\s)(?:do\\s+)?(\\d{1,2})\\.?\\s?(${Object.keys(MONTHS).join('|')})(?:\\s?(\\d{4}))?(?=$|[\\s,.;])`,
 )
-const RE_ZA = /(?<=^|\s)za\s+(\d{1,2}|jeden|dva|tri|ctyri|pet|sest|sedm|osm|devet|deset|dvanact|ctrnact)\s+(dny|dni|dnu|den|tydny|tydnu|tyden|mesic|mesice|mesicu)(?=$|[\s,.;])/
+// Číslo je nepovinné: „za týden" je „za jeden týden" — česky se jednička
+// vynechává a bez ní parser dřív nepoznal termín vůbec.
+const RE_ZA = /(?<=^|\s)za\s+(?:(\d{1,2}|jeden|dva|tri|ctyri|pet|sest|sedm|osm|devet|deset|dvanact|ctrnact)\s+)?(dny|dni|dnu|den|tydny|tydnu|tyden|mesic|mesice|mesicu)(?=$|[\s,.;])/
 const RE_PRISTI_TYDEN = /(?<=^|\s)pristi\s+tyden(?=$|[\s,.;])/
 const RE_PRISTI_MESIC = /(?<=^|\s)pristi\s+mesic(?=$|[\s,.;])/
-const RE_KONCEM = /(?<=^|\s)koncem\s+(tydne|mesice)(?=$|[\s,.;])/
-const RE_VIKEND = /(?<=^|\s)(?:(pristi)\s+)?(?:(?:o|na)\s+)?vikendu?(?=$|[\s,.;])/
-const RE_WEEKDAY = new RegExp(`(?<=^|\\s)(?:(pristi)\\s+)?(?:(?:ve?|do)\\s+)?(${WD})(?=$|[\\s,.;])`)
-const RE_RELWORD = /(?<=^|\s)(dneska|dnes|zejtra|zitra|pozitri)(?=$|[\s,.;])/
+const RE_KONCEM = /(?<=^|\s)(?:koncem|do\s+konce)\s+(tydne|mesice)(?=$|[\s,.;])/
+// „tento týden" je termín do konce toho týdne, tedy totéž co „koncem týdne".
+const RE_TENTO_TYDEN = /(?<=^|\s)(?:tento|tenhle)\s+tyden(?=$|[\s,.;])/
+const RE_VIKEND = /(?<=^|\s)(?:(?:o|na)\s+)?(?:(pristim?)\s+)?vikendu?(?=$|[\s,.;])/
+const RE_WEEKDAY = new RegExp(
+  `(?<=^|\\s)(?:(?:ve?|do|na)\\s+)?(?:(pristi|tento|tenhle|tuhle)\\s+)?(${WD})(?=$|[\\s,.;])`,
+)
+// Předložka i druhý pád: „do zítřka", „na dnes", „během dneška" jsou
+// termíny stejně jako holé „zítra" — v úkolu je píše člověk častěji.
+const RE_RELWORD =
+  /(?<=^|\s)(?:(?:do|na|behem)\s+)?(dneska|dnes|zitrka|zitra|zejtrka|zejtra|pozitri)(?=$|[\s,.;])/
 // „každý pátek", „každé pondělí a čtvrtek", „každý všední den",
 // „každý den/týden/měsíc/rok", „každých 14 dní", „každé 2 týdny"
 const RE_RECUR = new RegExp(
@@ -143,11 +152,19 @@ const RE_RECUR = new RegExp(
 const RE_TIME_COLON = /(?<=^|\s)(?:(?:do|ve|v|od)\s+)?(\d{1,2}):(\d{2})(?=$|[\s,.;!?])/
 // „do 14h", „ve 14 h", „v 9 hod"
 const RE_TIME_H = /(?<=^|\s)(?:do|ve|v|od)\s+(\d{1,2})\s?h(?:od(?:in)?)?(?=$|[\s,.;!?])/
+// Holá hodina po předložce: „v 10", „od 9", „v 8 ráno", „v 7 večer".
+// Bere se JEN když za ní už nic nestojí (konec věty nebo interpunkce),
+// případně jen denní doba. Ta podmínka je celá pojistka: „v 10 lidech" je
+// počet, ne čas, a „do 15.9." je datum — obojí by se jinak přečetlo jako
+// hodina a tiše přepsalo termín.
+const RE_TIME_BARE =
+  /(?<=^|\s)(?:do|ve|v|od)\s+(\d{1,2})(?:\s+(rano|dopoledne|odpoledne|podvecer|vecer))?(?=\s*$|\s*[,;!?]|\.(?!\s*\d))/
 // denní doby — orientační časy (ráno 9:00, poledne 12:00, večer 19:00…)
 const RE_TIME_WORD =
-  /(?<=^|\s)(?:(?:do|k|na|v)\s+)?(dopoledne|odpoledne|poledne|podvecer|vecera|vecer|rano)(?=$|[\s,.;!?])/
+  /(?<=^|\s)(?:(?:do|k|na|v)\s+)?(po\s+obede|dopoledne|odpoledne|poledne|podvecer|vecera|vecer|rano)(?=$|[\s,.;!?])/
 const TIME_WORDS: Record<string, string> = {
   rano: '09:00',
+  'po obede': '13:00',
   dopoledne: '10:00',
   poledne: '12:00',
   odpoledne: '15:00',
@@ -180,6 +197,16 @@ function parseTime(norm: string): TimeHit | null {
   m = RE_TIME_H.exec(norm)
   if (m) {
     const h = Number(m[1])
+    if (h <= 23) {
+      return { time: `${String(h).padStart(2, '0')}:00`, start: m.index, end: m.index + m[0].length }
+    }
+  }
+  m = RE_TIME_BARE.exec(norm)
+  if (m) {
+    let h = Number(m[1])
+    // „v 7 večer" je 19:00 — odpolední doba posouvá dopolední hodinu.
+    // Dvanáctka zůstává dvanáctkou, jinak by z poledne bylo 24:00.
+    if (m[2] && h >= 1 && h <= 11 && m[2] !== 'rano' && m[2] !== 'dopoledne') h += 12
     if (h <= 23) {
       return { time: `${String(h).padStart(2, '0')}:00`, start: m.index, end: m.index + m[0].length }
     }
@@ -275,7 +302,7 @@ function parseDate(norm: string, today: Date): DateHit | null {
 
   m = RE_ZA.exec(norm)
   if (m) {
-    const n = NUM_WORDS[m[1]] ?? Number(m[1])
+    const n = m[1] ? (NUM_WORDS[m[1]] ?? Number(m[1])) : 1
     let d: Date
     if (m[2].startsWith('mesic')) {
       d = new Date(today.getFullYear(), today.getMonth() + n, today.getDate())
@@ -305,6 +332,11 @@ function parseDate(norm: string, today: Date): DateHit | null {
     return { iso: toISODate(d), start: m.index, end: m.index + m[0].length }
   }
 
+  m = RE_TENTO_TYDEN.exec(norm)
+  if (m) {
+    return { iso: toISODate(nearestDow(today, 5)), start: m.index, end: m.index + m[0].length }
+  }
+
   m = RE_VIKEND.exec(norm)
   if (m) {
     // sobota; „příští víkend“ = sobota příštího týdne
@@ -316,13 +348,14 @@ function parseDate(norm: string, today: Date): DateHit | null {
   if (m) {
     const dow = WEEKDAYS[m[2]]
     // „příští pátek“ = pátek příštího týdne; jinak nejbližší výskyt
-    const d = m[1] ? addDays(nextMonday(today), (dow + 6) % 7) : nearestDow(today, dow)
+    const d = m[1] === 'pristi' ? addDays(nextMonday(today), (dow + 6) % 7) : nearestDow(today, dow)
     return { iso: toISODate(d), start: m.index, end: m.index + m[0].length }
   }
 
   m = RE_RELWORD.exec(norm)
   if (m) {
-    const offset = { dneska: 0, dnes: 0, zejtra: 1, zitra: 1, pozitri: 2 }[m[1]] ?? 0
+    const offset =
+      { dneska: 0, dnes: 0, zitrka: 1, zitra: 1, zejtrka: 1, zejtra: 1, pozitri: 2 }[m[1]] ?? 0
     return { iso: toISODate(addDays(today, offset)), start: m.index, end: m.index + m[0].length }
   }
 

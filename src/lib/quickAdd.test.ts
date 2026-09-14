@@ -120,7 +120,9 @@ describe('parseQuickAdd', () => {
 
   it('rozpozná příští měsíc a „za měsíc"', () => {
     expect(parseQuickAdd('příští měsíc strategie', [], TODAY).dueDate).toBe('2026-08-01')
-    expect(parseQuickAdd('za měsíc kontrola', [], TODAY).dueDate).toBeUndefined() // „za měsíc" bez čísla neumíme
+    // „za měsíc" je za jeden měsíc — tedy tentýž den v dalším měsíci,
+    // kdežto „příští měsíc" míří na jeho začátek. Dvě různé věty, dva dny.
+    expect(parseQuickAdd('za měsíc kontrola', [], TODAY).dueDate).toBe('2026-08-29')
     expect(parseQuickAdd('za 2 měsíce revize', [], TODAY).dueDate).toBe('2026-09-29')
   })
 
@@ -238,5 +240,68 @@ describe('samotný vykřičník', () => {
     const r = parseQuickAdd('spadl web !!!', [], new Date('2026-08-31T09:00:00'))
     expect(r.priority).toBe('critical')
     expect(r.title).toBe('spadl web')
+  })
+})
+
+describe('řeč, kterou člověk píše doopravdy', () => {
+  it('„za týden" bez čísla je za jeden týden', () => {
+    expect(parseQuickAdd('follow up za týden', [], TODAY).dueDate).toBe('2026-08-05')
+    expect(parseQuickAdd('follow up za týden', [], TODAY).title).toBe('follow up')
+    expect(parseQuickAdd('revize za měsíc', [], TODAY).dueDate).toBe('2026-08-29')
+    expect(parseQuickAdd('ozvat se za den', [], TODAY).dueDate).toBe('2026-07-30')
+  })
+
+  it('„do konce týdne" i „tento týden" míří na pátek', () => {
+    expect(parseQuickAdd('poslat report do konce týdne', [], TODAY).dueDate).toBe('2026-07-31')
+    expect(parseQuickAdd('newsletter tento týden', [], TODAY).dueDate).toBe('2026-07-31')
+    expect(parseQuickAdd('newsletter tento týden', [], TODAY).title).toBe('newsletter')
+    expect(parseQuickAdd('fakturace do konce měsíce', [], TODAY).dueDate).toBe('2026-07-31')
+  })
+
+  it('druhý pád i předložka u „dnes/zítra"', () => {
+    expect(parseQuickAdd('zaplatit fakturu do zítřka', [], TODAY).dueDate).toBe('2026-07-30')
+    expect(parseQuickAdd('zaplatit fakturu do zítřka', [], TODAY).title).toBe('zaplatit fakturu')
+    expect(parseQuickAdd('poslat nabídku během dneška', [], TODAY).dueDate).toBe('2026-07-29')
+    expect(parseQuickAdd('poslat nabídku během dneška', [], TODAY).title).toBe('poslat nabídku')
+  })
+
+  it('„na čtvrtek" a „tento pátek" — předložka ani zájmeno nezůstanou v názvu', () => {
+    const ctvrtek = parseQuickAdd('připravit prezentaci na čtvrtek', [], TODAY)
+    expect(ctvrtek.dueDate).toBe('2026-07-30')
+    expect(ctvrtek.title).toBe('připravit prezentaci')
+    const patek = parseQuickAdd('přenést data tento pátek', [], TODAY)
+    expect(patek.dueDate).toBe('2026-07-31')
+    expect(patek.title).toBe('přenést data')
+  })
+
+  it('předložka smí stát i před „příští"', () => {
+    expect(parseQuickAdd('na příští pátek audit', [], TODAY).dueDate).toBe('2026-08-07')
+    expect(parseQuickAdd('o příštím víkendu odpočinek', [], TODAY).dueDate).toBe('2026-08-08')
+    expect(parseQuickAdd('o příštím víkendu odpočinek', [], TODAY).title).toBe('odpočinek')
+  })
+
+  it('holá hodina po předložce: „v 10", „v 8 ráno", „v 7 večer"', () => {
+    expect(parseQuickAdd('schůzka v 10', [], TODAY).dueTime).toBe('10:00')
+    expect(parseQuickAdd('schůzka v úterý v 10', [], TODAY).dueTime).toBe('10:00')
+    expect(parseQuickAdd('schůzka v úterý v 10', [], TODAY).title).toBe('schůzka')
+    expect(parseQuickAdd('brief v 8 ráno', [], TODAY).dueTime).toBe('08:00')
+    expect(parseQuickAdd('zavolat v 7 večer', [], TODAY).dueTime).toBe('19:00')
+    expect(parseQuickAdd('oběd v 12 odpoledne', [], TODAY).dueTime).toBe('12:00')
+    expect(parseQuickAdd('schůzka v 10 !!', [], TODAY).priority).toBe('high')
+    expect(parseQuickAdd('schůzka v 10 !!', [], TODAY).dueTime).toBe('10:00')
+  })
+
+  it('holá hodina se bere jen na konci — počet ani datum nejsou čas', () => {
+    const porada = parseQuickAdd('porada v 10 lidech', [], TODAY)
+    expect(porada.dueTime).toBeUndefined()
+    expect(porada.title).toBe('porada v 10 lidech')
+    const faktura = parseQuickAdd('faktura do 15.9.', [], TODAY)
+    expect(faktura.dueDate).toBe('2026-09-15')
+    expect(faktura.dueTime).toBeUndefined()
+  })
+
+  it('„po obědě" je 13:00', () => {
+    expect(parseQuickAdd('poslat podklady po obědě', [], TODAY).dueTime).toBe('13:00')
+    expect(parseQuickAdd('poslat podklady po obědě', [], TODAY).title).toBe('poslat podklady')
   })
 })
