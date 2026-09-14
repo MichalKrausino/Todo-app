@@ -288,22 +288,33 @@ async function sirka(kde) {
 // Sem se nedá dojít měřením symetrie: když se posune CELÁ obrazovka,
 // všechno na ní zůstane vůči sobě srovnané a všechny ostatní kontroly
 // projdou. Přesně to se stalo — nájezd `BlurFade` nechal na Plánu
-// zmrzlý `translateX(14px)` a titulek stál na 30 px místo 16, zatímco
-// audit hlásil čistý výsledek. Měří se proto ABSOLUTNÍ poloha titulku.
+// zmrzlý `translateX(14px)` a obsah stál o 14 px vedle, zatímco audit
+// hlásil čistý výsledek.
+//
+// Měří se OBAL NÁJEZDU, ne titulek. Titulek se k tomu nehodí: v detailu
+// klienta stojí až za barevnou tečkou (16 + 16 + 12 = 44 px) a kontrola
+// na něm hlásila planý poplach. Obal je naproti tomu na každé obrazovce
+// týž prvek a právě on ten posun nese.
+//
+// POCTIVĚ: tenhle audit ten konkrétní závod NEREPRODUKUJE. Seje data
+// přímo do IndexedDB ještě před načtením, takže živé dotazy doběhnou
+// dřív, než se někam naviguje, a po nájezdu už nic nepřekresluje —
+// s vrácenou vadou proto průchod projde. Reprodukuje ho `npm run nahled`,
+// který data zakládá přes rozhraní za běhu (změřeno: Plán 30 px místo 16
+// ve světlém i tmavém režimu). Kontrola je tedy pojistka na TRVALÝ posun,
+// ne důkaz proti tomuhle závodu.
 async function svislice(kde) {
   const x = await page.evaluate(() => {
-    const h1 = document.querySelector('main h1')
-    if (!h1) return null
-    // Poloha PRVNÍ ŘÁDKY textu, ne rámu uzlu — u titulku po písmenech
-    // (TextEffect) je rám stejně široký jako sloupec.
-    const r = h1.getClientRects()[0] ?? h1.getBoundingClientRect()
-    return Math.round(r.x * 10) / 10
+    const clip = document.querySelector('main > div.overflow-x-clip')
+    const obal = clip?.firstElementChild
+    if (!obal) return null
+    return Math.round(obal.getBoundingClientRect().x * 10) / 10
   })
   if (x === null) return
   if (Math.abs(x - 16) > 1) {
     nalezy.push({
       kde, typ: 'svislice',
-      popis: `titulek stoji na ${x} px misto 16 — cela obrazovka je posunuta`,
+      popis: `obsah obrazovky stoji na ${x} px misto 16 — posunula se cela`,
       vlevo: x, vpravo: 16,
     })
   }
