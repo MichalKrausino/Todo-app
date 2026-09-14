@@ -282,7 +282,15 @@ plyne mezi přepínači; pilulku pod záložkou doku dělá vlastní
 `DokZalozky` s motion values, viz výš), `DisclosureContent` (sbalené sekce se rozbalují
 na výšku). Z magicui: `Dock` (zvětšování ikon pod
 kurzorem), `BlurFade` (nástup obrazovky ze strany, kam se v doku šlo),
-`BorderBeam` (jen ranní návrh — jediná karta, kterou napsal server),
+`BorderBeam` (jen ranní návrh — jediná karta, kterou napsal server;
+**pohyb je přepsaný**: předloha animuje `offset-distance`, což neumí
+předat kompozitoru žádný prohlížeč, takže to motion přepisoval z JS při
+každém snímku a světlo se zastavovalo pokaždé, když appka překreslovala
+seznam — změřeno při 4× zpomaleném procesoru rozptyl kroku ±35 % a
+sedmkrát za pět vteřin úplné zastavení. Teď rotuje kuželový přechod přes
+`transform` čistou CSS animací `.beam-svetlo`, tedy ±0 % i pod zátěží.
+**Obíhající světlo smí jet jen na `transform` nebo `opacity`** — nic
+jiného kompozitor nevezme),
 `Ripple` (prázdný stav), konfety přes `canvas-confetti` (splněný den,
 jednou denně, `todo.konfety`). Z react-bits: `ClickSpark` (jiskry z místa
 ťuknutí v doku), `BlurText` (nadpis prázdného stavu). Ze shadcn/ui nad

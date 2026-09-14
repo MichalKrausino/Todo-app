@@ -169,6 +169,44 @@ body {
   text-transform: uppercase;
 }
 
+/* Světlo obíhající okraj karty (ranní návrh, `BorderBeam`). Jede na
+   `transform`, protože **to je jediná vlastnost, kterou umí prohlížeč
+   předat kompozitoru** — animace se pak nedotkne hlavního vlákna a
+   nezastaví se, když appka zrovna překresluje seznam nebo když roluješ.
+   Předloha z magicui vedla světlo po `offset-path` a animovala
+   `offset-distance`: tu neumí kompozitovat žádný prohlížeč, takže ji
+   motion přepisoval z JS při každém snímku. Změřeno při 4× zpomaleném
+   procesoru: v klidu ±4 % rozptyl kroku, **pod zátěží ±35 % a sedmkrát
+   za pět vteřin stálo úplně**.
+
+   Čtverec je dvakrát širší než karta, aby jeho kuželový přechod pokryl
+   i rohy; `BorderBeam` se používá jen na chipu, kde je šířka větší než
+   výška, takže dvojnásobek šířky vždycky přesáhne úhlopříčku. */
+@keyframes beam-obeh {
+  from {
+    transform: translate(-50%, -50%) rotate(0turn);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(1turn);
+  }
+}
+.beam-svetlo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 200%;
+  aspect-ratio: 1;
+  animation: beam-obeh var(--beam-doba) linear infinite;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    var(--beam-od) var(--beam-luk),
+    var(--beam-do) calc(var(--beam-luk) * 1.5),
+    transparent calc(var(--beam-luk) * 1.5)
+  );
+  will-change: transform;
+}
+
 /* Vodorovně scrollující řádka pilulek: obsah, který ujede za okraj
    displeje, se nesmí uříznout nožem — poslední pilulka se rozplyne a
    tím řekne „tudy to pokračuje". Fade sedí přesně na přesahu záporné
