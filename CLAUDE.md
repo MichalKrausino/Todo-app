@@ -393,9 +393,31 @@ vlastním kódu znamenalo stáhnout do telefonu **znovu celý megabajt** včetn�
 knihoven, které se nezměnily. Teď se mění jen balíček s kódem appky:
 změřeno **316 kB místo 1,1 MB (28 %)** — a první vykreslení na 4G se
 zrychlilo z **2018 na 1669 ms (−17 %)**, protože se balíčky stahují
-souběžně. Supabase (215 kB) je na startu zbytečná, ale odložit ji nejde
-bez `React.lazy` na `SyncSheet` — to by přidalo viditelný suspense, a na
-vzhled se nesahá.
+souběžně.
+
+**Supabase se na startu nestahuje** (`initSync` v `src/sync/engine.ts`).
+Dřív tu stálo, že odložit ji nejde bez `React.lazy` na `SyncSheet` a že
+by to přidalo viditelný suspense — to byla špatná diagnóza. `SyncSheet`
+supabase-js vůbec neimportuje, bere jen API enginu; `@supabase/supabase-js`
+si dováží **jediný soubor** a `createClient` se volá na **jednom místě**.
+Stačí tam `await import()`: žádná komponenta se nelazyuje, žádný suspense,
+na vzhled se nesahá. Jde to proto, že **UI na síť nikdy nečeká** —
+zdrojem pravdy je Dexie — a `getSupabase()` odjakživa vrací
+`SupabaseClient | null`, takže okno „klient ještě nedojel" je stav, který
+sesterské moduly (kalendář, sdílení, Todoist) už ošetřují. Změřeno na
+pomalé 4G (1,6 Mb/s, 150 ms), medián ze sedmi běhů: **první vykreslení
+5964 → 4920 ms (−17,5 %)**, staženého JS **1068 → 858 kB**; chunk se
+stahuje až jako poslední, 172 ms po startu.
+
+Odložení si vyžádalo **vlastní fázi `starting`** (`src/sync/status.ts`).
+Bez ní stav mezi startem a doječením klienta hlásil `unconfigured`, tedy
+„sync nemáš nastavený" — u nastaveného syncu lež, i když jen na okamžik.
+Změřeno oběma směry: s fází projde stav „Spouští se…" → „Nepřihlášeno",
+bez ní „Nenastaveno" → „Nepřihlášeno". **Nová fáze musí přibýt do obou
+map v `SyncSheet`** (`PHASE_LABELS`, `PHASE_COLORS` jsou
+`Record<SyncPhase, …>`, takže na to upozorní typecheck) **i do testů na
+přihlášení** v `ClientSharing` a `SharingSheet` — během startu ještě
+není jisté, že přihlášeno je.
 
 ## Datový model
 

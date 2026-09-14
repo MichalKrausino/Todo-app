@@ -15,7 +15,9 @@ import { Sheet } from './Sheet'
 
 export function SharingSheet({ onClose }: { onClose: () => void }) {
   const status = useSyncExternalStore(subscribeSyncStatus, getSyncStatus)
-  const signedIn = status.phase !== 'signedOut' && status.phase !== 'unconfigured'
+  const signedIn = status.phase !== 'signedOut' &&
+    status.phase !== 'unconfigured' &&
+    status.phase !== 'starting'
   const clients = useLiveQuery(activeClients, []) ?? []
   const sdilene = useLiveQuery(sharedClientIds, [], new Set<string>())
   // Napřed sdílený klient: kdo sem přijde podruhé, řeší nejspíš ten,

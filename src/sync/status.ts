@@ -1,7 +1,18 @@
 // Malý store stavu synchronizace pro UI (useSyncExternalStore).
 // Komponenty přes něj jen čtou — síť řeší výhradně engine.
 
-export type SyncPhase = 'unconfigured' | 'signedOut' | 'idle' | 'syncing' | 'offline' | 'error'
+// 'starting' je krátké okno mezi startem appky a doječením klienta
+// Supabase (dováží se dynamicky, viz engine.ts). Bez vlastní fáze by
+// v něm UI hlásilo 'unconfigured', tedy „sync nemáš nastavený" — a to
+// je u nastaveného syncu lež, i když jen na okamžik.
+export type SyncPhase =
+  | 'unconfigured'
+  | 'starting'
+  | 'signedOut'
+  | 'idle'
+  | 'syncing'
+  | 'offline'
+  | 'error'
 
 export interface SyncStatus {
   phase: SyncPhase

@@ -6,7 +6,7 @@
 // Engine zapisuje do Dexie přímo (bulkPut stažených záznamů) a záměrně
 // nerazítkuje updatedAt — zapisuje cizí záznamy tak, jak jsou.
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { db } from '../db/db'
 import { onRepoWrite } from '../db/events'
 import { reconcileTemplates } from '../db/templates'
@@ -49,11 +49,23 @@ let debounceTimer: ReturnType<typeof setTimeout> | undefined
 const localTable = (name: LocalTableName): Table<Syncable, string> =>
   db.table(name) as Table<Syncable, string>
 
-export function initSync(): void {
+export async function initSync(): Promise<void> {
   if (!isSupabaseConfigured) {
     setSyncStatus({ phase: 'unconfigured' })
     return
   }
+  setSyncStatus({ phase: 'starting' })
+
+  // supabase-js je 215 kB, které na první vykreslení nikdo nepotřebuje:
+  // UI čte a zapisuje výhradně Dexie a na síť nikdy nečeká. Dynamický
+  // import ho proto vezme ze startovní cesty pryč a stáhne až vedle ní.
+  //
+  // Jde to udělat tady a jen tady: `createClient` se v celé appce volá
+  // na jednom místě a `getSupabase()` vrací `SupabaseClient | null`,
+  // takže okno „klient ještě nedojel" je stav, který sesterské moduly
+  // (kalendář, sdílení) odjakživa ošetřují. Žádný React.lazy, žádný
+  // suspense — na vzhled se nesahá.
+  const { createClient } = await import('@supabase/supabase-js')
   sb = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!)
 
   // Zachytí i INITIAL_SESSION po startu, takže se appka srovná hned po otevření.
