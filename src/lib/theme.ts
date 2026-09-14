@@ -47,6 +47,16 @@ function apply(): void {
   const t = resolvedTheme()
   document.documentElement.dataset.theme = t
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', PAPER[t])
+  // Stavový řádek na iPhonu: s `default` si ho iOS kreslí sám podle
+  // vzhledu SYSTÉMU, takže světlý systém + tmavá appka = bílý pruh nad
+  // černou appkou. `black-translucent` ho nechá průhledný a nakreslí ho
+  // stránka svým papírem. Jen v tmavém režimu — bílý text hodin by se na
+  // světlém papíře ztratil. iOS čte tuhle hodnotu při startu appky, ne za
+  // běhu, takže tady je hlavně proto, aby obě značky držely pohromadě
+  // a `index.html` nebyl jediné místo, kde to platí.
+  document
+    .querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
+    ?.setAttribute('content', t === 'dark' ? 'black-translucent' : 'default')
   subs.forEach((fn) => fn())
 }
 
