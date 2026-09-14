@@ -391,7 +391,7 @@ export function TodayView({
           {navrhy.length > 0 && (
             <Chip tone="accent" className="relative overflow-hidden" onClick={() => setNavrhOpen(true)}>
               {/* BorderBeam (magicui): světlo obíhá jediný chip, který napsal server */}
-              <BorderBeam size={48} duration={5} />
+              <BorderBeam doba={5} />
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
                 <path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z" />
               </svg>
