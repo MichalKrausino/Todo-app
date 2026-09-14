@@ -1,21 +1,24 @@
-// Plán = dny jako řádky, čas jako pruh.
+// Plán = měsíční mřížka a pod ní vybraný den.
 //
-// Jeden nápad, ne tři: každý den je řádek — vlevo datum, vpravo pruh,
-// jehož délka je naplánovaný čas (celý pruh = osm hodin) a barvy jsou
-// klienti (šedá schůzka nebo úkol bez klienta). Týden se tak čte jako
-// vodorovný graf: kde je plno, kde je volno, komu který den patří. Řádky
-// jdou pod sebou od dneška a scrollují se do budoucnosti — žádný
-// přepínač týden/měsíc, žádný pás čísel, žádná zvláštní karta; ťuknutí
-// na den ho rozbalí na místě (schůzky, úkoly, pole pro nový úkol a
-// výběr z úkolů bez termínu) a plánuje se tam, kde se den vidí.
+// Klasický kalendář, jak ho lidé znají: sedm sloupců, týden od pondělí,
+// listuje se po měsících. Mřížka odpovídá na „kdy to je" — kde je v měsíci
+// plno a kde volno — a den pod ní na „co to je": schůzky, úkoly, pole pro
+// nový úkol a výběr z úkolů bez termínu. Plánuje se tam, kde se den vidí.
 //
-// Dvě předchozí verze byly kalendář z telefonu (mřížka čísel s tečkami,
-// pak se sloupky) a karta dne pod ním. Mřížka umí ukázat jen „něco tam
-// je" a u sedmi čísel v řádce není místo na jméno klienta ani na počet
-// hodin. Řádek má celou šířku: pruh je čitelný, popisek pod ním řekne
-// „2 úkoly · schůzka · ~3 h" a rozbalený den nemusí nikam odskakovat.
+// Mřížka měla proti řádkům jednu vadu, kvůli které tu dvakrát nevydržela:
+// sedm čísel v řádce má na telefonu ~41 px na buňku a tam se jméno klienta
+// ani počet hodin nevejde, takže den umí říct jen „něco tam je". Řeší to
+// dělba práce s agendou pod mřížkou (tak to dělá i kalendář v telefonu):
+// v buňce je pruh dne v barvách klientů, tedy KOLIK a KOMU, a jména,
+// hodiny a jednotlivé úkoly stojí rozepsané pod ní. Čísla nikdy nenesou
+// text, na který v nich není místo.
+//
+// Značka pod číslem je pruh, ne semaforová tečka jako v kalendáříku
+// u zadávání: Plán se ptá „kolik toho ten den je a komu to patří".
+// Prázdný den značku nedostane — třicet tichých kolejí vedle sebe je
+// šedá tapeta, ne graf.
 
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
+import { useCallback, useState, useMemo } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { CalendarEvent, Task } from '../db/types'
 import {
@@ -32,6 +35,7 @@ import { plannedMinutes } from '../lib/capacity'
 import { addDays, formatEventRange, formatFullDate, formatFullDateNa, fromISODate, mondayOf, toISODate, todayISO } from '../lib/dates'
 import { minutesToLabel } from '../lib/freeSlot'
 import { plural } from '../lib/labels'
+import { dnyMesice, kotvaMesice, posunMesic } from '../lib/mesic'
 import { klidovyRezim } from '../lib/motion'
 import { PLNY_DEN_MIN, dilyDne, minutyDilu, type Dil } from '../lib/pruhDne'
 import { parseQuickAdd } from '../lib/quickAdd'
@@ -39,10 +43,10 @@ import { ukazToast } from '../lib/toast'
 import { useNavrhPamet } from '../lib/navrhPamet'
 import { TaskRow } from '../components/TaskRow'
 import { DlouhySeznam } from '../components/DlouhySeznam'
+import { MesicniMrizka, type DenZnacka } from '../components/MesicniMrizka'
 import { PruhDne } from '../components/PruhDne'
 import { Chip } from '../components/Chip'
 import { BezTerminuSheet } from '../components/BezTerminuSheet'
-import { DisclosureContent } from '../components/ui/Disclosure'
 import { TextEffect } from '../components/ui/TextEffect'
 
 const effectiveDate = (t: Task): string | undefined => {
@@ -50,9 +54,6 @@ const effectiveDate = (t: Task): string | undefined => {
   return dates.sort()[0]
 }
 
-// Kolik dní se ukáže napoprvé a o kolik se dobírá.
-const DAVKA_DNI = 28
-const DNY = ['po', 'út', 'st', 'čt', 'pá', 'so', 'ne']
 const monthFmt = new Intl.DateTimeFormat('cs-CZ', { month: 'long' })
 
 /** Nálož jednoho dne: minuty podle klienta (bez barvy = schůzka / bez klienta). */
@@ -72,23 +73,8 @@ export function UpcomingView({
 }) {
   const today = todayISO()
   const klid = klidovyRezim()
-  const [vybrany, setVybrany] = useState<string | null>(today)
-  const [dnu, setDnu] = useState(DAVKA_DNI)
-  // Nekonečný seznam: jakmile se konec dostane na dohled, přibere se
-  // další dávka dnů. Tlačítko pod ním zůstává pro klávesnici a čtečku.
-  const konecRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const el = konecRef.current
-    if (!el || typeof IntersectionObserver === 'undefined') return
-    const io = new IntersectionObserver(
-      (zaznamy) => {
-        if (zaznamy.some((z) => z.isIntersecting)) setDnu((n) => n + DAVKA_DNI)
-      },
-      { rootMargin: '600px 0px' },
-    )
-    io.observe(el)
-    return () => io.disconnect()
-  }, [])
+  const [mesic, setMesic] = useState(() => kotvaMesice(today))
+  const [vybrany, setVybrany] = useState(today)
   const [inbox, setInbox] = useState<null | { cil?: string }>(null)
   const [novy, setNovy] = useState('')
 
@@ -101,25 +87,26 @@ export function UpcomingView({
   const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients])
   const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
 
-  const dny = useMemo(
-    () => Array.from({ length: dnu }, (_, i) => toISODate(addDays(fromISODate(today), i))),
-    [today, dnu],
-  )
-  const konec = dny[dny.length - 1]
+  // Dny zobrazeného měsíce. Plán se dívá dopředu, takže se nálož počítá
+  // od dneška — minulé dny v mřížce zůstanou tiché a propadlá práce
+  // stojí na dnešku, kde se s ní dá něco dělat (triáž je na Dnes).
+  const dnyVMesici = useMemo(() => dnyMesice(mesic), [mesic])
+  const oknoOd = dnyVMesici[0] < today ? today : dnyVMesici[0]
+  const oknoDo = dnyVMesici[dnyVMesici.length - 1] < oknoOd ? oknoOd : dnyVMesici[dnyVMesici.length - 1]
 
-  // CELÝ rozpočet Plánu v jednom `useMemo`. Nezávisí na rozbaleném dni ani
+  // Schůzky pro celé okno. Vícedenní událost patří do KAŽDÉHO svého dne.
+  const events = useLiveQuery(() => calendarEventsBetween(oknoOd, oknoDo), [oknoOd, oknoDo]) ?? []
+
+  // CELÝ rozpočet Plánu v jednom `useMemo`. Nezávisí na vybraném dni ani
   // na rozepsaném úkolu — a přesně to se dřív dělo: každé písmeno v poli
   // „Nový úkol na sobotu…" přepočítalo schůzky, rozdělení úkolů po dnech
   // i pruhy zátěže pro celé okno.
-  // Schůzky pro celé okno. Vícedenní událost patří do KAŽDÉHO svého dne.
-  const events = useLiveQuery(() => calendarEventsBetween(today, konec), [today, konec]) ?? []
-
-  const { eventsPerDay, podleDne, bezTerminu, naloz, souhrn, pondeli } = useMemo(() => {
+  const { eventsPerDay, podleDne, bezTerminu, naloz, souhrn } = useMemo(() => {
     const eventsPerDay = new Map<string, CalendarEvent[]>()
     for (const e of events) {
       if (e.isTodoBlock) continue
-      let d = e.startDay < today ? today : e.startDay
-      const end = (e.endDay ?? e.startDay) > konec ? konec : (e.endDay ?? e.startDay)
+      let d = e.startDay < oknoOd ? oknoOd : e.startDay
+      const end = (e.endDay ?? e.startDay) > oknoDo ? oknoDo : (e.endDay ?? e.startDay)
       let guard = 0
       while (d <= end && guard++ < 90) {
         const uz = eventsPerDay.get(d)
@@ -147,7 +134,8 @@ export function UpcomingView({
 
     // Pruh dne: čas úkolů po klientech + délka schůzek (bez barvy).
     const naloz = new Map<string, DenNaloz>()
-    for (const d of dny) {
+    for (const d of dnyVMesici) {
+      if (d < today) continue
       const ukoly = podleDne.get(d) ?? []
       const schuzky = eventsPerDay.get(d) ?? []
       if (ukoly.length === 0 && schuzky.length === 0) continue
@@ -178,8 +166,28 @@ export function UpcomingView({
       tydenSchuzky > 0 ? `${tydenSchuzky} ${plural(tydenSchuzky, 'schůzka', 'schůzky', 'schůzek')}` : '',
     ].filter(Boolean)
 
-    return { eventsPerDay, podleDne, bezTerminu, naloz, souhrn, pondeli }
-  }, [dny, today, konec, open, events, clientMap])
+    return { eventsPerDay, podleDne, bezTerminu, naloz, souhrn }
+  }, [dnyVMesici, today, oknoOd, oknoDo, open, events, clientMap])
+
+  const popisDne = (n: DenNaloz | undefined) => {
+    if (!n) return ''
+    return [
+      n.ukoly > 0 ? `${n.ukoly} ${plural(n.ukoly, 'úkol', 'úkoly', 'úkolů')}` : '',
+      n.schuzky > 0 ? `${n.schuzky} ${plural(n.schuzky, 'schůzka', 'schůzky', 'schůzek')}` : '',
+      n.minuty > 0 ? `~${minutesToLabel(n.minuty)}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ')
+  }
+
+  // Značky do mřížky: buňka nese pruh a přístupný popis, nic víc se do ní
+  // nevejde. Počítá se z téže nálože jako popisek pod agendou, takže
+  // mřížka a den pod ní nikdy neřeknou dvě různá čísla.
+  const znacky = useMemo(() => {
+    const m = new Map<string, DenZnacka>()
+    for (const [den, n] of naloz) m.set(den, { dily: n.dily, popis: popisDne(n) })
+    return m
+  }, [naloz])
 
   // Neděle a pondělí — stejné okno, v jakém chodí nedělní push notifikace.
   const reviewDay = [0, 1].includes(fromISODate(today).getDay())
@@ -204,8 +212,8 @@ export function UpcomingView({
   const nazevDne = (iso: string) => (iso === today ? 'Dnes' : formatFullDate(fromISODate(iso)))
   const naDen = (iso: string) => (iso === today ? 'dnešek' : formatFullDateNa(fromISODate(iso)))
 
-  // Nový úkol rovnou na rozbalený den — parser dál rozumí klientovi,
-  // prioritě i času; den je daný řádkem.
+  // Nový úkol rovnou na vybraný den — parser dál rozumí klientovi,
+  // prioritě i času; den je daný mřížkou.
   const pridej = async (e: React.FormEvent, iso: string) => {
     e.preventDefault()
     const parsed = parseQuickAdd(novy, clients, new Date(), projects)
@@ -224,40 +232,16 @@ export function UpcomingView({
     ukazToast(`${nazevDne(iso)} — „${task.title}"`)
   }
 
-  // MĚSÍCE jsou hlavní předěl, týdny tichý štítek uvnitř nich. Dřív byl
-  // Plán jen řada týdnů a po pár obrazovkách splýval: „od 21. září" je
-  // štítek, ne orientační bod, a všechny vypadaly stejně. Teď nese měsíc
-  // velké jméno a počet úkolů, týden 13px tichý popisek — dvě velikosti
-  // písma říkají, kde končí jeden celek a začíná druhý, bez jediné linky.
-  // Týden přes přelom měsíce se DĚLÍ, aby blok měsíce nikdy neukazoval
-  // dny jiného; pokračování se pozná podle kotvy (pondělí v minulém
-  // měsíci) a místo „tento týden" ukáže rozsah dnů.
-  const mesice: { kotva: string; tydny: { kotva: string; dny: string[] }[] }[] = []
-  for (const d of dny) {
-    const mKotva = d.slice(0, 7)
-    const wKotva = mondayOf(d)
-    let mesic = mesice[mesice.length - 1]
-    if (!mesic || mesic.kotva !== mKotva) {
-      mesic = { kotva: mKotva, tydny: [] }
-      mesice.push(mesic)
-    }
-    const posledni = mesic.tydny[mesic.tydny.length - 1]
-    if (posledni && posledni.kotva === wKotva) posledni.dny.push(d)
-    else mesic.tydny.push({ kotva: wKotva, dny: [d] })
-  }
-
   const stitekMesice = (kotva: string) => {
     const d = fromISODate(`${kotva}-01`)
     const jmeno = monthFmt.format(d)
-    // Rok se píše, až když nejde o tenhle — Plán je nekonečný, tak se
-    // do něj dá dorolovat i na příští leden.
+    // Rok se píše, až když nejde o tenhle — dolistovat se dá kamkoli.
     return d.getFullYear() === fromISODate(today).getFullYear() ? jmeno : `${jmeno} ${d.getFullYear()}`
   }
 
-  // Souhrn měsíce počítá CELÝ měsíc (od dneška), ne jen vykreslené dny —
-  // úkoly jsou v paměti všechny, takže se číslo doscrollováním nemění.
-  // Hodiny jsou čas úkolů jako v hlavičce („tento týden · ~4 h"),
-  // schůzky v nich nejsou: kalendář je stažený jen po konec okna.
+  // Souhrn měsíce počítá CELÝ měsíc (od dneška), ne jen dny se značkou.
+  // Hodiny jsou čas úkolů jako v hlavičce („tento týden · ~4 h"), schůzky
+  // v nich nejsou: kalendář je stažený jen po konec okna.
   const souhrnMesice = (kotva: string) => {
     let ukoly = 0
     let minuty = 0
@@ -270,147 +254,26 @@ export function UpcomingView({
     return `${ukoly} ${plural(ukoly, 'úkol', 'úkoly', 'úkolů')}${minuty > 0 ? ` · ~${minutesToLabel(minuty)}` : ''}`
   }
 
-  const stitekTydne = (kotva: string, dnyTydne: string[], pokracovani: boolean) => {
-    if (!pokracovani) {
-      if (kotva === pondeli) return 'tento týden'
-      if (kotva === toISODate(addDays(fromISODate(pondeli), 7))) return 'příští týden'
-    }
-    const od = fromISODate(dnyTydne[0]).getDate()
-    const do_ = fromISODate(dnyTydne[dnyTydne.length - 1]).getDate()
-    return od === do_ ? `${od}.` : `${od}.–${do_}.`
+  // Listování měsíci bere výběr s sebou: kdyby zůstal, ukazuje agenda den,
+  // který v mřížce nad ní není vidět, a obrazovka mluví o dvou různých
+  // dnech naráz. V měsíci s dneškem padne výběr na dnešek, jinde na první.
+  const listuj = (o: number) => {
+    const cil = posunMesic(mesic, o)
+    setMesic(cil)
+    setVybrany(cil === kotvaMesice(today) ? today : `${cil}-01`)
+  }
+  const naDnesek = () => {
+    setMesic(kotvaMesice(today))
+    setVybrany(today)
   }
 
-  const popisDne = (n: DenNaloz | undefined) => {
-    if (!n) return ''
-    return [
-      n.ukoly > 0 ? `${n.ukoly} ${plural(n.ukoly, 'úkol', 'úkoly', 'úkolů')}` : '',
-      n.schuzky > 0 ? `${n.schuzky} ${plural(n.schuzky, 'schůzka', 'schůzky', 'schůzek')}` : '',
-      n.minuty > 0 ? `~${minutesToLabel(n.minuty)}` : '',
-    ]
-      .filter(Boolean)
-      .join(' · ')
-  }
-
-  const radekDne = (iso: string) => {
-    const d = fromISODate(iso)
-    const n = naloz.get(iso)
-    const otevreny = vybrany === iso
-    const vraceni = otevreny ? open.filter((t) => pamet.odpociva.get(t.id) === iso) : []
-    const isToday = iso === today
-    const zitra = iso === toISODate(addDays(fromISODate(today), 1))
-    const vikend = [0, 6].includes(d.getDay())
-    const celkem = n?.minuty ?? 0
-    const preteklo = celkem > PLNY_DEN_MIN
-    const dayTasks = sortTasks(podleDne.get(iso) ?? [])
-    const dayEvents = [...(eventsPerDay.get(iso) ?? [])].sort(
-      (a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start),
-    )
-    return (
-      <li key={iso} data-day={iso}>
-        <button
-          type="button"
-          aria-expanded={otevreny}
-          onClick={() => setVybrany(otevreny ? null : iso)}
-          className="flex w-full items-center gap-3 py-2.5 text-left transition-transform duration-150 active:scale-[0.99]"
-        >
-          <span className="flex w-11 shrink-0 flex-col items-start leading-none">
-            <span className={`text-[11px] font-medium ${isToday || zitra ? 'text-accent-deep' : 'text-ink-faint'}`}>
-              {isToday ? 'dnes' : zitra ? 'zítra' : DNY[(d.getDay() + 6) % 7]}
-            </span>
-            <span
-              className={`mt-1 text-[22px] font-semibold tabular-nums ${
-                isToday ? 'text-accent-deep' : vikend && !n ? 'text-ink-soft' : 'text-ink'
-              }`}
-            >
-              {d.getDate()}
-            </span>
-          </span>
-          <span className="min-w-0 flex-1">
-            {/* Pruh: délka je čas, barvy klienti. Prázdný den má jen
-                tichou kolej — graf s nulou má pořád osu. */}
-            <PruhDne dily={n?.dily ?? []} klid={klid} />
-            <span className={`mt-1.5 block truncate text-[13px] ${n ? 'text-ink-soft' : 'text-ink-faint'}`}>
-              {n ? popisDne(n) : 'volno'}
-              {preteklo && <span className="text-danger"> · přes 8 h</span>}
-            </span>
-          </span>
-          <svg
-            viewBox="0 0 24 24"
-            className={`h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 ${otevreny ? 'rotate-180' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M6 9l6 6 6-6" />
-          </svg>
-        </button>
-
-        {/* Rozbalený den: agenda, pole pro nový úkol, výběr bez termínu.
-            Rozbaluje se na místě, takže se plánuje tam, kde se den vidí. */}
-        <DisclosureContent open={otevreny}>
-          <div className="space-y-2 pb-4 pt-1">
-            <div className="overflow-hidden rounded-2xl bg-card shadow-card">
-              {dayEvents.length > 0 && (
-                <ul className={`divide-y divide-line bg-well/30 ${dayTasks.length > 0 ? 'border-b border-line' : ''}`}>
-                  {dayEvents.map((e) => (
-                    <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
-                      <span className="w-24 shrink-0 text-[13px] tabular-nums text-ink-soft">{formatEventRange(e)}</span>
-                      <span className="min-w-0 flex-1 truncate text-[15px] text-ink">{e.title}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {dayTasks.length > 0 && <DlouhySeznam polozky={dayTasks} radek={row} davka={12} className="divide-y divide-line" />}
-              {openRaw !== undefined && dayTasks.length === 0 && dayEvents.length === 0 && (
-                <p className="px-4 py-4 text-sm text-ink-faint">Volný den. Napiš, co na něj patří.</p>
-              )}
-            </div>
-            {/* Odložené úkoly se ten den vrátí do ranního návrhu — v Plánu
-                je to vidět, aby odložení nebylo zapomenutí. */}
-            {vraceni.length > 0 && (
-              <p className="px-1 text-[13px] text-ink-faint">
-                Vrátí se do ranního návrhu: {vraceni.map((t) => t.title).join(', ')}
-              </p>
-            )}
-            {/* Tiché pole jako v detailu klienta: plusko se vynoří až s textem. */}
-            <form onSubmit={(e) => void pridej(e, iso)} className="relative">
-              <input
-                value={novy}
-                onChange={(e) => setNovy(e.target.value)}
-                aria-label="Nový úkol na vybraný den"
-                placeholder={`Nový úkol na ${naDen(iso)}…`}
-                enterKeyHint="done"
-                className="w-full appearance-none rounded-full border border-transparent bg-card py-2.5 pl-4 pr-12 text-[16px] text-ink shadow-card outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus-visible:outline-none"
-              />
-              <button
-                type="submit"
-                aria-label="Přidat úkol"
-                disabled={!novy.trim()}
-                className={`absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-accent text-card transition-[opacity,transform] duration-200 active:scale-90 ${
-                  novy.trim() ? 'opacity-100' : 'pointer-events-none opacity-0'
-                }`}
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-              </button>
-            </form>
-            {bezTerminu.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setInbox({ cil: iso })}
-                className="px-1 py-1 text-[13px] font-medium text-accent-deep"
-              >
-                + Vybrat z úkolů bez termínu · {bezTerminu.length}
-              </button>
-            )}
-          </div>
-        </DisclosureContent>
-      </li>
-    )
-  }
+  const denNaloz = naloz.get(vybrany)
+  const preteklo = (denNaloz?.minuty ?? 0) > PLNY_DEN_MIN
+  const dayTasks = sortTasks(podleDne.get(vybrany) ?? [])
+  const dayEvents = [...(eventsPerDay.get(vybrany) ?? [])].sort(
+    (a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start),
+  )
+  const vraceni = open.filter((t) => pamet.odpociva.get(t.id) === vybrany)
 
   return (
     <div className="space-y-5">
@@ -441,37 +304,129 @@ export function UpcomingView({
         </div>
       )}
 
-      {mesice.map((m, i) => (
-        <section
-          key={m.kotva}
-          className={`rise ${i > 0 ? 'pt-3' : ''}`}
-          style={{ '--stagger': Math.min(i + 1, 6) } as React.CSSProperties}
-        >
-          <div className="flex items-baseline justify-between gap-3">
-            <h2 className="display text-[19px] font-semibold leading-tight first-letter:uppercase">
-              {stitekMesice(m.kotva)}
-            </h2>
-            <span className="shrink-0 text-[13px] text-ink-soft">{souhrnMesice(m.kotva)}</span>
+      {/* Mřížka měsíce. Jméno měsíce nese souhrn, šipky listují — stejné
+          řazení jako všude jinde: nadpis vlevo na svislici, čísla vpravo. */}
+      <section className="rise">
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="display text-[19px] font-semibold leading-tight first-letter:uppercase">
+            {stitekMesice(mesic)}
+          </h2>
+          <div className="flex shrink-0 items-center gap-1">
+            {mesic !== kotvaMesice(today) && (
+              <button
+                type="button"
+                onClick={naDnesek}
+                className="flex h-8 items-center rounded-full px-2.5 text-[13px] font-medium text-accent-deep"
+              >
+                dnes
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => listuj(-1)}
+              aria-label="Předchozí měsíc"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-accent transition-transform duration-150 active:scale-90"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 6l-6 6 6 6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => listuj(1)}
+              aria-label="Další měsíc"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-accent transition-transform duration-150 active:scale-90"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
           </div>
-          {m.tydny.map((t, j) => (
-            <div key={t.kotva} className={j === 0 ? 'mt-2' : 'mt-4'}>
-              <h3 className="section-label mb-1">
-                {stitekTydne(t.kotva, t.dny, t.kotva.slice(0, 7) !== m.kotva)}
-              </h3>
-              <ol className="divide-y divide-line">{t.dny.map(radekDne)}</ol>
-            </div>
-          ))}
-        </section>
-      ))}
+        </div>
+        <p className="section-label mb-2">{souhrnMesice(mesic)}</p>
+        <MesicniMrizka
+          kotva={mesic}
+          dnes={today}
+          vybrany={vybrany}
+          znacky={znacky}
+          klid={klid}
+          onVyber={setVybrany}
+        />
+      </section>
 
-      <div ref={konecRef} aria-hidden="true" />
-      <button
-        type="button"
-        onClick={() => setDnu((n) => n + DAVKA_DNI)}
-        className="px-1 py-2 text-[13px] font-medium text-accent-deep"
-      >
-        Další čtyři týdny
-      </button>
+      {/* Vybraný den: co na něm stojí a kam se dá přidat. */}
+      <section className="rise space-y-2">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="display text-[19px] font-semibold leading-tight first-letter:uppercase">
+            {nazevDne(vybrany)}
+          </h2>
+          <span className={`shrink-0 text-[13px] ${denNaloz ? 'text-ink-soft' : 'text-ink-faint'}`}>
+            {denNaloz ? popisDne(denNaloz) : 'volno'}
+            {preteklo && <span className="text-danger"> · přes 8 h</span>}
+          </span>
+        </div>
+        {/* Pruh přes celou šířku: v mřížce je ten samý obrázek v malém. */}
+        <PruhDne dily={denNaloz?.dily ?? []} klid={klid} />
+
+        <div className="seznam-na-papire">
+          {dayEvents.length > 0 && (
+            <ul className="divide-y divide-line">
+              {dayEvents.map((e) => (
+                <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="w-24 shrink-0 text-[13px] tabular-nums text-ink-soft">{formatEventRange(e)}</span>
+                  <span className="min-w-0 flex-1 truncate text-[15px] text-ink">{e.title}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {dayTasks.length > 0 && <DlouhySeznam polozky={dayTasks} radek={row} davka={12} className="divide-y divide-line" />}
+          {openRaw !== undefined && dayTasks.length === 0 && dayEvents.length === 0 && (
+            <p className="py-4 text-sm text-ink-faint">Volný den. Napiš, co na něj patří.</p>
+          )}
+        </div>
+
+        {/* Odložené úkoly se ten den vrátí do ranního návrhu — v Plánu
+            je to vidět, aby odložení nebylo zapomenutí. */}
+        {vraceni.length > 0 && (
+          <p className="px-1 text-[13px] text-ink-faint">
+            Vrátí se do ranního návrhu: {vraceni.map((t) => t.title).join(', ')}
+          </p>
+        )}
+
+        {/* Tiché pole jako v detailu klienta: plusko se vynoří až s textem. */}
+        <form onSubmit={(e) => void pridej(e, vybrany)} className="relative">
+          <input
+            value={novy}
+            onChange={(e) => setNovy(e.target.value)}
+            aria-label="Nový úkol na vybraný den"
+            placeholder={`Nový úkol na ${naDen(vybrany)}…`}
+            enterKeyHint="done"
+            className="w-full appearance-none rounded-full border border-transparent bg-card py-2.5 pl-4 pr-12 text-[16px] text-ink shadow-card outline-none transition-colors duration-200 placeholder:text-ink-faint focus:border-accent/50 focus-visible:outline-none"
+          />
+          <button
+            type="submit"
+            aria-label="Přidat úkol"
+            disabled={!novy.trim()}
+            className={`absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-accent text-card transition-[opacity,transform] duration-200 active:scale-90 ${
+              novy.trim() ? 'opacity-100' : 'pointer-events-none opacity-0'
+            }`}
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+        </form>
+
+        {bezTerminu.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setInbox({ cil: vybrany })}
+            className="px-1 py-2 text-[13px] font-medium text-accent-deep"
+          >
+            + Vybrat z úkolů bez termínu · {bezTerminu.length}
+          </button>
+        )}
+      </section>
 
       {inbox && (
         <BezTerminuSheet

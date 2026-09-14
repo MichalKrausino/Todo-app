@@ -609,6 +609,52 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 10. Plán je mřížka měsíce a den pod ní ---
+// Mřížka a agenda musí mluvit o TÉMŽE dni: kdyby výběr zůstal při
+// listování stát, ukazuje obrazovka v mřížce jeden měsíc a pod ní den
+// z jiného. Pravítkem se to nezměří — je to otázka, co se stane po
+// ťuknutí.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  await page.getByRole('button',{name:'Nový úkol'}).click(); await page.waitForTimeout(250)
+  await page.locator('input[placeholder]').first().fill('zítra mřížka test')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(250)
+  await page.keyboard.press('Escape'); await page.waitForTimeout(250)
+  await page.getByRole('button',{name:'Plán',exact:true}).click(); await page.waitForTimeout(900)
+
+  const nadpisMesice = () => page.locator('main h2').first().textContent()
+  const nadpisDne = () => page.locator('main h2').nth(1).textContent()
+
+  const dnu = await page.locator('main [data-day]').count()
+  T_(dnu >= 28 && dnu <= 31, 'mřížka má tolik buněk, kolik má měsíc dnů (' + dnu + ')')
+  T_(await page.locator('main [data-day] >> nth=0').isVisible(), 'mřížka je vidět')
+  T_((await nadpisDne()).trim() === 'Dnes', 'pod mřížkou stojí rovnou dnešek')
+
+  // Ťuknutí na den přepne agendu pod mřížkou.
+  const posledni = page.locator('main [data-day]').last()
+  const iso = await posledni.getAttribute('data-day')
+  const cislo = Number(iso.slice(-2))
+  await posledni.click(); await page.waitForTimeout(500)
+  const poVyberu = (await nadpisDne()).trim()
+  T_(poVyberu !== 'Dnes' && poVyberu.includes(cislo + '.'), 'ťuknutí na den ukáže ten den pod mřížkou (' + poVyberu + ')')
+
+  // Listování měsíci bere výběr s sebou — jinak mluví mřížka a agenda
+  // o dvou různých dnech.
+  const mesicPred = (await nadpisMesice()).trim()
+  await page.getByRole('button',{name:'Další měsíc'}).click(); await page.waitForTimeout(600)
+  const mesicPo = (await nadpisMesice()).trim()
+  T_(mesicPo !== mesicPred, 'šipka přelistuje měsíc (' + mesicPred + ' → ' + mesicPo + ')')
+  T_((await nadpisDne()).trim().includes('1.'), 'výběr jde s měsícem, ne zůstává v minulém (' + (await nadpisDne()).trim() + ')')
+
+  // Cesta zpátky na dnešek je vidět, ne skrytá.
+  await page.getByRole('button',{name:'dnes',exact:true}).click(); await page.waitForTimeout(600)
+  T_((await nadpisMesice()).trim() === mesicPred, 'tlačítko „dnes" vrátí měsíc')
+  T_((await nadpisDne()).trim() === 'Dnes', 'tlačítko „dnes" vrátí i vybraný den')
+  await ctx.close()
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)
