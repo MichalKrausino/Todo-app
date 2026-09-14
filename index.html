@@ -8,31 +8,9 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no"
     />
-    <!-- Jediná theme-color: režim si od téhle chvíle řídí appka (dá se
-         v nastavení přepnout napevno), takže barvu stavového řádku
-         přepisuje skript níž, ne media dotaz. -->
-    <meta name="theme-color" content="#f4f4f1" />
+    <!-- theme-color ani styl stavového řádku tu NEJSOU napevno — píše je
+         skript níž do proudu parseru. Proč, viz jeho komentář. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <!-- Stavový řádek na iPhonu. Značku řídí skript níž podle režimu
-         a jsou to TŘI stavy, ne dva — každý ověřený na telefonu:
-
-         `default` = pruh si kreslí iOS sám podle vzhledu SYSTÉMU, do appky
-         nevidí. Kdo má systém a appku rozladěné, dostane pruh naopak:
-         nejdřív bílý nad tmavou appkou, po první opravě černý nad světlou.
-         Proto se `default` nepoužívá vůbec.
-
-         `black-translucent` (tmavý režim) = pruh je průhledný a kreslí ho
-         stránka svým papírem; text hodin píše iOS bíle, což na tmavém
-         papíři sedí. Na telefonu ověřeno, že tuhle hodnotu iOS opravdu
-         čte, i když ji nastaví až tenhle skript.
-
-         Světlý režim značku NEMÁ — smaže se. `black-translucent` by tu
-         bílý text položil na světlý papír a hodiny by zmizely; a jakmile
-         značka chybí, řídí pruh `theme-color`, tedy táž barva jako papír,
-         a barvu textu si iOS dopočítá z jejího jasu. Kdyby to tenhle iOS
-         neuměl, spadne to zpátky na chování `default` — tedy na dnešek,
-         ne na hůř. -->
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Todo" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -40,24 +18,42 @@
     <!-- Režim se musí vyřešit dřív, než se cokoli vykreslí — jinak by
          tmavá appka na okamžik problikla bíle. Proto je to tady jako
          obyčejný skript v hlavičce, ne až v Reactu. Zdroj pravdy je
-         `src/lib/theme.ts`, tohle je jen jeho ranní ozvěna. -->
+         `src/lib/theme.ts`, tohle je jen jeho ranní ozvěna.
+
+         Obě značky se PÍŠOU do proudu parseru (`document.write`), ne
+         přepisují po něm — a to je celý vtip. iOS je čte při parsování
+         hlavičky, takže pozdější `setAttribute` už nevidí. Změřeno na
+         telefonu třikrát: pruh nahoře šel pokaždé za vzhledem SYSTÉMU,
+         i když skript hned po parsování nastavil `black-translucent`.
+         Vypadalo to, že tmavý režim jednou „funguje", ale to byla jen
+         shoda — systém byl tehdy taky tmavý. Zapsaná značka je pro
+         parser totéž co napsaná v HTML, jen se hodnota rozhodne až tady.
+
+         `black-translucent` = pruh je průhledný a kreslí ho stránka svým
+         papírem (proto `viewport-fit=cover` a `env(safe-area-inset-top)`
+         v layoutu); hodiny píše iOS bíle, což na tmavém papíři sedí.
+         Ve světlém režimu se značka NEPÍŠE vůbec: bílé hodiny by na
+         světlém papíře zmizely, a bez ní si pruh vezme barvu z
+         `theme-color`, tedy z papíru. -->
     <script>
       (function () {
+        var tmavy = false
         try {
           var volba = localStorage.getItem('todo.theme') || 'system'
-          var tmavy =
+          tmavy =
             volba === 'dark' ||
             (volba !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-          document.documentElement.dataset.theme = tmavy ? 'dark' : 'light'
-          var meta = document.querySelector('meta[name="theme-color"]')
-          if (meta) meta.setAttribute('content', tmavy ? '#0e0e11' : '#f4f4f1')
-          var lista = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
-          if (lista) {
-            if (tmavy) lista.setAttribute('content', 'black-translucent')
-            else lista.remove()
-          }
         } catch (e) {
-          document.documentElement.dataset.theme = 'light'
+          // soukromé okno bez localStorage — zbyde světlý režim
+        }
+        document.documentElement.dataset.theme = tmavy ? 'dark' : 'light'
+        document.write(
+          '<meta name="theme-color" content="' + (tmavy ? '#0e0e11' : '#f4f4f1') + '">',
+        )
+        if (tmavy) {
+          document.write(
+            '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">',
+          )
         }
       })()
     </script>

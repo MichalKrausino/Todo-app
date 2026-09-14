@@ -446,24 +446,26 @@ skript v `index.html`, aby tmavá appka neproblikla bíle; volba je lokální
 (localStorage), nesynchronizuje se. Tmavá paleta je díky tomu na jednom
 místě — nová barva se přidává jen jednou. Podklad je teplá téměř-čerň
 (`#0e0e11`), ne plná čerň. Jediná `theme-color` meta v `index.html` se
-přepisuje z JS a musí sedět s `paper`. **Stavový řádek na iPhonu jde za
-appkou, ne za systémem**, a `apple-mobile-web-app-status-bar-style` má
-proto **tři stavy, ne dva** — každý ověřený na telefonu. `default` se
-nepoužívá vůbec: s ním si pruh kreslí iOS podle vzhledu SYSTÉMU, do appky
-nevidí, a při rozladěném systému a appce vyjde naopak — nejdřív bílý pruh
-nad tmavou appkou, po první opravě černý nad světlou. V **tmavém** režimu
-je `black-translucent`: pruh je průhledný, kreslí ho stránka svým papírem
-(proto `viewport-fit=cover` a `env(safe-area-inset-top)` v layoutu) a bílé
-hodiny na tmavém papíři sedí. Ve **světlém** se značka **smaže** —
-`black-translucent` by bílé hodiny položil na světlý papír a bez značky
-řídí pruh `theme-color`, tedy táž barva jako papír. Mazání znamená, že
-`theme.ts` ji musí umět zase vyrobit a nesmí se množit (hlídá audit
-přepnutím tam a zpátky). Hodnotu musí nastavit **skript v hlavičce, ne až
-`theme.ts`** — iOS čte značky při startu appky, dřív než doběhne balíček
-s Reactem. Audit chování to proto měří dvakrát a to druhé měření je to
-podstatné: se zablokovaným balíčkem vidí jen to, co stihla hlavička.
-Ověřeno vrácenou vadou — průchod, který se dívá až na hotovou appku,
-projde i s rozbitou hlavičkou, protože ji mezitím srovná `theme.ts`. Barvy klientů zůstávají
+přepisuje z JS a musí sedět s `paper`. **Značky v hlavičce se PÍŠOU do proudu
+parseru, nepřepisují po něm** (`document.write` ve skriptu v `index.html`)
+— a stálo to tři nasazení, než se přišlo proč. iOS čte `theme-color`
+i `apple-mobile-web-app-status-bar-style` **při parsování hlavičky**,
+takže statickou hodnotu vidí a pozdější `setAttribute` (ať už ze skriptu
+v hlavičce, nebo z `theme.ts`) už ne. Změřeno na telefonu třikrát: pruh
+nahoře šel pokaždé za vzhledem SYSTÉMU — světlý nad tmavou appkou, pak
+tmavý nad světlou, pak zase světlý nad tmavou. Prostřední pokus vypadal,
+že „tmavý režim funguje", ale byla to jen shoda: systém byl tehdy taky
+tmavý. **Zapsaná značka je pro parser totéž co napsaná v HTML**, jen se
+její hodnota rozhodne až za běhu. V tmavém režimu se píše
+`black-translucent`: pruh je průhledný a kreslí ho stránka svým papírem
+(proto `viewport-fit=cover` a `env(safe-area-inset-top)` v layoutu), bílé
+hodiny na tmavém papíři sedí. Ve světlém se **nepíše vůbec** — bílé hodiny
+by na světlém papíře zmizely a bez ní si pruh vezme barvu z `theme-color`.
+`default` se nepoužívá nikdy: znamená „řiď se systémem". Tuhle vlastnost
+**v prohlížeči změřit nelze** (v DOMu vypadá zapsaná značka stejně jako
+přepsaná), takže audit chování kontroluje ZDROJ stránky: mimo skript
+nesmí být ani jedna z nich. Ověřeno vrácenou vadou — statická
+`theme-color` zpátky v hlavičce shodí tuhle kontrolu i počty značek. Barvy klientů zůstávají
 systémová paleta iOS (`CLIENT_COLORS`) — jsou to štítky, ne brand.
 Animace `rise`/`pop`/`sheet-*` respektují `prefers-reduced-motion`.
 Ikony appky stojí na `paper` a barvách klientů (viz „Značka je ten pruh")
