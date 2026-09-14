@@ -297,9 +297,20 @@ na nulu — vzhled se nemění, jen se zaručí dosednutí.
 
 **Posun celé obrazovky žádná míra symetrie nechytí**, protože vůči sobě
 zůstane všechno srovnané; audit rozhraní hlásil čistý výsledek, zatímco
-titulek stál na 30 px. Přibyla proto kontrola `svislice`, která měří
-**absolutní** polohu titulku proti 16 px, a to z první řádky textu, ne
-z rámu uzlu (u titulku po písmenech je rám široký jako celý sloupec).
+obsah stál na 30 px. Hlídá to teď kontrola, která měří **absolutní**
+polohu obalu nájezdu proti 16 px. Měří se obal, ne titulek: ten v detailu
+klienta legitimně stojí až za barevnou tečkou (44 px) a kontrola na něm
+hlásila planý poplach.
+
+**Ta kontrola musí být v `audit:chovani`, ne (jen) v `audit:ui`** — je to
+rozdíl mezi pojistkou a testem. `audit:ui` seje data přímo do IndexedDB
+ještě před načtením, takže živé dotazy doběhnou dřív, než se někam
+naviguje, a po nájezdu už nic nepřekresluje: **ten závod tam nenastane
+a s vrácenou vadou průchod projde.** `audit:chovani` zakládá data přes
+rozhraní za běhu, takže se rozpočet dnů v Plánu dopočítá až po příjezdu —
+a to je přesně ten okamžik, kdy se osa přepne. Ověřeno oběma směry:
+s opravou 16 px na všech třech obrazovkách, s vrácenou vadou **spadne
+jen Plán, na 30 px**.
 
 **Co ujede za okraj, se rozplyne** (`.radka-mizi` v `index.css`).
 Vodorovně scrollující řádky pilulek — chipy na Dnes, v Plánu, ve Vše
