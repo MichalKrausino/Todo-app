@@ -283,6 +283,24 @@ uvnitř `h1`), ne celá hlavička. Dokud se uhýbalo `pr-24`, ubíralo se
 96 px i tam, kde žádná ikona není, a jméno se **uřízlo** („Ondra Fré…")
 na obrazovce, kde bylo místa dost. Jméno člověka se zalomí, neuřízne.
 
+**Nájezd obrazovky musí dosednout na OBOU osách** (`BlurFade`, `App.tsx`).
+Plán stál natrvalo o 14 px vpravo — celá obrazovka mimo svislici, na které
+stojí zbytek appky. Řetěz příčiny: směr nájezdu počítá `App` z `prevTab`
+ref, takže hned po přepnutí vyjde `dir ≠ 0` → `'left'` → osa **x**, nájezd
+z `+offset` (14 px). Jakmile efekt `prevTab` srovná, vyjde při dalším
+překreslení `dir === 0` → `'up'` → osa **y**. Varianta `visible`
+nastavovala jen `[osa]: 0`, takže se z ní klíč `x` ztratil — a motion
+nechal x **zmrzlé** tam, kde zrovna bylo. Na Plánu se to trefí pokaždé:
+živé dotazy (rozpočet dnů, kalendář) obrazovku překreslí hned po nájezdu.
+Proto `visible` vrací na nulu `x` i `y` a `hidden` nastavuje druhou osu
+na nulu — vzhled se nemění, jen se zaručí dosednutí.
+
+**Posun celé obrazovky žádná míra symetrie nechytí**, protože vůči sobě
+zůstane všechno srovnané; audit rozhraní hlásil čistý výsledek, zatímco
+titulek stál na 30 px. Přibyla proto kontrola `svislice`, která měří
+**absolutní** polohu titulku proti 16 px, a to z první řádky textu, ne
+z rámu uzlu (u titulku po písmenech je rám široký jako celý sloupec).
+
 **Co ujede za okraj, se rozplyne** (`.radka-mizi` v `index.css`).
 Vodorovně scrollující řádky pilulek — chipy na Dnes, v Plánu, ve Vše
 a u klienta, řádka slotů v detailu úkolu — mizely pod hranou displeje

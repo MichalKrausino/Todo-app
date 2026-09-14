@@ -283,6 +283,32 @@ async function sirka(kde) {
   }
 }
 
+// Stojí obsah obrazovky na svislici stránky (16 px)?
+//
+// Sem se nedá dojít měřením symetrie: když se posune CELÁ obrazovka,
+// všechno na ní zůstane vůči sobě srovnané a všechny ostatní kontroly
+// projdou. Přesně to se stalo — nájezd `BlurFade` nechal na Plánu
+// zmrzlý `translateX(14px)` a titulek stál na 30 px místo 16, zatímco
+// audit hlásil čistý výsledek. Měří se proto ABSOLUTNÍ poloha titulku.
+async function svislice(kde) {
+  const x = await page.evaluate(() => {
+    const h1 = document.querySelector('main h1')
+    if (!h1) return null
+    // Poloha PRVNÍ ŘÁDKY textu, ne rámu uzlu — u titulku po písmenech
+    // (TextEffect) je rám stejně široký jako sloupec.
+    const r = h1.getClientRects()[0] ?? h1.getBoundingClientRect()
+    return Math.round(r.x * 10) / 10
+  })
+  if (x === null) return
+  if (Math.abs(x - 16) > 1) {
+    nalezy.push({
+      kde, typ: 'svislice',
+      popis: `titulek stoji na ${x} px misto 16 — cela obrazovka je posunuta`,
+      vlevo: x, vpravo: 16,
+    })
+  }
+}
+
 const obrazovky = [
   ['Dnes', async () => {}],
   // Druhá poloha záložky Dnes (dvojité ťuknutí). Měří se hned za Dnes,
@@ -357,6 +383,7 @@ async function projdi(znacka, jenKontrast) {
     await jdi()
     await zmer(jmeno(kde), 'main', jenKontrast)
     if (!jenKontrast) await sirka(jmeno(kde))
+    if (!jenKontrast) await svislice(jmeno(kde))
   }
   await page.getByRole('button', { name: 'Dnes', exact: true }).click(); await page.waitForTimeout(400)
   for (const [kde, otevri, kolikZavrit] of panely) {
