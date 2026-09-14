@@ -655,6 +655,51 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 11. stavový řádek na iPhonu jde za appkou, ne za systémem ---
+// Obě značky v hlavičce musí sedět s tím, co je opravdu vykreslené —
+// a hlavně i tehdy, když se appka a systém NESHODNOU (světlý iOS, tmavá
+// appka). Přesně na tom to prasklo: pruh nahoře zůstal bílý nad černou
+// appkou. `--color-paper` se čte z plátna, ne z řetězce, takže změna
+// palety, která na značky zapomene, tady spadne.
+//
+// Měří se DVAKRÁT a to druhé měření je to podstatné: iOS čte značky při
+// startu appky, tedy dřív, než doběhne balíček s Reactem. Kontrola, která
+// se dívá až na hotovou appku, projde i s rozbitou hlavičkou, protože ji
+// mezitím srovná `theme.ts` — ověřeno vrácenou vadou. Proto druhý průchod
+// balíček zablokuje a dívá se jen na to, co stihl skript v hlavičce.
+{
+  const stav = async (schema, volba, bezBalicku) => {
+    const ctx = await b.newContext({viewport:{width:390,height:844}, colorScheme: schema})
+    const page = await ctx.newPage()
+    if (volba) await page.addInitScript((v) => localStorage.setItem('todo.theme', v), volba)
+    if (bezBalicku) await page.route('**/assets/*.js', (r) => r.abort())
+    await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'domcontentloaded'}); await page.waitForTimeout(bezBalicku ? 300 : 700)
+    const out = await page.evaluate(() => ({
+      theme: document.documentElement.dataset.theme,
+      barva: document.querySelector('meta[name="theme-color"]')?.getAttribute('content'),
+      lista: document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.getAttribute('content'),
+      paper: getComputedStyle(document.documentElement).getPropertyValue('--color-paper').trim(),
+      pocet: document.querySelectorAll('meta[name="theme-color"]').length,
+    }))
+    await ctx.close()
+    return out
+  }
+  const kombinace = [['light', null, 'light'], ['dark', null, 'dark'], ['light', 'dark', 'dark'], ['dark', 'light', 'light']]
+  for (const [schema, volba, cekany] of kombinace) {
+    for (const bezBalicku of [false, true]) {
+      const o = await stav(schema, volba, bezBalicku)
+      const kde = (bezBalicku ? 'při startu: ' : 'v appce: ') + 'systém ' + schema + ' + volba ' + (volba ?? 'systém')
+      T_(o.theme === cekany, kde + ' → režim ' + cekany + ' (je ' + o.theme + ')')
+      T_(o.pocet === 1, kde + ' → jediná značka theme-color (je ' + o.pocet + ')')
+      T_(o.barva === o.paper, kde + ' → theme-color sedí s papírem (' + o.barva + ' vs ' + o.paper + ')')
+      T_(
+        o.lista === (cekany === 'dark' ? 'black-translucent' : 'default'),
+        kde + ' → stavový řádek ' + (cekany === 'dark' ? 'kreslí stránka' : 'nechá iOS') + ' (' + o.lista + ')',
+      )
+    }
+  }
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)

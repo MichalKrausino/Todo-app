@@ -13,8 +13,17 @@
          přepisuje skript níž, ne media dotaz. -->
     <meta name="theme-color" content="#f4f4f1" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <!-- default + theme-color: stavový řádek přebírá barvu pozadí appky
-         v obou režimech (black-translucent by nutil bílý text i na světlé) -->
+    <!-- Stavový řádek na iPhonu. Hodnota se přepisuje skriptem níž podle
+         režimu a NENÍ to kosmetika: s `default` si pruh nahoře kreslí iOS
+         sám podle vzhledu SYSTÉMU, ne podle appky. Kdo má systém světlý
+         a appku přepnutou na tmavou, kouká na bílý pruh nad černou appkou.
+         Do appky iOS nevidí, takže jediná cesta, jak tam dostat její
+         barvu, je nechat stránku kreslit až pod něj (`black-translucent`,
+         proto `viewport-fit=cover` a `env(safe-area-inset-top)` v layoutu).
+         Přepíná se to jen do tmavého režimu: `black-translucent` píše text
+         hodin bíle a na světlém papíře by zmizel. Když by iOS dynamickou
+         hodnotu nevzal, zůstane `default`, tedy dnešní stav — tahle změna
+         nemá jak nic zhoršit. -->
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Todo" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -34,6 +43,8 @@
           document.documentElement.dataset.theme = tmavy ? 'dark' : 'light'
           var meta = document.querySelector('meta[name="theme-color"]')
           if (meta) meta.setAttribute('content', tmavy ? '#0e0e11' : '#f4f4f1')
+          var lista = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
+          if (lista) lista.setAttribute('content', tmavy ? 'black-translucent' : 'default')
         } catch (e) {
           document.documentElement.dataset.theme = 'light'
         }
