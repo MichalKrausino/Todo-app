@@ -634,21 +634,35 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
   );
 }
 
+/* Tmavá čočka musí být proti desce o TÝŽ VJEMOVÝ krok jako světlá, ne
+   o týž jas. Oko nevnímá jas lineárně: na tmavém podkladu je tentýž
+   rozdíl vidět mnohem víc, a čočka pak není sklo, ale světlejší flek.
+   Změřeno z plátna (ne z CSS — dok je sklo, vypočtená barva o výsledku
+   nic neříká), rozdíl světlosti L* mezi čočkou a deskou:
+
+     světlý režim       5,66   ← tenhle krok je ten správný
+     tmavý s 0,13/0,28  8,18   ← o 45 % víc, odtud ten flek
+     tmavý s 0,105/0,23 5,46   ← sedí
+
+   Pozor, dolů to ujede rychle: s 0,07 vyjde 1,79 a s 0,05 už −0,07,
+   tedy čočka zmizí úplně. */
 :root[data-theme='dark'] .tab-on {
-  background: rgb(255 255 255 / 0.13);
+  background: rgb(255 255 255 / 0.105);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.28),
-    inset 0 -1px 0 rgb(255 255 255 / 0.06),
-    inset 1px 0 0 rgb(255 255 255 / 0.1),
+    inset 0 1px 0 rgb(255 255 255 / 0.23),
+    inset 0 -1px 0 rgb(255 255 255 / 0.05),
+    inset 1px 0 0 rgb(255 255 255 / 0.09),
     0 2px 8px rgb(0 0 0 / 0.35);
 }
+/* Za jízdy sklo zesvětlá — poměr ke klidovému stavu zůstal, jen se
+   posunul dolů s ním, aby byl zdvih pořád stejně znát. */
 :root[data-theme='dark'] [data-leti] .tab-on,
 :root[data-theme='dark'] [data-tahne] .tab-on {
-  background: rgb(255 255 255 / 0.2);
+  background: rgb(255 255 255 / 0.16);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.4),
-    inset 0 -1px 0 rgb(255 255 255 / 0.08),
-    inset 1px 0 0 rgb(255 255 255 / 0.14),
+    inset 0 1px 0 rgb(255 255 255 / 0.34),
+    inset 0 -1px 0 rgb(255 255 255 / 0.07),
+    inset 1px 0 0 rgb(255 255 255 / 0.12),
     0 8px 20px rgb(0 0 0 / 0.5);
 }
 :root[data-theme='dark'] .tab-lesk {

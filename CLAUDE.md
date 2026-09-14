@@ -84,7 +84,14 @@ podkladu `paper` (ne studená iOS šeď), hairline oddělovače, plovoucí sklen
 vzoru tab baru iOS 26 — Liquid Glass, jak ho nosí GitHub i Instagram):
 pod vybranou ikonou je **čočka** — široké sklo 64 × 44 světlejší než
 deska, s ostrým světlem na horní hraně a měkkým stínem, takže stojí
-nad dokem (`.tab-on`). **Složený dok je úzký** (`DOK_SIRKA` v `App.tsx`,
+nad dokem (`.tab-on`). **V tmavém režimu musí být ten krok stejně velký
+VJEMOVĚ, ne stejně velký v jasu**: oko nevnímá jas lineárně, takže tentýž
+rozdíl je na tmavém podkladu vidět mnohem víc a z čočky je světlejší
+flek místo skla. Měří se z plátna, ne z CSS (dok je sklo, vypočtená
+barva o výsledku nic neříká) — rozdíl světlosti `L*` mezi čočkou
+a deskou: světlý režim 5,66, tmavý měl 8,18 (o 45 % víc), po doladění
+na krytí 0,105 má 5,46. Dolů to ujede rychle: 0,07 dá 1,79 a 0,05
+už −0,07, tedy čočka zmizí. **Složený dok je úzký** (`DOK_SIRKA` v `App.tsx`,
 306 px, `mx-auto`): tři sloty po 64 px = přesně šířka čočky, mezery
 20 px, okraje 6 / 8 px, takže čočka (44 v 56) i plusko (40 v 56) sedí v rozích
 kapsle se stejnou mezerou jako svisle a zaoblení vrstev je
