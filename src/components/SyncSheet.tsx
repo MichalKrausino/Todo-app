@@ -39,6 +39,7 @@ import { TodoistSheet } from './TodoistSheet'
 
 const PHASE_LABELS: Record<SyncPhase, string> = {
   unconfigured: 'Nenastaveno',
+  starting: 'Spouští se…',
   signedOut: 'Nepřihlášeno',
   idle: 'Synchronizováno',
   syncing: 'Synchronizuji…',
@@ -55,7 +56,8 @@ export function useSyncStatus() {
 // Popisek řádky sdílení. Odhlášenému se neslibuje nic, co nepůjde —
 // ale řádka zůstává vidět, jinak by se o sdílení nedozvěděl.
 function sdileniPopis(pocet: number, phase: SyncPhase): string {
-  if (phase === 'unconfigured' || phase === 'signedOut') return 'Vyžaduje přihlášení'
+  if (phase === 'unconfigured' || phase === 'starting' || phase === 'signedOut')
+    return 'Vyžaduje přihlášení'
   if (pocet === 0) return 'Klienta můžeš sdílet s kolegou'
   return `${pocet} ${plural(pocet, 'sdílený klient', 'sdílení klienti', 'sdílených klientů')}`
 }
@@ -95,7 +97,9 @@ export function SyncSheet({ onClose }: { onClose: () => void }) {
           </>
         )}
 
-        {status.phase !== 'unconfigured' && status.phase !== 'signedOut' && (
+        {status.phase !== 'unconfigured' &&
+          status.phase !== 'starting' &&
+          status.phase !== 'signedOut' && (
           <>
             <dl className="space-y-1 text-sm">
               {status.email && (
@@ -582,6 +586,7 @@ function SignInForm() {
 
 const PHASE_COLORS: Record<SyncPhase, string> = {
   unconfigured: 'text-ink-faint',
+  starting: 'text-ink-faint',
   signedOut: 'text-ink-faint',
   idle: 'text-moss',
   syncing: 'text-accent-deep',

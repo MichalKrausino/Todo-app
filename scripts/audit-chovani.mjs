@@ -168,9 +168,28 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await tah(195, y1, 260, 8, 40)
   T_(await panelu() > 0, 'odrolovaný panel se tažením nezavírá, jen scrolluje')
 
-  // A hlavně: obsah panelu musí jít pořád rolovat prstem. Tažení se kvůli
-  // tomu chytá jen za úchyt nahoře — kdyby se `touch-action: none` dostalo
-  // na celou plochu, rolování by přestalo fungovat úplně.
+  // Stažení ZA OBSAH, když je panel nahoře. Dokud se gesto chytalo jen
+  // za úchyt, prst na obsahu spustil pružné přetažení vlastního rolování:
+  // uvnitř krabice sjel obsah dolů, krabice zůstala stát a nad úchytem se
+  // otevřela prázdná plocha. Vypadalo to jako dvě vrstvy, z nichž se hýbe
+  // ta špatná.
+  await otevri()
+  await page.evaluate(() => { document.querySelector('.sheet-panel').scrollTop = 0 })
+  const yStred = (await page.locator('.sheet-panel').boundingBox()).y + 260
+  await tah(195, yStred, 260, 8, 40)
+  T_(await panelu() === 0, 'stažení za obsah panel zavře, ne jen odsune obsah uvnitř')
+
+  // Pružné přetažení vlastního rolování musí být vypnuté (`overscroll-none`,
+  // ne `contain`): `contain` zabrání jen přenosu na stránku, odskok uvnitř
+  // panelu nechá být — a právě ten dělal tu prázdnou plochu.
+  await otevri()
+  const odskok = await page.evaluate(() =>
+    getComputedStyle(document.querySelector('.sheet-panel')).overscrollBehaviorY)
+  T_(odskok === 'none', 'panel nemá pružné přetažení vlastního rolování (' + odskok + ')')
+
+  // A hlavně: obsah panelu musí jít pořád rolovat prstem. Kdyby se
+  // `touch-action: none` dostalo na celou plochu, rolování by přestalo
+  // fungovat úplně.
   await otevri()
   await page.evaluate(() => { document.querySelector('.sheet-panel').scrollTop = 0 })
   const yObsah = (await page.locator('.sheet-panel').boundingBox()).y + 260
@@ -178,6 +197,52 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   const odrolovano = await page.evaluate(() => document.querySelector('.sheet-panel').scrollTop)
   T_(odrolovano > 20, 'obsah panelu jde rolovat prstem (scrollTop ' + odrolovano + ')')
   T_(await panelu() > 0, 'rolování obsahu panel nezavře')
+  await page.keyboard.press('Escape'); await page.waitForTimeout(500)
+
+  // Nad textovým polem patří svislý tah kurzoru a výběru textu, ne panelu.
+  // Hledání je panel s polem hned nahoře, takže se to na něm dá ověřit.
+  await page.getByRole('button',{name:'Hledat'}).click(); await page.waitForTimeout(700)
+  const pole = await page.locator('.sheet-panel input').first().boundingBox()
+  if (pole) {
+    await tah(Math.round(pole.x + pole.width / 2), Math.round(pole.y + pole.height / 2), 260, 8, 40)
+    T_(await panelu() > 0, 'tah nad textovým polem panel nezavře')
+  } else {
+    T_(false, 'tah nad textovým polem panel nezavře (pole se nenašlo)')
+  }
+  await page.keyboard.press('Escape'); await page.waitForTimeout(500)
+
+  // Vodorovná řádka uvnitř panelu musí pořád rolovat do strany, a svislý
+  // tah z TÉŽE řádky musí panel zavřít. `preventDefault` v touchmove platí
+  // na celé gesto, takže jedno ukvapené zavolání na prvním ťuknutí by
+  // řádku umrtvilo — a řádka slotů je v detailu úkolu hlavní ovládání.
+  await page.getByRole('button',{name:'Nový úkol'}).click(); await page.waitForTimeout(300)
+  await page.locator('input[placeholder]').first().fill('úkol na řádku slotů')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(900)
+  await page.getByText('úkol na řádku slotů').first().click(); await page.waitForTimeout(900)
+  const radka = await page.evaluate(() => {
+    const el = document.querySelector('.sheet-panel .radka-mizi')
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    return { pretece: el.scrollWidth > el.clientWidth, y: Math.round(r.y + r.height / 2) }
+  })
+  if (radka?.pretece) {
+    // Vodorovně: tah doleva musí řádku odrolovat a panel nechat být.
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:320,y:radka.y}]})
+    for (let i=1;i<=8;i++) {
+      await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:320-i*25,y:radka.y}]})
+      await page.waitForTimeout(30)
+    }
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})
+    await page.waitForTimeout(500)
+    const doStrany = await page.evaluate(() => document.querySelector('.sheet-panel .radka-mizi')?.scrollLeft ?? 0)
+    T_(doStrany > 10, 'vodorovná řádka v panelu roluje do strany (scrollLeft ' + doStrany + ')')
+    T_(await panelu() > 0, 'vodorovné tažení panel nezavře')
+    // Svisle z téže řádky: panel se zavře.
+    await tah(200, radka.y, 280, 8, 35)
+    T_(await panelu() === 0, 'svislý tah z vodorovné řádky panel zavře')
+  } else {
+    T_(false, 'vodorovná řádka v panelu roluje do strany (řádka slotů se nenašla nebo nepřetéká)')
+  }
   await page.keyboard.press('Escape'); await page.waitForTimeout(500)
 
   await ctx.close()
@@ -233,6 +298,73 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   T_(await page.locator('main button').filter({hasText:'Pokusný'}).count() > 0, 'vrácený klient je zpátky v seznamu')
   await page.locator('main button').filter({hasText:'Pokusný'}).first().click(); await page.waitForTimeout(600)
   T_(await ukolKlienta() > 0, 'vrácení klienta obnoví i jeho úkoly')
+  await ctx.close()
+}
+
+// --- 4b. rozpad projektu na kroky (Fáze 5) ---
+// Nabídka smí čerpat JEN z vlastní historie, takže se musí ověřit celý
+// řetěz: úkol zařazený do jednoho projektu → podobně pojmenovaný druhý
+// projekt → nabídka → přidání → vratnost. A hlavně že se u projektu,
+// kterému se nic nepodobá, nenabízí vůbec nic — ticho je tu odpověď.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  await page.getByRole('button',{name:'Klienti',exact:true}).click(); await page.waitForTimeout(500)
+  await page.getByRole('button',{name:'+ Nový'}).first().click(); await page.waitForTimeout(400)
+  await page.getByRole('textbox',{name:'Jméno klienta nebo oblasti'}).fill('Rozpad')
+  await page.getByRole('button',{name:'Vytvořit'}).click(); await page.waitForTimeout(700)
+  await page.locator('main button').filter({hasText:'Rozpad'}).first().click(); await page.waitForTimeout(600)
+
+  const zalozProjekt = async (jmeno) => {
+    await page.getByRole('button',{name:'+ Projekt'}).click(); await page.waitForTimeout(350)
+    await page.getByRole('textbox',{name:'Název nového projektu'}).fill(jmeno)
+    await page.getByRole('button',{name:'Založit'}).click(); await page.waitForTimeout(700)
+  }
+  await zalozProjekt('Rebranding webu')
+  await zalozProjekt('Rebranding webu pro e-shop')
+
+  // Úkol do prvního projektu — zařazení bydlí ve slotu v detailu úkolu.
+  await page.getByRole('textbox',{name:'Nový úkol pro klienta'}).fill('Analýza současného webu')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(700)
+  await page.locator('main').getByText('Analýza současného webu').first().click(); await page.waitForTimeout(700)
+  // Slot „Projekt" má i zadávání v doku — hledá se jen uvnitř panelu.
+  const panel = page.locator('.sheet-panel')
+  await panel.getByRole('button',{name:'Projekt',exact:true}).click(); await page.waitForTimeout(400)
+  // Volba nese značku „▸" a „Rebranding webu" je předponou toho druhého
+  // projektu — proto přesná shoda i se značkou.
+  await panel.getByRole('button',{name:'▸ Rebranding webu',exact:true}).click(); await page.waitForTimeout(400)
+  await panel.getByRole('button',{name:'Uložit'}).click(); await page.waitForTimeout(800)
+
+  // Druhý projekt teď má z čeho čerpat.
+  await page.locator('main button').filter({hasText:'Rebranding webu pro e-shop'}).first().click()
+  await page.waitForTimeout(800)
+  const nabidka = page.getByRole('button',{name:/Rozepsat na kroky/})
+  T_(await nabidka.count() > 0, 'podobný projekt nabídne rozpad na kroky')
+  if (await nabidka.count()) {
+    T_(/Rozepsat na kroky · 1/.test(await nabidka.textContent()), 'nabídne právě kroky zdrojového projektu')
+    // Rozbalení je animace na výšku — než se dojede, tlačítko dole se hýbe.
+    await nabidka.click(); await page.waitForTimeout(1200)
+    T_(await page.getByText('podle „Rebranding webu"').count() > 0, 'u kroku je vidět, odkud pochází')
+    const pridat = page.getByRole('button',{name:/^Přidat ·/})
+    await pridat.scrollIntoViewIfNeeded()
+    await pridat.click(); await page.waitForTimeout(1000)
+    T_(await page.locator('main').getByText('Analýza současného webu').count() > 0,
+       'přijatý krok se založil jako úkol projektu')
+    // Panel se musí zavřít sám: toast má z-40, plachta panelu z-50 —
+    // pod otevřeným panelem by „Vrátit" nešlo stisknout.
+    T_(await page.locator('.sheet-panel').count() === 0, 'po přidání se panel zavře, ať je „Vrátit" dosažitelné')
+  }
+  const vratit = page.getByRole('button',{name:'Vrátit'})
+  T_(await vratit.count() > 0, 'přidání kroků jde vrátit')
+  if (await vratit.count()) { await vratit.click(); await page.waitForTimeout(800) }
+
+  // Projekt, kterému se nic nepodobá, nesmí nabízet nic.
+  await zalozProjekt('Focení produktů')
+  await page.locator('main button').filter({hasText:'Focení produktů'}).first().click()
+  await page.waitForTimeout(800)
+  T_(await page.getByRole('button',{name:/Rozepsat na kroky/}).count() === 0,
+     'bez podobného projektu se nenabízí nic (ani prázdný stav)')
   await ctx.close()
 }
 

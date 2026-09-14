@@ -14,7 +14,9 @@ import { getSyncStatus, subscribeSyncStatus } from '../sync/status'
 
 export function ClientSharing({ clientId }: { clientId: string }) {
   const status = useSyncExternalStore(subscribeSyncStatus, getSyncStatus)
-  const signedIn = status.phase !== 'signedOut' && status.phase !== 'unconfigured'
+  const signedIn = status.phase !== 'signedOut' &&
+    status.phase !== 'unconfigured' &&
+    status.phase !== 'starting'
   const [shares, setShares] = useState<ClientShare[]>([])
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string>()

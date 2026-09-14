@@ -20,17 +20,23 @@ export const jeOtevrenyPanel = () => stack.length > 0
 // POSTAVENO PODLE OVĚŘENÉHO VZORU (vaul, drawer od Emila Kowalského),
 // protože vlastní vynález tady dvakrát selhal:
 //
-//   1. Pointer events, ne touch events. Safari od iOS 15 `preventDefault`
-//      v touchmove spolehlivě neposlouchá, jakmile se jednou rozjede
-//      rolování — stavět na něm gesto je stavba na písku. Pointer capture
-//      naproti tomu drží události u panelu i mimo něj a `pointercancel`
-//      poctivě řekne, že si scrollování vzal prohlížeč.
-//   1b. TÁHNE SE ZA ÚCHYT NAHOŘE, ne za celou plochu panelu. Změřeno:
-//      když gesto začne na rolovací ploše, prohlížeč si ho vezme po dvou
-//      pohybech (přijde `pointercancel`) dřív, než se stihne rozpoznat —
-//      a proti tomu nepomůže nic než `touch-action: none`, které by ale
-//      na rolovací ploše zabilo rolování. Úchyt je proto samostatný pruh
-//      nahoře, který nerolluje; přesně to slibuje ta čárka pod okrajem.
+//   1. ÚCHYT jede na pointer events. Má `touch-action: none`, takže mu
+//      prohlížeč gesto nevezme, a pointer capture drží události u něj,
+//      i když prst vyjede jinam.
+//   1b. PLOCHA PANELU jede na touch events, a jinak to nejde. Změřeno:
+//      při tahu na rolovací ploše přijde `pointercancel` UŽ PO PRVNÍM
+//      pohybu — a přijde i tehdy, když je panel odrolovaný nahoře
+//      a `overscroll-behavior: none`, tedy když není co odrolovat.
+//      Prohlížeč si svislý tah bere tak jako tak a jediné, co ho
+//      zastaví, je `preventDefault` v non-passive `touchmove`.
+//      Ten se volá JEN když se stejně nedá rolovat (panel nahoře, tah
+//      dolů): nikdy tedy nesebere gesto, které by něco odrolovalo,
+//      a když ho Safari nevyslyší — od iOS 15 `preventDefault` v
+//      touchmove neposlouchá, jakmile se rolování jednou rozjede —
+//      zůstane chování jako dřív, ne rozbité.
+//      Bez toho tahu za plochu prst na obsahu spustil pružné přetažení
+//      vlastního rolování: obsah uvnitř sjel dolů, krabice zůstala stát
+//      a nad úchytem se otevřela prázdná plocha v barvě panelu.
 //   2. Poloha se zapisuje jako obyčejný inline `transform`. Šlo to jen
 //      proto, že panel už nemá CSS animaci s `fill: both` — ta v kaskádě
 //      inline styl přebíjela a panel se prstem nehnul ani o pixel.
@@ -97,8 +103,8 @@ export function Sheet({
     }
   }, [close])
 
-  // Nativní listenery schválně: React by `pointermove` navěsil na kořen,
-  // a tady je potřeba mít je přímo na panelu kvůli pointer capture.
+  // Nativní listenery schválně: React by je navěsil na kořen, a tady je
+  // potřeba mít je přímo na panelu (pointer capture, non-passive touchmove).
   useEffect(() => {
     const panel = panelRef.current
     const uchyt = uchytRef.current
@@ -112,52 +118,58 @@ export function Sheet({
     let tahne = false
     let odshora = false
     let posun = 0
+    // Dvě cesty ke stejnému gestu (úchyt přes pointer events, plocha přes
+    // touch events) se nesmí potkat v jednom tahu a počítat rychlost dvakrát.
+    let zdroj: 'uchyt' | 'plocha' | null = null
 
     const uklid = () => {
       tahne = false
+      zdroj = null
       panel.style.transition = ''
       panel.style.overflowY = ''
     }
 
-    const start = (e: PointerEvent) => {
-      // Myš tažení nepotřebuje — má Escape i klepnutí vedle.
-      if (e.pointerType === 'mouse') return
-      zacatekX = e.clientX
-      zacatekY = posledniY = e.clientY
-      posledniCas = e.timeStamp
+    const zacatek = (x: number, y: number, cas: number, kdo: 'uchyt' | 'plocha') => {
+      zacatekX = x
+      zacatekY = posledniY = y
+      posledniCas = cas
       rychlost = 0
       posun = 0
       tahne = false
-      // Úchyt nerolluje, takže tahat jde vždycky — ale když je obsah
-      // odrolovaný, patří první tah zpátky nahoru, ne na zavření.
+      zdroj = kdo
+      // Když je obsah odrolovaný, patří první tah zpátky nahoru, ne na zavření.
       odshora = panel.scrollTop <= 0
     }
 
-    const pohyb = (e: PointerEvent) => {
-      if (e.pointerType === 'mouse') return
-      const dy = e.clientY - zacatekY
+    /** Vrací true, když tah tímhle pohybem právě začal. */
+    const posunuj = (x: number, y: number, cas: number): boolean => {
+      const dy = y - zacatekY
+      let zacalo = false
       if (!tahne) {
         // Svislé gesto musí převážit nad vodorovným, jinak by tažení po
         // posuvné řádce (barvy, rychlé dny) sebralo panel místo obsahu.
-        if (!odshora || dy < 8 || dy <= Math.abs(e.clientX - zacatekX)) return
+        if (!odshora || dy < 8 || dy <= Math.abs(x - zacatekX)) return false
         tahne = true
-        // Capture drží události u úchytu, i když prst vyjede jinam.
-        uchyt.setPointerCapture(e.pointerId)
+        zacalo = true
         // Po dobu tahu se nesmí rolovat ani přechodovat: rolování by pod
         // prstem gumovalo obsah, přechod by za prstem zpožďoval panel.
         panel.style.overflowY = 'hidden'
         panel.style.transition = 'none'
       }
-      const dt = e.timeStamp - posledniCas
-      if (dt > 0) rychlost = (e.clientY - posledniY) / dt
-      posledniY = e.clientY
-      posledniCas = e.timeStamp
+      const dt = cas - posledniCas
+      if (dt > 0) rychlost = (y - posledniY) / dt
+      posledniY = y
+      posledniCas = cas
       posun = Math.max(0, dy) // tažení nahoru není zavírání
       panel.style.transform = `translate3d(0, ${posun}px, 0)`
+      return zacalo
     }
 
     const konec = () => {
-      if (!tahne) return
+      if (!tahne) {
+        zdroj = null
+        return
+      }
       const prah = Math.min(ZAVRIT_PX, panel.offsetHeight * 0.25)
       const zavrit = posun > prah || rychlost > ZAVRIT_RYCHLOST
       uklid()
@@ -169,20 +181,93 @@ export function Sheet({
 
     // pointercancel = rolování si vzal prohlížeč. Panel patří zpátky nahoru.
     const zruseno = () => {
-      if (!tahne) return
+      if (!tahne) {
+        zdroj = null
+        return
+      }
       uklid()
       panel.style.transform = ''
     }
 
-    uchyt.addEventListener('pointerdown', start)
-    uchyt.addEventListener('pointermove', pohyb)
-    uchyt.addEventListener('pointerup', konec)
-    uchyt.addEventListener('pointercancel', zruseno)
+    // --- úchyt: pointer events (má `touch-action: none`, nikdo mu gesto nevezme)
+    const pDown = (e: PointerEvent) => {
+      // Myš tažení nepotřebuje — má Escape i klepnutí vedle.
+      if (e.pointerType === 'mouse') return
+      zacatek(e.clientX, e.clientY, e.timeStamp, 'uchyt')
+    }
+    const pMove = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse' || zdroj !== 'uchyt') return
+      // Capture drží události u úchytu, i když prst vyjede jinam.
+      if (posunuj(e.clientX, e.clientY, e.timeStamp)) uchyt.setPointerCapture(e.pointerId)
+    }
+    const pUp = () => {
+      if (zdroj === 'uchyt') konec()
+    }
+    const pCancel = () => {
+      if (zdroj === 'uchyt') zruseno()
+    }
+
+    // --- plocha panelu: touch events
+    //
+    // Pointer events tu nestačí. Změřeno: prohlížeč si svislý tah na rolovací
+    // ploše vezme a pošle `pointercancel` UŽ PO PRVNÍM POHYBU — a dělá to
+    // i tehdy, když je panel odrolovaný nahoře a `overscroll-behavior: none`,
+    // tedy když není co odrolovat. Jediné, co mu v tom zabrání, je
+    // `preventDefault` v non-passive `touchmove`.
+    //
+    // Ten se volá JEN když se stejně nedá rolovat: panel je nahoře a tah
+    // míří dolů. Díky té podmínce nemůže vzít gesto, které by jinak něco
+    // odrolovalo — a když ho Safari nevyslyší, zůstane chování jako dřív
+    // (tah neudělá nic), ne rozbité.
+    const zTextovehoPole = (t: EventTarget | null) =>
+      t instanceof Element && t.closest('input, textarea, [contenteditable=""], [contenteditable="true"]')
+
+    const tStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1 || zdroj) return
+      // Úchyt si gesto řeší sám přes pointer events.
+      if (uchyt.contains(e.target as Node)) return
+      // Nad textovým polem patří svislý tah kurzoru a výběru textu.
+      if (zTextovehoPole(e.target)) return
+      const t = e.touches[0]
+      zacatek(t.clientX, t.clientY, e.timeStamp, 'plocha')
+    }
+    const tMove = (e: TouchEvent) => {
+      if (zdroj !== 'plocha' || e.touches.length !== 1) return
+      const t = e.touches[0]
+      const dy = t.clientY - zacatekY
+      // `preventDefault` musí čekat, až je jasné, že jde o SVISLÝ tah dolů.
+      // Prevence platí na celé gesto, takže jedno ukvapené zavolání na první
+      // ťuknutí by zabilo vodorovné rolování řádky chipů (sloty v detailu
+      // úkolu, barvy, rychlé dny) — a ta uvnitř panelu je skoro všude.
+      if (panel.scrollTop <= 0 && dy > 0 && dy >= Math.abs(t.clientX - zacatekX) && e.cancelable) {
+        e.preventDefault()
+      }
+      posunuj(t.clientX, t.clientY, e.timeStamp)
+    }
+    const tEnd = () => {
+      if (zdroj === 'plocha') konec()
+    }
+    const tCancel = () => {
+      if (zdroj === 'plocha') zruseno()
+    }
+
+    uchyt.addEventListener('pointerdown', pDown)
+    uchyt.addEventListener('pointermove', pMove)
+    uchyt.addEventListener('pointerup', pUp)
+    uchyt.addEventListener('pointercancel', pCancel)
+    panel.addEventListener('touchstart', tStart, { passive: true })
+    panel.addEventListener('touchmove', tMove, { passive: false })
+    panel.addEventListener('touchend', tEnd)
+    panel.addEventListener('touchcancel', tCancel)
     return () => {
-      uchyt.removeEventListener('pointerdown', start)
-      uchyt.removeEventListener('pointermove', pohyb)
-      uchyt.removeEventListener('pointerup', konec)
-      uchyt.removeEventListener('pointercancel', zruseno)
+      uchyt.removeEventListener('pointerdown', pDown)
+      uchyt.removeEventListener('pointermove', pMove)
+      uchyt.removeEventListener('pointerup', pUp)
+      uchyt.removeEventListener('pointercancel', pCancel)
+      panel.removeEventListener('touchstart', tStart)
+      panel.removeEventListener('touchmove', tMove)
+      panel.removeEventListener('touchend', tEnd)
+      panel.removeEventListener('touchcancel', tCancel)
     }
   }, [close])
 
@@ -195,7 +280,7 @@ export function Sheet({
     >
       <div
         ref={panelRef}
-        className={`sheet-panel max-h-[90dvh] w-full max-w-lg overflow-y-auto overflow-x-hidden overscroll-contain rounded-t-[28px] p-4 shadow-sheet ${
+        className={`sheet-panel max-h-[90dvh] w-full max-w-lg overflow-y-auto overflow-x-hidden overscroll-none rounded-t-[28px] p-4 shadow-sheet ${
           tone === 'paper' ? 'bg-paper' : 'bg-card'
         } ${className}`}
         style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}

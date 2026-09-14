@@ -12,6 +12,7 @@ import type { Project } from '../db/types'
 import { removeProject, restoreDeleted, updateProject } from '../db/repo'
 import { formatDayLabel, todayISO } from '../lib/dates'
 import { nabidniVraceni } from '../lib/toast'
+import { RozpadKroku } from './RozpadKroku'
 import { Sheet } from './Sheet'
 import { Button } from './ui/Button'
 
@@ -115,6 +116,8 @@ export function ProjektSheet({
               )}
             </label>
           </div>
+
+          <RozpadKroku project={project} onHotovo={close} />
 
           {celkem > 0 && (
             <div className="h-1 w-full overflow-hidden rounded-full bg-card">

@@ -29,7 +29,7 @@ registerSW({
   },
 })
 initTheme()
-initSync()
+void initSync()
 initCalendar()
 initTodoist()
 // Udržuje data čerstvá, dokud je appka otevřená a je signál.
