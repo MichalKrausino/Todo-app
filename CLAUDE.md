@@ -172,15 +172,49 @@ jen mimo pole a bez modifikátorů, s otevřeným panelem
 poznámky je na řádku úkolu cíl k ťuknutí (první odkaz, `TaskRow`) a v
 detailu čipy s doménou; tečka, čárka a závorka za adresou patří větě.
 
-**Panel se chytá za úchyt, ne za plochu** (`Sheet.tsx` + `.sheet-grip`).
-Tři věci, které se tu už dvakrát podařilo rozbít: (1) nájezd a sjezd dělá
-**přechod, ne animace s `fill: both`** — animace v kaskádě přebíjí inline
-styl, takže se panel prstem nehnul ani o pixel, i když se poloha poctivě
-zapisovala; (2) gesto stojí na **pointer events a pointer capture**, ne na
-`preventDefault` v touchmove — ten Safari od iOS 15 spolehlivě neposlouchá;
-(3) úchyt je samostatný nerolující pruh s `touch-action: none`, protože na
-rolovací ploše si prohlížeč vezme svislé gesto jako rolování a pošle
-`pointercancel` po dvou pohybech (změřeno). Vzor: vaul od E. Kowalského.
+**Panel se zavře stažením — za úchyt i za plochu** (`Sheet.tsx` +
+`.sheet-grip`). Úchyt zůstává tou viditelnou nabídkou („chyť mě tady")
+a jediným místem s `touch-action: none`; stáhnout jde ale i za obsah,
+**dokud je panel odrolovaný nahoře**. Při odrolovaném obsahu patří tah
+rolování, jako dosud.
+
+Dřív se chytal jen úchyt a prst na obsahu spustil **pružné přetažení
+vlastního rolování panelu**: uvnitř krabice sjel obsah dolů, krabice
+zůstala stát a nad úchytem se otevřela prázdná plocha v barvě panelu.
+Vypadá to jako dvě vrstvy, z nichž se hýbe ta špatná.
+
+Jsou to dvě různé vady a každá chce něco jiného:
+
+1. **Ta prázdná plocha je odskok vlastního rolování.** Panel měl
+   `overscroll-behavior: contain`, což zabrání jen přenosu rolování na
+   stránku pod panelem — vlastní odskok nechá být. Musí být **`none`**.
+2. **Tah za plochu potřebuje touch events, ne pointer events.** Změřeno
+   v prohlížeči: při tahu na rolovací ploše přijde `pointercancel`
+   **už po prvním pohybu**, a přijde i tehdy, když je panel nahoře
+   a odskok vypnutý — tedy když není co odrolovat. Prohlížeč si gesto
+   bere tak jako tak a jediné, co ho zastaví, je `preventDefault`
+   v **non-passive** `touchmove`. (Dřívější komentář v souboru tvrdil, že
+   za plochu to nejde; nešlo to přes pointer events, což není totéž.)
+
+`preventDefault` se volá **jen když se stejně nedá rolovat**: panel je
+nahoře, tah míří dolů a je **svislejší než vodorovný**. Ta podmínka je celá
+pojistka — gesto, které by něco odrolovalo, se nikdy nevezme, a kdyby ho
+Safari nevyslyšelo, je chování jako dřív (tah neudělá nic), ne rozbité.
+Ten test na směr tam není pro pořádek: **prevence platí na celé gesto**,
+takže jedno ukvapené zavolání hned na prvním ťuknutí by umrtvilo vodorovné
+rolování řádky chipů — a ta je uvnitř panelu skoro všude (sloty v detailu
+úkolu, barvy, rychlé dny). Úchyt si dál jede po
+své ose přes pointer events a pointer capture; obě cesty hlídá příznak
+zdroje, aby se v jednom tahu nepotkaly a nepočítaly rychlost dvakrát.
+
+Co platí dál: (a) nájezd a sjezd dělá **přechod, ne animace s `fill: both`**
+— animace v kaskádě přebíjí inline styl, takže se panel prstem nehnul ani
+o pixel, i když se poloha poctivě zapisovala; (b) `preventDefault`
+v touchmove Safari neposlouchá, **jakmile se rolování jednou rozjede** —
+proto ta podmínka výš, která ho volá dřív, než by se co rozjelo;
+(c) tah **nezačíná nad textovým polem** (`input`, `textarea`,
+`contenteditable`) — tam patří kurzor a výběr textu, ne panel.
+Vzor: vaul od E. Kowalského.
 
 **Karty nemají prstenec.** `--shadow-card` je jen dotek, který kartu
 nenechá vypadat nalepenou; hloubku dělá kontrast papír × karta a jediný

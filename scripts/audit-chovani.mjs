@@ -168,9 +168,28 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await tah(195, y1, 260, 8, 40)
   T_(await panelu() > 0, 'odrolovaný panel se tažením nezavírá, jen scrolluje')
 
-  // A hlavně: obsah panelu musí jít pořád rolovat prstem. Tažení se kvůli
-  // tomu chytá jen za úchyt nahoře — kdyby se `touch-action: none` dostalo
-  // na celou plochu, rolování by přestalo fungovat úplně.
+  // Stažení ZA OBSAH, když je panel nahoře. Dokud se gesto chytalo jen
+  // za úchyt, prst na obsahu spustil pružné přetažení vlastního rolování:
+  // uvnitř krabice sjel obsah dolů, krabice zůstala stát a nad úchytem se
+  // otevřela prázdná plocha. Vypadalo to jako dvě vrstvy, z nichž se hýbe
+  // ta špatná.
+  await otevri()
+  await page.evaluate(() => { document.querySelector('.sheet-panel').scrollTop = 0 })
+  const yStred = (await page.locator('.sheet-panel').boundingBox()).y + 260
+  await tah(195, yStred, 260, 8, 40)
+  T_(await panelu() === 0, 'stažení za obsah panel zavře, ne jen odsune obsah uvnitř')
+
+  // Pružné přetažení vlastního rolování musí být vypnuté (`overscroll-none`,
+  // ne `contain`): `contain` zabrání jen přenosu na stránku, odskok uvnitř
+  // panelu nechá být — a právě ten dělal tu prázdnou plochu.
+  await otevri()
+  const odskok = await page.evaluate(() =>
+    getComputedStyle(document.querySelector('.sheet-panel')).overscrollBehaviorY)
+  T_(odskok === 'none', 'panel nemá pružné přetažení vlastního rolování (' + odskok + ')')
+
+  // A hlavně: obsah panelu musí jít pořád rolovat prstem. Kdyby se
+  // `touch-action: none` dostalo na celou plochu, rolování by přestalo
+  // fungovat úplně.
   await otevri()
   await page.evaluate(() => { document.querySelector('.sheet-panel').scrollTop = 0 })
   const yObsah = (await page.locator('.sheet-panel').boundingBox()).y + 260
@@ -178,6 +197,52 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   const odrolovano = await page.evaluate(() => document.querySelector('.sheet-panel').scrollTop)
   T_(odrolovano > 20, 'obsah panelu jde rolovat prstem (scrollTop ' + odrolovano + ')')
   T_(await panelu() > 0, 'rolování obsahu panel nezavře')
+  await page.keyboard.press('Escape'); await page.waitForTimeout(500)
+
+  // Nad textovým polem patří svislý tah kurzoru a výběru textu, ne panelu.
+  // Hledání je panel s polem hned nahoře, takže se to na něm dá ověřit.
+  await page.getByRole('button',{name:'Hledat'}).click(); await page.waitForTimeout(700)
+  const pole = await page.locator('.sheet-panel input').first().boundingBox()
+  if (pole) {
+    await tah(Math.round(pole.x + pole.width / 2), Math.round(pole.y + pole.height / 2), 260, 8, 40)
+    T_(await panelu() > 0, 'tah nad textovým polem panel nezavře')
+  } else {
+    T_(false, 'tah nad textovým polem panel nezavře (pole se nenašlo)')
+  }
+  await page.keyboard.press('Escape'); await page.waitForTimeout(500)
+
+  // Vodorovná řádka uvnitř panelu musí pořád rolovat do strany, a svislý
+  // tah z TÉŽE řádky musí panel zavřít. `preventDefault` v touchmove platí
+  // na celé gesto, takže jedno ukvapené zavolání na prvním ťuknutí by
+  // řádku umrtvilo — a řádka slotů je v detailu úkolu hlavní ovládání.
+  await page.getByRole('button',{name:'Nový úkol'}).click(); await page.waitForTimeout(300)
+  await page.locator('input[placeholder]').first().fill('úkol na řádku slotů')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(900)
+  await page.getByText('úkol na řádku slotů').first().click(); await page.waitForTimeout(900)
+  const radka = await page.evaluate(() => {
+    const el = document.querySelector('.sheet-panel .radka-mizi')
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    return { pretece: el.scrollWidth > el.clientWidth, y: Math.round(r.y + r.height / 2) }
+  })
+  if (radka?.pretece) {
+    // Vodorovně: tah doleva musí řádku odrolovat a panel nechat být.
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:320,y:radka.y}]})
+    for (let i=1;i<=8;i++) {
+      await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:320-i*25,y:radka.y}]})
+      await page.waitForTimeout(30)
+    }
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})
+    await page.waitForTimeout(500)
+    const doStrany = await page.evaluate(() => document.querySelector('.sheet-panel .radka-mizi')?.scrollLeft ?? 0)
+    T_(doStrany > 10, 'vodorovná řádka v panelu roluje do strany (scrollLeft ' + doStrany + ')')
+    T_(await panelu() > 0, 'vodorovné tažení panel nezavře')
+    // Svisle z téže řádky: panel se zavře.
+    await tah(200, radka.y, 280, 8, 35)
+    T_(await panelu() === 0, 'svislý tah z vodorovné řádky panel zavře')
+  } else {
+    T_(false, 'vodorovná řádka v panelu roluje do strany (řádka slotů se nenašla nebo nepřetéká)')
+  }
   await page.keyboard.press('Escape'); await page.waitForTimeout(500)
 
   await ctx.close()

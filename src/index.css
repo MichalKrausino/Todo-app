@@ -831,10 +831,12 @@ body:has(.sheet-backdrop:not(.closing)) .app-shell {
   transition: transform 0.44s var(--ease-ios);
 }
 
-/* Úchyt: jediné místo, kde se panel chytá prstem. `touch-action: none`
-   je tu proto, že jinak si prohlížeč vezme svislé gesto jako rolování a
-   pošle `pointercancel` dřív, než se dá cokoli poznat (změřeno: po dvou
-   pohybech). Na rolovací plochu se to dát nedá — zabilo by to rolování. */
+/* Úchyt: viditelná nabídka „chyť mě tady" a jediné místo s
+   `touch-action: none`. Bez něj si prohlížeč vezme svislé gesto jako
+   rolování a pošle `pointercancel` dřív, než se dá cokoli poznat
+   (změřeno: po prvním pohybu). Na rolovací plochu se `touch-action`
+   dát nedá — zabilo by to rolování; ta se proto chytá přes touch
+   events s `preventDefault`, viz Sheet.tsx. */
 .sheet-grip {
   touch-action: none;
 }
