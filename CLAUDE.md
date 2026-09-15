@@ -53,11 +53,30 @@ zdůvodnění rozhodnutí a roadmapa fází: **`docs/PLAN.md`** — před větš
    Repo hlásí zápisy přes `src/db/events.ts`, engine na ně reaguje debounced
    pushem. **Co odeslat, se pozná podle evidence odeslaných verzí
    (`pushState`, logika v `src/sync/outbox.ts`), NIKDY podle času** — časový
-   kurzor tiše ztrácel změny, kdykoli se rozešly hodiny dvou zařízení. UI čte stav syncu jen přes `src/sync/status.ts`. O čerstvost se
+   kurzor tiše ztrácel změny, kdykoli se rozešly hodiny dvou zařízení. UI čte stav syncu jen přes `src/sync/status.ts`. **Spouštěče syncu se
+   slučují** (`src/sync/koalescence.ts`, čistá logika s testy): o sync si
+   říká pět míst a dvě z nich přijdou v TÉMŽE dispatchi, takže se bez
+   slučování dělal plný průchod dvakrát hned po sobě — zrovna po připojení
+   k síti. Rozlišuje se přitom KDO požádal: **pouhý spouštěč se připojí
+   k běžícímu, ZÁPIS si vynutí druhý průchod** (push posílá to, co našel na
+   začátku, takže úkol založený v půlce syncu by jinak čekal na další tik).
+   **Pád startu sync vrstvy se musí ošetřit a opakovat**: `supabase-js` se
+   dováží dynamicky, a když se ten import jednou nepovede (neúplná precache,
+   vyhozená cache), zůstal by stav navždy na „Spouští se…", posluchače by se
+   vůbec nezaložily a appka by se do restartu nesesynchronizovala — tiché
+   a trvalé zároveň. O čerstvost se
    stará jeden plánovač `src/sync/live.ts` — tiká, dokud je appka v popředí
    a je signál (vlastní data po minutě, kalendář a Todoist po pěti), a při
    návratu signálu, přepnutí wifi ↔ data i po probuzení zařízení stáhne
-   všechno hned. Na pozadí se netahá nic — od toho jsou push notifikace.
+   všechno hned. **Spouštění syncu patří jemu, ne jednotlivým modulům** —
+   engine si na `visibilitychange` nechává jen obnovu push odběru, kalendář
+   a Todoist svoje `maybeRefresh*` s minimálním intervalem. Duplicitní
+   posluchač u kalendáře a Todoistu nic nestojí (interval ho utne), u syncu
+   stál celý druhý průchod, protože žádný takový strop nemá. **Pozor:
+   stub v `live.test.ts` drží posluchače v mapě klíčované `win:online`,
+   takže druhá registrace tu první přepíše — duplicitu tenhle test
+   z principu nechytí, hlídá ji jen jedno místo registrace.** Na pozadí se
+   netahá nic — od toho jsou push notifikace.
 2. **Tombstony.** Záznamy se nikdy nemažou natvrdo — nastavuje se `deletedAt`.
    Všechny dotazy musí filtrovat `deletedAt`. Konflikty při synchronizaci řeší
    last-write-wins podle `updatedAt`.
