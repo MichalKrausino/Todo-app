@@ -29,7 +29,9 @@ registerSW({
   },
 })
 initTheme()
-void initSync()
+// Sync si pád vlastního startu ošetřuje sám (a zkouší znovu); tohle je
+// pojistka pro zbytek — appka běží na Dexie a padnout kvůli síti nesmí.
+void initSync().catch((e) => console.warn('initSync:', e))
 initCalendar()
 initTodoist()
 // Udržuje data čerstvá, dokud je appka otevřená a je signál.

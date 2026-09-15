@@ -20,6 +20,7 @@ import {
   type PulledRow,
   type Syncable,
 } from './merge'
+import { vytvorKoalescenci } from './koalescence'
 import { dirtyRecords, sendWithFallback, vanishedIds, type PushedVersions } from './outbox'
 import {
   clientsToForget,
@@ -31,6 +32,8 @@ import { setSyncStatus } from './status'
 
 const PAGE_SIZE = 500
 const WRITE_DEBOUNCE_MS = 2500
+// Jak dlouho počkat, než se start sync vrstvy zkusí znovu (viz initSync).
+const START_RETRY_MS = 60_000
 
 let sb: SupabaseClient | null = null
 
@@ -42,9 +45,13 @@ export const getSupabase = (): SupabaseClient | null => sb
 let googleTokenError: string | undefined
 export const getGoogleTokenError = (): string | undefined => googleTokenError
 
-let syncing = false
-let queued = false
+// Slučování spouštěčů — bez něj udělá `online` dva plné průchody za sebou,
+// protože o sync požádá engine i plánovač. Logika i s testy je vedle,
+// v `koalescence.ts`.
+const koalescence = vytvorKoalescenci()
 let debounceTimer: ReturnType<typeof setTimeout> | undefined
+let startRetryTimer: ReturnType<typeof setTimeout> | undefined
+let startListenersReady = false
 
 const localTable = (name: LocalTableName): Table<Syncable, string> =>
   db.table(name) as Table<Syncable, string>
@@ -54,7 +61,16 @@ export async function initSync(): Promise<void> {
     setSyncStatus({ phase: 'unconfigured' })
     return
   }
+  if (sb) return // klient už dojel, druhý start nemá co dělat
   setSyncStatus({ phase: 'starting' })
+
+  // Pojistky na opakování se zakládají jednou, ne při každém pokusu.
+  if (!startListenersReady) {
+    startListenersReady = true
+    window.addEventListener('online', () => {
+      if (!sb) void initSync()
+    })
+  }
 
   // supabase-js je 215 kB, které na první vykreslení nikdo nepotřebuje:
   // UI čte a zapisuje výhradně Dexie a na síť nikdy nečeká. Dynamický
@@ -65,7 +81,26 @@ export async function initSync(): Promise<void> {
   // takže okno „klient ještě nedojel" je stav, který sesterské moduly
   // (kalendář, sdílení) odjakživa ošetřují. Žádný React.lazy, žádný
   // suspense — na vzhled se nesahá.
-  const { createClient } = await import('@supabase/supabase-js')
+  //
+  // Pád tohohle importu se MUSÍ ošetřit. Balíček je sice v precache, takže
+  // offline start běžně projde, ale když se jednou nestáhne (neúplná
+  // precache, vyhozená cache, první spuštění po aktualizaci bez signálu),
+  // je to jinak konec: status zůstane navždy na „Spouští se…", posluchače
+  // níž se nezaloží vůbec a appka se do restartu už nesesynchronizuje.
+  // Tiché a trvalé je nejhorší možná kombinace, tak radši nahlas a znovu.
+  let createClient: typeof import('@supabase/supabase-js').createClient
+  try {
+    ;({ createClient } = await import('@supabase/supabase-js'))
+  } catch (e) {
+    setSyncStatus({
+      phase: 'error',
+      error: `synchronizaci se nepodařilo spustit (${e instanceof Error ? e.message : String(e)})`,
+    })
+    clearTimeout(startRetryTimer)
+    startRetryTimer = setTimeout(() => void initSync(), START_RETRY_MS)
+    return
+  }
+  clearTimeout(startRetryTimer)
   sb = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!)
 
   // Zachytí i INITIAL_SESSION po startu, takže se appka srovná hned po otevření.
@@ -89,26 +124,36 @@ export async function initSync(): Promise<void> {
     }
   })
 
+  // Sync spouští JEDEN plánovač (`live.ts`) — ten na návrat do popředí
+  // i na návrat signálu reaguje sám. Engine si tu drží jen to, co je
+  // opravdu jeho: obnovu push odběru.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      void syncNow()
-      void healPushSubscription()
-    }
+    if (document.visibilityState === 'visible') void healPushSubscription()
   })
-  window.addEventListener('online', () => void syncNow())
 
   onRepoWrite(() => {
     clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(() => void syncNow(), WRITE_DEBOUNCE_MS)
+    // `true` = podnětem byla ZMĚNA DAT. Když zápis dorazí v půlce běhu,
+    // musí se doběhnout ještě jednou, jinak by na serveru chyběl až do
+    // dalšího tiku; pouhý spouštěč se naopak jen připojí k běžícímu.
+    debounceTimer = setTimeout(() => void syncNow(true), WRITE_DEBOUNCE_MS)
   })
 }
 
-export async function syncNow(): Promise<void> {
+/**
+ * Sesynchronizovat teď. Volají to čtyři různá místa (plánovač, přihlášení,
+ * zápis přes repo, tlačítko v panelu), takže se běhy slučují — dva
+ * spouštěče v jednom okamžiku udělají JEDEN průchod, ne dva po sobě.
+ *
+ * `zZapisu` říká, že podnětem byla změna dat. Takový podnět se během
+ * běžícího syncu nesmí zahodit: push posílá to, co našel na začátku.
+ */
+export function syncNow(zZapisu = false): Promise<void> {
+  return koalescence.spust(probehniSync, zZapisu)
+}
+
+async function probehniSync(): Promise<void> {
   if (!sb) return
-  if (syncing) {
-    queued = true
-    return
-  }
   const { data } = await sb.auth.getSession()
   const session = data.session
   if (!session) {
@@ -120,7 +165,6 @@ export async function syncNow(): Promise<void> {
     return
   }
 
-  syncing = true
   setSyncStatus({ phase: 'syncing' })
   refusedCount = 0
   try {
@@ -145,12 +189,6 @@ export async function syncNow(): Promise<void> {
     await reconcileTemplates()
   } catch (e) {
     setSyncStatus({ phase: 'error', error: e instanceof Error ? e.message : String(e) })
-  } finally {
-    syncing = false
-    if (queued) {
-      queued = false
-      void syncNow()
-    }
   }
 }
 
