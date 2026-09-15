@@ -537,7 +537,23 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
 }
 
 /* Sklo v tmavém režimu. Vnořené pravidlo drží všechny tři vrstvy
-   (výplň, prstenec, prosvětlení) pohromadě pod jedním přepínačem. */
+   (výplň, prstenec, prosvětlení) pohromadě pod jedním přepínačem.
+
+   Všechny tři jsou BÍLÉ ZÁVOJE ZADANÉ KRYTÍM, a to je past: ve světlém
+   režimu se utnou o bílou a nejsou po nich ani stopy, na tmavém podkladu
+   z týchž čísel vyleze obrovský vjemový krok. Změřeno ze syrových pixelů,
+   s obsahem pod dokem, rozdíly L* proti sousednímu místu:
+
+                        světlý   tmavý dosud   tmavý nově
+     prstenec po obvodu   0,46      31,1          ~12
+     deska shora dolů     0,09       5,9          ~0,4
+     čočka proti desce    0,94      11,5          ~4,4
+
+   Ve světlém je dok doslova jedna plocha (253–254 po celé kapsli) a co ho
+   drží pohromadě, je stín, ne světlo. Tmavá verze tohle nikdy nedožene na
+   nulu — stín na desce o L* 8 nemá kam ztmavit —, ale přestřelovat to
+   dvanáctkrát je rozdíl mezi sklem a obtaženou krabicí se světlejším
+   flekem uvnitř. */
 :root[data-theme='dark'] {
   .dock {
     /* Na tmavém podkladu potřebuje sklo víc krytí, jinak ikony plavou.
@@ -547,27 +563,36 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
     -webkit-backdrop-filter: blur(30px) saturate(200%) brightness(0.92);
     backdrop-filter: blur(30px) saturate(200%) brightness(0.92);
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.1),
-      inset 0 -1px 0 rgb(255 255 255 / 0.04),
+      inset 0 1px 0 rgb(255 255 255 / 0.045),
+      inset 0 -1px 0 rgb(255 255 255 / 0.02),
       0 2px 12px rgb(0 0 0 / 0.5);
   }
 
+  /* Prstenec byl ze všech tří vrstev nejhlasitější: na tmavé desce z něj
+     byl obtažený rám, přesně to, co si tenhle design u karet zakazuje
+     („když má obrys všechno, nezvedá se nic"). Ubrat mu nestačí samotný
+     přechod — do téhož pixelu svítí i horní `inset` v box-shadow desky
+     výš, takže se musely stáhnout obě. */
   .dock::before {
     background: linear-gradient(
       to bottom,
-      rgb(255 255 255 / 0.24),
-      rgb(255 255 255 / 0.06) 38%,
+      rgb(255 255 255 / 0.1),
+      rgb(255 255 255 / 0.025) 38%,
       rgb(255 255 255 / 0) 62%,
-      rgb(255 255 255 / 0.08)
+      rgb(255 255 255 / 0.033)
     );
   }
 
+  /* Prosvětlení je tu PLOCHÉ a nikdy nedojde na nulu. Na světlém podkladu
+     se svislý přechod utne o bílou a není po něm ani stopy; na tmavém by
+     z kapsle udělal stínovaný předmět — deska by byla nahoře světlá a dole
+     tmavá. Radši o chlup nadzvednout celou plochu než po ní vést spád. */
   .dock::after {
     background: linear-gradient(
       to bottom,
-      rgb(255 255 255 / 0.07),
-      rgb(255 255 255 / 0.02) 45%,
-      rgb(255 255 255 / 0) 72%
+      rgb(255 255 255 / 0.02),
+      rgb(255 255 255 / 0.014) 45%,
+      rgb(255 255 255 / 0.01) 72%
     );
   }
 }
@@ -637,33 +662,45 @@ ul > .rise:nth-child(n + 8) { --stagger: 7 }
 /* Tmavá čočka musí být proti desce o TÝŽ VJEMOVÝ krok jako světlá, ne
    o týž jas. Oko nevnímá jas lineárně: na tmavém podkladu je tentýž
    rozdíl vidět mnohem víc, a čočka pak není sklo, ale světlejší flek.
-   Změřeno z plátna (ne z CSS — dok je sklo, vypočtená barva o výsledku
-   nic neříká), rozdíl světlosti L* mezi čočkou a deskou:
 
-     světlý režim       5,66   ← tenhle krok je ten správný
-     tmavý s 0,13/0,28  8,18   ← o 45 % víc, odtud ten flek
-     tmavý s 0,105/0,23 5,46   ← sedí
+   Měří se ze SYROVÝCH PIXELŮ snímku, ne výpočtem z krytí: prohlížeč
+   skládá vrstvy v zakódovaném sRGB, ne v lineárním světle (bílá 0,106
+   nad deskou 22 dá 22·0,894 + 255·0,106 = 47, a to na pixel přesně).
+   Počítat kompozici lineárně dá o polovinu menší číslo, než co je
+   doopravdy na displeji — na tom se tahle hodnota jednou už spálila.
 
-   Pozor, dolů to ujede rychle: s 0,07 vyjde 1,79 a s 0,05 už −0,07,
-   tedy čočka zmizí úplně. */
+   Měřit se přitom musí S OBSAHEM POD DOKEM a jen uvnitř kapsle: na
+   prázdné appce se světlé sklo utne o bílou a v rozích obdélníkového
+   vzorku leží stránka, ne dok.
+
+   Rozdíl světlosti L* mezi čočkou a deskou vedle ní:
+
+     světlý režim        0,94   ← čočku tam dělá STÍN a hrana, ne výplň
+     tmavý s 0,105      11,50   ← dvanáctkrát víc, odtud ten flek
+     tmavý s 0,04        4,4    ← sedí
+
+   Na nulu to stáhnout nejde: ve světlém drží čočku pohromadě stín pod ní,
+   jenže na tmavé desce (L* ~8) stín nemá kam ztmavit. Proto tady výplň
+   zůstává — jen tolik, aby byla pilulka poznat, ne aby byla vidět dřív
+   než ikona. */
 :root[data-theme='dark'] .tab-on {
-  background: rgb(255 255 255 / 0.105);
+  background: rgb(255 255 255 / 0.04);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.23),
-    inset 0 -1px 0 rgb(255 255 255 / 0.05),
-    inset 1px 0 0 rgb(255 255 255 / 0.09),
-    0 2px 8px rgb(0 0 0 / 0.35);
+    inset 0 1px 0 rgb(255 255 255 / 0.13),
+    inset 0 -1px 0 rgb(255 255 255 / 0.04),
+    inset 1px 0 0 rgb(255 255 255 / 0.05),
+    0 2px 8px rgb(0 0 0 / 0.45);
 }
 /* Za jízdy sklo zesvětlá — poměr ke klidovému stavu zůstal, jen se
    posunul dolů s ním, aby byl zdvih pořád stejně znát. */
 :root[data-theme='dark'] [data-leti] .tab-on,
 :root[data-theme='dark'] [data-tahne] .tab-on {
-  background: rgb(255 255 255 / 0.16);
+  background: rgb(255 255 255 / 0.062);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.34),
-    inset 0 -1px 0 rgb(255 255 255 / 0.07),
-    inset 1px 0 0 rgb(255 255 255 / 0.12),
-    0 8px 20px rgb(0 0 0 / 0.5);
+    inset 0 1px 0 rgb(255 255 255 / 0.19),
+    inset 0 -1px 0 rgb(255 255 255 / 0.06),
+    inset 1px 0 0 rgb(255 255 255 / 0.07),
+    0 8px 20px rgb(0 0 0 / 0.6);
 }
 :root[data-theme='dark'] .tab-lesk {
   background: linear-gradient(

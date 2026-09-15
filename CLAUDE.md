@@ -84,14 +84,38 @@ podkladu `paper` (ne studená iOS šeď), hairline oddělovače, plovoucí sklen
 vzoru tab baru iOS 26 — Liquid Glass, jak ho nosí GitHub i Instagram):
 pod vybranou ikonou je **čočka** — široké sklo 64 × 44 světlejší než
 deska, s ostrým světlem na horní hraně a měkkým stínem, takže stojí
-nad dokem (`.tab-on`). **V tmavém režimu musí být ten krok stejně velký
-VJEMOVĚ, ne stejně velký v jasu**: oko nevnímá jas lineárně, takže tentýž
-rozdíl je na tmavém podkladu vidět mnohem víc a z čočky je světlejší
-flek místo skla. Měří se z plátna, ne z CSS (dok je sklo, vypočtená
-barva o výsledku nic neříká) — rozdíl světlosti `L*` mezi čočkou
-a deskou: světlý režim 5,66, tmavý měl 8,18 (o 45 % víc), po doladění
-na krytí 0,105 má 5,46. Dolů to ujede rychle: 0,07 dá 1,79 a 0,05
-už −0,07, tedy čočka zmizí. **Složený dok je úzký** (`DOK_SIRKA` v `App.tsx`,
+nad dokem (`.tab-on`). **Sklo drží pohromadě tři bílé závoje zadané
+krytím — prstenec po obvodu (`::before`), prosvětlení (`::after`)
+a výplň čočky — a to je v tmavém režimu past.** Ve světlém se všechny
+tři utnou o bílou a nejsou po nich ani stopy (deska je 253–254 po celé
+kapsli, jedna plocha); na tmavém podkladu z týchž čísel vyleze obrovský
+vjemový krok, protože oko nevnímá jas lineárně. Změřeno ze syrových
+pixelů, rozdíly `L*` proti sousednímu místu:
+
+| | světlý | tmavý dosud | tmavý nově |
+|---|---|---|---|
+| prstenec po obvodu | 0,46 | 31,1 | 15,0 |
+| deska shora dolů | 0,09 | 5,9 | 0,40 |
+| čočka proti desce | 0,94 | 11,5 | 4,41 |
+
+Z doku byla v tmavém **obtažená krabice se světlejším flekem uvnitř**
+a k tomu stínovaná, protože prosvětlení po ní vedlo spád — proto je
+teď ploché a nejde na nulu. Na světlá čísla to nikdy nedojede a nemá:
+ve světlém drží kapsli i čočku **stín**, a na desce o `L*` 8 nemá stín
+kam ztmavit, takže tam tu práci musí odvést světlo. Totéž platí pro
+zdvih za jízdy (světlý 0,35, tmavý 2,54) — ve světlém ho dělá
+prodloužený stín, v tmavém jas.
+
+**Měří se ze syrových pixelů snímku, ne výpočtem z krytí**: prohlížeč
+skládá vrstvy v zakódovaném sRGB, ne v lineárním světle (bílá 0,106 nad
+deskou 22 dá `22·0,894 + 255·0,106 = 47`, na pixel přesně) — lineární
+výpočet dá o polovinu jiné číslo, než co je na displeji, a přesně na
+tomhle se dřívější hodnota u čočky spálila. Vzorkovat se přitom musí
+**s obsahem pod dokem** (na prázdné appce se světlé sklo utne o bílou
+a vyjde z něj dokonalá plocha i tam, kde by plochá nebyla) a **jen
+uvnitř kapsle** (v rozích obdélníkového vzorku leží stránka, ne dok —
+a poloměr se při maskování musí zastropovat půlkou kratší strany,
+protože `rounded-full` je poloměr v tisících). **Složený dok je úzký** (`DOK_SIRKA` v `App.tsx`,
 306 px, `mx-auto`): tři sloty po 64 px = přesně šířka čočky, mezery
 20 px, okraje 6 / 8 px, takže čočka (44 v 56) i plusko (40 v 56) sedí v rozích
 kapsle se stejnou mezerou jako svisle a zaoblení vrstev je
