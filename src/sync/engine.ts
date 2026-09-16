@@ -169,6 +169,7 @@ async function probehniSync(): Promise<void> {
   refusedCount = 0
   try {
     await ensureAccount(session.user.id)
+    await ensureOwnerStamp()
     const scopeChanged = await ensureShareScope()
     for (const name of LOCAL_TABLE_NAMES) await pullTable(name)
     for (const name of LOCAL_TABLE_NAMES) await pushTable(name)
@@ -222,6 +223,26 @@ async function ensureAccount(userId: string): Promise<void> {
 // Druhý směr — sdílení mi vzali — se musí uklidit lokálně, a to výhradně
 // tvrdým výmazem. Tombstone by se odsynchronizoval zpátky a smazal data
 // tomu, kdo mi je půjčil.
+// Jednorázové doplnění razítka „čí je řádek" (Task.ownerId).
+//
+// Řádky stažené dřív, než razítko existovalo, ho v Dexie nemají — a
+// kurzorový pull je znovu nepřinese, protože mají staré updated_at. Bez
+// toho by po upgradu vypadaly VŠECHNY cizí úkoly jako moje a nasdílený
+// klient by mi zaplavil dnešek přesně tím, čemu má přiřazení zabránit.
+//
+// Stačí vynulovat kurzory: záznamy přitečou znovu a applyPull je orazítkuje,
+// aniž by přepsal novější lokální úpravy. Klíč nese verzi, aby se totéž
+// dalo v budoucnu zopakovat, a zapisuje se PŘED pullem schválně — kdyby
+// se pull nepovedl, další sync ho stejně dokončí od nulového kurzoru.
+const RAZITKO_VERZE = '1'
+
+async function ensureOwnerStamp(): Promise<void> {
+  const stored = (await db.syncState.get('ownerStamp'))?.cursor
+  if (stored === RAZITKO_VERZE) return
+  for (const name of LOCAL_TABLE_NAMES) await db.syncState.delete(`pull:${name}`)
+  await db.syncState.put({ id: 'ownerStamp', cursor: RAZITKO_VERZE })
+}
+
 async function ensureShareScope(): Promise<boolean> {
   const shares = await fetchMyShares()
   // Nevíme, jak na tom sdílení je — nechat všechno být. Kdyby se selhání
@@ -306,7 +327,10 @@ async function pullTable(name: LocalTableName): Promise<void> {
   for (;;) {
     let query = sb!
       .from(REMOTE_TABLES[name])
-      .select('id,data,updated_at')
+      // `user_id` je jediné místo, kde je vlastnictví řádku pravda (hlídá
+      // ho trigger lww_guard). Bez něj by se po nasdílení klienta nedalo
+      // poznat, které úkoly jsou moje — viz applyPull.
+      .select('id,data,updated_at,user_id')
       .order('updated_at', { ascending: true })
       .limit(PAGE_SIZE)
     if (cursor) query = query.gt('updated_at', cursor)
@@ -352,7 +376,10 @@ async function upsertRows(name: LocalTableName, rows: Syncable[]): Promise<strin
   const { error } = await sb!.from(REMOTE_TABLES[name]).upsert(
     rows.map((r) => ({
       id: r.id,
-      data: r,
+      // Razítko „čí to je" se neposílá zpátky: je odvozené ze sloupce
+      // user_id a v `data` by z něj byla druhá, tišší pravda o vlastnictví
+      // — a ta by přežila i tehdy, kdyby sloupec ze stahování vypadl.
+      data: { ...r, ownerId: undefined },
       updated_at: r.updatedAt,
       deleted_at: r.deletedAt ?? null,
     })),

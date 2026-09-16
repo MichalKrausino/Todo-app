@@ -7,10 +7,11 @@ const rec = (id: string, updatedAt: string, deletedAt?: string): Syncable => ({
   deletedAt,
 })
 
-const row = (data: Syncable): PulledRow => ({
+const row = (data: Syncable, user_id?: string): PulledRow => ({
   id: data.id,
   data,
   updated_at: data.updatedAt.replace('Z', '+00:00'),
+  user_id,
 })
 
 describe('applyPull (last-write-wins)', () => {
@@ -43,3 +44,38 @@ describe('applyPull (last-write-wins)', () => {
   })
 })
 
+describe('razítko „čí je řádek"', () => {
+  it('nový záznam dostane majitele ze sloupce user_id', () => {
+    const remote = rec('a', '2026-07-29T10:00:00.000Z')
+    expect(applyPull([undefined], [row(remote, 'u-kolega')])).toEqual([
+      { ...remote, ownerId: 'u-kolega' },
+    ])
+  })
+
+  it('odpověď bez sloupce razítko nepřepíše na prázdno', () => {
+    const local = { ...rec('a', '2026-07-29T10:00:00.000Z'), ownerId: 'u-kolega' }
+    const remote = rec('a', '2026-07-29T11:00:00.000Z')
+    expect(applyPull([local], [row(remote)])).toEqual([remote])
+  })
+
+  it('chybějící razítko se doplní, i když server nenese nic nového', () => {
+    const local = rec('a', '2026-07-29T12:00:00.000Z')
+    const remote = rec('a', '2026-07-29T12:00:00.000Z')
+    expect(applyPull([local], [row(remote, 'u-kolega')])).toEqual([
+      { ...local, ownerId: 'u-kolega' },
+    ])
+  })
+
+  it('doplnění razítka nepřepíše NOVĚJŠÍ lokální úpravu', () => {
+    const local = { ...rec('a', '2026-07-29T12:00:00.000Z'), title: 'upraveno offline' }
+    const remote = rec('a', '2026-07-29T11:00:00.000Z')
+    const puts = applyPull([local as Syncable], [row(remote, 'u-ja')])
+    expect(puts).toEqual([{ ...local, ownerId: 'u-ja' }])
+    expect((puts[0] as typeof local).title).toBe('upraveno offline')
+  })
+
+  it('už orazítkovaný a nezměněný řádek se nezapisuje znovu', () => {
+    const local = { ...rec('a', '2026-07-29T12:00:00.000Z'), ownerId: 'u-ja' }
+    expect(applyPull([local], [row(rec('a', '2026-07-29T12:00:00.000Z'), 'u-ja')])).toEqual([])
+  })
+})

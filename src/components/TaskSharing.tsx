@@ -13,10 +13,9 @@
 // ne tahle komponenta. Filtr jen v UI by úkol pořád posílal do cizího
 // zařízení a stačilo by se podívat do jeho IndexedDB.
 
-import { useEffect, useState, useSyncExternalStore } from 'react'
-import { useLiveQuery } from 'dexie-react-hooks'
+import { useSyncExternalStore } from 'react'
 import { updateTask } from '../db/repo'
-import { listClientShares, sharedClientIds, type ClientShare } from '../sync/shares'
+import { useKolegove, useSdilenyKlient } from '../lib/useTym'
 import { getSyncStatus, subscribeSyncStatus } from '../sync/status'
 
 export function TaskSharing({
@@ -32,25 +31,11 @@ export function TaskSharing({
 }) {
   const status = useSyncExternalStore(subscribeSyncStatus, getSyncStatus)
   // Z otisku, ne ze sítě: v letadle se tím pozná, že klient sdílený je,
-  // i když seznam kolegů zrovna nedojde.
-  const sdilene = useLiveQuery(sharedClientIds, [], new Set<string>())
-  const [lide, setLide] = useState<ClientShare[]>([])
-  const [nacetlo, setNacetlo] = useState(false)
-
-  const jeSdileny = !!clientId && sdilene.has(clientId)
-
-  useEffect(() => {
-    if (!jeSdileny || !clientId) return
-    let live = true
-    void listClientShares(clientId).then((rows) => {
-      if (!live) return
-      setLide(rows)
-      setNacetlo(true)
-    })
-    return () => {
-      live = false
-    }
-  }, [clientId, jeSdileny])
+  // i když seznam kolegů zrovna nedojde. Samotný seznam lidí dává
+  // `useKolegove` — sdílený se slotem „Kdo to má", takže se u otevřeného
+  // úkolu netahá dvakrát totéž.
+  const jeSdileny = useSdilenyKlient(clientId)
+  const { lide, nacetlo } = useKolegove(clientId)
 
   if (!jeSdileny) return null
 

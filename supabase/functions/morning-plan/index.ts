@@ -65,8 +65,17 @@ Deno.serve(async () => {
   let sent = 0
 
   for (const userId of users) {
-    const [tasksRes, clientsRes, plansRes] = await Promise.all([
+    const [tasksRes, prirazeneRes, clientsRes, plansRes] = await Promise.all([
       admin.from('tasks').select('data').eq('user_id', userId).is('deleted_at', null),
+      // Co mi dal kolega u sdíleného klienta (Fáze 10). Je to jeho řádek,
+      // takže se do dotazu podle `user_id` nevejde — a přitom je to moje
+      // ranní práce úplně stejně jako to, co jsem si založil sám.
+      admin
+        .from('tasks')
+        .select('data')
+        .eq('data->>assignedTo', userId)
+        .neq('user_id', userId)
+        .is('deleted_at', null),
       admin.from('clients').select('data').eq('user_id', userId).is('deleted_at', null),
       // Minulé plány = paměť návrhu (co jsi odmítl a co ignoroval).
       admin
@@ -76,8 +85,35 @@ Deno.serve(async () => {
         .is('deleted_at', null)
         .gte('data->>date', addDaysISO(today, -HISTORIE_DNI)),
     ])
-    const tasks = (tasksRes.data ?? []).map((r) => r.data as Rec)
-    const clients = (clientsRes.data ?? []).map((r) => r.data as Rec)
+    // Moje ráno = co mám JÁ, ne co vlastním. Bez toho by ranní návrh
+    // nabízel práci, kterou jsem předal kolegovi, a naopak by zamlčel to,
+    // co mi předal on — tedy přesně opačně, než jak vypadá appka v ruce.
+    // Totéž pravidlo jako `jeMuj` v src/lib/tymUkoly.ts.
+    if (prirazeneRes.error) console.error('prirazene', prirazeneRes.error.message)
+    const tasks = [
+      ...(tasksRes.data ?? [])
+        .map((r) => r.data as Rec)
+        .filter((t) => !t.assignedTo || t.assignedTo === userId),
+      ...(prirazeneRes.data ?? []).map((r) => r.data as Rec),
+    ]
+    // Klient sdíleného úkolu patří kolegovi, takže se do dotazu podle
+    // `user_id` nevejde. Bez něj by se návrh spočítal správně, jen by
+    // v odůvodnění chyběl klient („u klienta Alza se 12 dní nic nedělo") —
+    // a to je u cizí práce ta nejdůležitější půlka věty.
+    const ciziKlienti = [
+      ...new Set(
+        (prirazeneRes.data ?? [])
+          .map((r) => (r.data as Rec).clientId as string | undefined)
+          .filter((id): id is string => !!id),
+      ),
+    ]
+    const ciziKlientiRes = ciziKlienti.length
+      ? await admin.from('clients').select('data').in('id', ciziKlienti).is('deleted_at', null)
+      : { data: [], error: null }
+    const clients = [
+      ...(clientsRes.data ?? []).map((r) => r.data as Rec),
+      ...(ciziKlientiRes.data ?? []).map((r) => r.data as Rec),
+    ]
     if (plansRes.error) console.error('day_plans history', plansRes.error.message)
     const historie = historieZPlanu((plansRes.data ?? []).map((r) => r.data as Rec), today)
     const clientsById = new Map(clients.map((c) => [c.id as string, c]))

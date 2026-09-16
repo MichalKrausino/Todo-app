@@ -8,15 +8,16 @@
 // slot nabízí, vyplněný ukazuje hodnotu, otevřený má pod řádkou panel
 // s výběrem. Kdo se naučil zadávat, umí i upravovat.
 //
-// Ukládá se tlačítkem (a ⌘↩), jen checklist, špendlík a „kdo úkol
-// vidí" hned — to jsou rozhodnutí o datech, ne rozepsaný text.
+// Ukládá se tlačítkem (a ⌘↩), jen checklist, špendlík, „kdo to má"
+// a „kdo úkol vidí" hned — to jsou rozhodnutí o datech, ne rozepsaný text.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Priority, Project, Subtask, Task } from '../db/types'
 import {
   MAX_PINNED,
   activeClients,
+  assignTask,
   clientProjects,
   removeTask,
   restoreDeleted,
@@ -31,6 +32,8 @@ import { SlotChip, pill } from './SlotChip'
 import { najdiOdkazy } from '../lib/links'
 import { nabidniVraceni, ukazToast } from '../lib/toast'
 import { TaskSharing } from './TaskSharing'
+import { jeMuj, kdoMa, kratkaJmena } from '../lib/tymUkoly'
+import { useJa, useKolegove } from '../lib/useTym'
 import { deleteBlockForTask } from '../sync/calendar'
 import {
   addTodoistSubtask,
@@ -55,13 +58,41 @@ import {
   type RuleParts,
 } from '../lib/rrule'
 
-type Picker = 'date' | 'scheduled' | 'client' | 'project' | 'priority' | 'recurrence' | null
+type Picker = 'date' | 'scheduled' | 'client' | 'project' | 'priority' | 'recurrence' | 'kdo' | null
 
 export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => void }) {
   const [title, setTitle] = useState(task.title)
   const [notes, setNotes] = useState(task.notes ?? '')
   const [clientId, setClientId] = useState(task.clientId ?? '')
   const [hiddenFrom, setHiddenFrom] = useState<string[]>(task.hiddenFrom ?? [])
+  // Přiřazení se ukládá hned, ne až tlačítkem: „kdo to má udělat" je
+  // rozhodnutí o práci někoho jiného, ne rozepsaný text. Kdyby čekalo na
+  // Uložit, zavřel by panel s pocitem, že úkol předal — a nepředal.
+  const [assignedTo, setAssignedTo] = useState<string | undefined>(task.assignedTo)
+  const ja = useJa()
+  const { lide: sdileniLide } = useKolegove(clientId || undefined)
+  // Nabídka lidí = všichni u klienta včetně mě. Sám sebe tu člověk
+  // potřebuje: „vzít si to zpátky" je stejně častý krok jako předání.
+  const kolegove = useMemo(() => {
+    const kratka = kratkaJmena(sdileniLide.map((l) => l.email))
+    return sdileniLide
+      .filter((l) => !!l.userId)
+      .map((l) => ({ userId: l.userId, email: l.email, jmeno: kratka.get(l.email) }))
+  }, [sdileniLide])
+  const kdoTeda = kdoMa({ ownerId: task.ownerId, assignedTo }, ja)
+  const kdoJmeno =
+    kdoTeda === ja ? 'Já' : (kolegove.find((k) => k.userId === kdoTeda)?.jmeno ?? 'někdo další')
+
+  // Předání se zapisuje rovnou, včetně škrtnutí z „kdo úkol nevidí":
+  // přiřadit práci někomu, kdo na ni nevidí, by byl úkol, o kterém neví
+  // nikdo. Volba shodná se zakladatelem se ukládá jako prázdno — je to
+  // výchozí stav, ne rozhodnutí, a v datech nemá co ležet.
+  const predej = (userId: string) => {
+    const dalsi = userId === task.ownerId ? undefined : userId
+    setAssignedTo(dalsi)
+    if (dalsi) setHiddenFrom((h) => h.filter((u) => u !== dalsi))
+    void assignTask(task.id, dalsi)
+  }
   const [ptamSeNaTodoist, setPtamSeNaTodoist] = useState(false)
   const [projectId, setProjectId] = useState(task.projectId ?? '')
   const [priority, setPriority] = useState<Priority>(task.priority)
@@ -360,6 +391,16 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
             onTap={() => otevri('priority')}
             icon={<path d="M12 5v9M12 17.5v1" />}
           />
+          {kolegove.length > 0 && (
+            <SlotChip
+              slot="kdo"
+              label="Kdo to má"
+              value={kdoJmeno}
+              open={picker === 'kdo'}
+              onTap={() => otevri('kdo')}
+              icon={<><circle cx="9" cy="8.5" r="3.2" /><path d="M3.5 19.5c.7-3 2.8-4.8 5.5-4.8s4.8 1.8 5.5 4.8" /><path d="M16.5 7.5h5M19 5v5" /></>}
+            />
+          )}
           <SlotChip
             slot="recurrence"
             label="Opakování"
@@ -497,6 +538,34 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
                     {PRIORITY_LABELS[p]}
                   </button>
                 ))}
+              </div>
+            )}
+            {picker === 'kdo' && (
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {kolegove.map((k) => {
+                    const vybrany = kdoTeda === k.userId
+                    return (
+                      <button
+                        key={k.userId}
+                        type="button"
+                        aria-pressed={vybrany}
+                        onClick={() => {
+                          predej(k.userId)
+                          setPicker(null)
+                        }}
+                        className={`${pill} ${vybrany ? 'bg-accent text-card' : 'bg-card text-ink'}`}
+                      >
+                        {k.userId === ja ? 'Já' : (k.jmeno ?? k.email)}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="px-1 text-[12px] text-ink-faint">
+                  {jeMuj({ ownerId: task.ownerId, assignedTo }, ja)
+                    ? 'Předaný úkol zmizí z tvého Dneška a objeví se v jeho — u klienta ho uvidíte oba.'
+                    : 'Tenhle úkol není v tvém Dnešku. Vezmi si ho zpátky ťuknutím na „Já".'}
+                </p>
               </div>
             )}
             {picker === 'recurrence' && (

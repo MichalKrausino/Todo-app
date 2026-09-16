@@ -18,6 +18,8 @@
 
 import { Fragment, useCallback, useState, useMemo } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { jeMuj, kdoMa, mojeUkoly, skupinyLidi } from '../lib/tymUkoly'
+import { useJa, useLide, useSdilim } from '../lib/useTym'
 import type { Task } from '../db/types'
 import { allClients, allProjects, completeTask, openTasks, reopenTask, sortTasks } from '../db/repo'
 import { todayISO } from '../lib/dates'
@@ -38,7 +40,9 @@ const DAVKA = 30
 
 // Řazení: po dnech (koše od propadlých po „bez termínu"), nebo po
 // klientech — jeden klient v kuse, míň přepínání kontextu.
-type Razeni = 'termin' | 'klient'
+// „kdo" se nabízí jen tomu, kdo něco sdílí — jinak by to byl přepínač
+// s jedinou skupinou („Já"), tedy tlačítko, které nic nedělá.
+type Razeni = 'termin' | 'klient' | 'kdo'
 const RAZENI_KLIC = 'todo.vse.razeni'
 
 interface Skupina {
@@ -56,9 +60,10 @@ export function VseView({
   onZpet: () => void
 }) {
   const dnes = todayISO()
-  const [razeni, setRazeni] = useState<Razeni>(() =>
-    localStorage.getItem(RAZENI_KLIC) === 'klient' ? 'klient' : 'termin',
-  )
+  const [razeni, setRazeni] = useState<Razeni>(() => {
+    const ulozene = localStorage.getItem(RAZENI_KLIC)
+    return ulozene === 'klient' || ulozene === 'kdo' ? ulozene : 'termin'
+  })
   const zmenRazeni = (r: Razeni) => {
     localStorage.setItem(RAZENI_KLIC, r)
     setRazeni(r)
@@ -76,14 +81,36 @@ export function VseView({
   const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients])
   const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
 
+  // Vše ukazuje i práci kolegů — schválně. Dnes a Plán odpovídají na
+  // „co mám dělat já", tahle obrazovka na „kde je ten úkol" a „co všechno
+  // se u nás děje"; kdyby cizí úkoly schovala, nebylo by je kde najít.
+  // Čí co je, říká jméno u řádku.
+  const ja = useJa()
+  const lide = useLide()
+  const sdilim = useSdilim()
+  // Uložená volba přežije i zrušení sdílení — pak by zůstal přepínač
+  // ve stavu, který se nemá kde přepnout zpátky.
+  const razeniPlatne: Razeni = razeni === 'kdo' && !sdilim ? 'termin' : razeni
+
   // Koše se počítaly dvakrát za překreslení — jednou kvůli propadlým
   // a podruhé kvůli seznamu. Je to týž průchod všemi úkoly.
   const kose = useMemo(() => vseSkupiny(open, dnes, sortTasks), [open, dnes])
-  const propadle = useMemo(() => kose.find((k) => k.id === 'poTerminu')?.ukoly ?? [], [kose])
+  // Triáž posouvá termíny, takže do fronty patří jen MOJE propadlé:
+  // přeložit kolegovi termín z mojí obrazovky je zásah do jeho práce.
+  const propadle = useMemo(
+    () => mojeUkoly(kose.find((k) => k.id === 'poTerminu')?.ukoly ?? [], ja),
+    [kose, ja],
+  )
 
   const skupiny: Skupina[] = useMemo(
     () =>
-      razeni === 'klient'
+      razeniPlatne === 'kdo'
+      ? skupinyLidi(open, ja, lide).map((s) => ({
+          klic: s.klic,
+          jmeno: s.nazev,
+          ukoly: sortTasks(s.ukoly),
+        }))
+      : razeniPlatne === 'klient'
       ? (() => {
           const map = new Map<string, Task[]>()
           for (const t of open) {
@@ -107,7 +134,7 @@ export function VseView({
             }))
         })()
       : kose.map((k) => ({ klic: k.id, jmeno: k.jmeno, ukoly: k.ukoly })),
-    [razeni, open, kose, clientMap],
+    [razeniPlatne, open, kose, clientMap, ja, lide],
   )
 
   // Strop platí na CELÝ seznam, ne na každou skupinu zvlášť — jinak by
@@ -128,6 +155,13 @@ export function VseView({
     void (t.status === 'done' ? reopenTask(t.id) : completeTask(t.id))
   }, [])
 
+  // Ve skupinách po lidech nese jméno hlavička, takže by u každého řádku
+  // stálo podruhé — pod nadpisem „jana" je řádka „jana" jen šum.
+  const kdoJmeno = (t: Task): string | undefined => {
+    if (razeniPlatne === 'kdo' || jeMuj(t, ja)) return undefined
+    return lide.get(kdoMa(t, ja) ?? '') ?? 'někdo další'
+  }
+
   const row = (t: Task) => (
     <TaskRow
       key={t.id}
@@ -137,6 +171,7 @@ export function VseView({
       onToggle={toggle}
       onOpen={onOpenTask}
       showDate
+      kdoMaJmeno={kdoJmeno(t)}
     />
   )
 
@@ -147,7 +182,8 @@ export function VseView({
           Vše
         </TextEffect>
         <p className="mt-1.5 text-[13px] text-ink-soft">
-          {open.length} {plural(open.length, 'otevřený úkol', 'otevřené úkoly', 'otevřených úkolů')} · napříč dny i klienty
+          {open.length} {plural(open.length, 'otevřený úkol', 'otevřené úkoly', 'otevřených úkolů')} ·{' '}
+          {sdilim ? 'i práce kolegů' : 'napříč dny i klienty'}
         </p>
       </header>
 
@@ -167,13 +203,22 @@ export function VseView({
         {open.length > 0 && (
           <div className="ml-auto flex shrink-0 gap-0.5 rounded-full bg-well p-0.5">
             {/* AnimatedBackground (motion-primitives): pilulka mezi volbami plyne */}
-            <AnimatedBackground value={razeni} onValueChange={(id) => zmenRazeni(id as Razeni)} className="rounded-full bg-card shadow-card">
-              <button data-id="termin" className="h-8 rounded-full px-2.5 text-[12px] font-medium text-ink-soft data-[checked=true]:text-ink">
-                Termín
-              </button>
-              <button data-id="klient" className="h-8 rounded-full px-2.5 text-[12px] font-medium text-ink-soft data-[checked=true]:text-ink">
-                Klient
-              </button>
+            <AnimatedBackground value={razeniPlatne} onValueChange={(id) => zmenRazeni(id as Razeni)} className="rounded-full bg-card shadow-card">
+              {[
+                <button key="termin" data-id="termin" className="h-8 rounded-full px-2.5 text-[12px] font-medium text-ink-soft data-[checked=true]:text-ink">
+                  Termín
+                </button>,
+                <button key="klient" data-id="klient" className="h-8 rounded-full px-2.5 text-[12px] font-medium text-ink-soft data-[checked=true]:text-ink">
+                  Klient
+                </button>,
+                ...(sdilim
+                  ? [
+                      <button key="kdo" data-id="kdo" className="h-8 rounded-full px-2.5 text-[12px] font-medium text-ink-soft data-[checked=true]:text-ink">
+                        Kdo
+                      </button>,
+                    ]
+                  : []),
+              ]}
             </AnimatedBackground>
           </div>
         )}
@@ -208,10 +253,10 @@ export function VseView({
                       ním říká přesně totéž a byla by to dvakrát tatáž věta
                       pod sebou, jen jednou červeně. Řádka triáže JE jeho
                       hlavička — a navíc nabízí cestu ven. */}
-                  {!(razeni === 'termin' && s.klic === 'poTerminu') && (
+                  {!(razeniPlatne === 'termin' && s.klic === 'poTerminu') && (
                     <li className="skupina-li">
                       <span className="flex items-center gap-1.5 px-4 pb-1 pt-3 text-[12px] font-medium text-ink-soft first-letter:uppercase">
-                        {razeni === 'klient' && (
+                        {razeniPlatne === 'klient' && (
                           <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.barva ?? 'var(--color-edge)' }} />
                         )}
                         {s.jmeno} · {s.ukoly.length}

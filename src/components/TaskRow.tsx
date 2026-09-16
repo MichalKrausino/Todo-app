@@ -50,6 +50,7 @@ export const TaskRow = memo(function TaskRow({
   onOpen,
   showDate = true,
   showPin = true,
+  kdoMaJmeno,
 }: {
   task: Task
   client?: Client
@@ -58,6 +59,11 @@ export const TaskRow = memo(function TaskRow({
   onOpen: (task: Task) => void
   showDate?: boolean
   showPin?: boolean
+  // Jméno člověka, který úkol má — VYPLNĚNÉ JEN TEHDY, KDYŽ TO NEJSEM JÁ.
+  // Kdo pracuje sám, tuhle značku nikdy neuvidí, a v mém vlastním seznamu
+  // by „já" u každého řádku byla jen tapeta. Počítá to volající, protože
+  // řádek nemá vědět, kdo jsem (viz src/lib/tymUkoly.ts).
+  kdoMaJmeno?: string
 }) {
   const done = task.status === 'done'
   const [pendingDone, setPendingDone] = useState(false)
@@ -273,7 +279,7 @@ export const TaskRow = memo(function TaskRow({
             {prio && !visualDone && <span className="sr-only">{prio.label}: </span>}
             {task.title}
           </div>
-          {(pinned || client || project || (showDate && task.dueDate) || task.dueTime || subs.length > 0 || task.priority === 'low' || task.recurrenceRule || task.sourceTemplateItemId || task.todoistId || task.todoistUnread) && (
+          {(pinned || kdoMaJmeno || client || project || (showDate && task.dueDate) || task.dueTime || subs.length > 0 || task.priority === 'low' || task.recurrenceRule || task.sourceTemplateItemId || task.todoistId || task.todoistUnread) && (
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
               {/* špendlík „Top 3 dne" — jen mimo sekci Na čem záleží, tam by
                   stál u každého řádku. Stojí mezi ostatními značkami úkolu
@@ -286,6 +292,19 @@ export const TaskRow = memo(function TaskRow({
                     <path d="M12 11.8V20.5" />
                   </svg>
                   <span className="sr-only">připnuto na dnešek</span>
+                </span>
+              )}
+              {/* Komu úkol patří. Stojí jako první ze značek a v akcentu:
+                  ze všeho na řádku je to ta nejdůležitější zpráva — tohle
+                  není tvoje práce. Čtečka dostane celou větu, oko jméno. */}
+              {kdoMaJmeno && (
+                <span className="inline-flex items-center gap-1 font-medium text-accent-deep">
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="8" r="3.2" />
+                    <path d="M5.5 19.5c0-3.3 2.9-5.2 6.5-5.2s6.5 1.9 6.5 5.2" />
+                  </svg>
+                  <span aria-hidden="true">{kdoMaJmeno}</span>
+                  <span className="sr-only">má udělat {kdoMaJmeno}</span>
                 </span>
               )}
               {client && (

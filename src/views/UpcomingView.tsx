@@ -20,6 +20,8 @@
 
 import { useCallback, useState, useMemo } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { mojeUkoly } from '../lib/tymUkoly'
+import { useJa } from '../lib/useTym'
 import type { CalendarEvent, Task } from '../db/types'
 import {
   addTask,
@@ -80,7 +82,10 @@ export function UpcomingView({
 
   // Než první dotaz doběhne, není to „volno" — jen se ještě neví.
   const openRaw = useLiveQuery(openTasks, [])
-  const open = openRaw ?? []
+  // Plán ukazuje MŮJ výhled: pruh dne je moje zátěž, ne součet práce
+  // celého týmu. Kolegovy úkoly jsou ve Vše a v detailu klienta.
+  const ja = useJa()
+  const open = useMemo(() => mojeUkoly(openRaw ?? [], ja), [openRaw, ja])
   const pamet = useNavrhPamet()
   const clients = useLiveQuery(allClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []

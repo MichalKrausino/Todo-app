@@ -239,6 +239,31 @@ export async function updateTask(id: string, patch: Partial<Task>): Promise<void
   emitRepoWrite()
 }
 
+// Moje id — totéž, co serveru razítkuje `ownerId`. Čte se z lokálního
+// účetnictví synchronizace, takže funguje i offline; bez přihlášení je
+// `undefined` a všechno se chová jako dřív.
+export const mojeId = (): Promise<string | undefined> =>
+  db.syncState.get('meta').then((r) => r?.userId)
+
+/**
+ * Předat úkol kolegovi (nebo si ho vzít zpátky).
+ *
+ * Zároveň se ten člověk škrtne z `hiddenFrom`. Přiřadit práci někomu, kdo
+ * na ni nevidí, je tichá past: úkol by mu nespadl do dneška, nespadl by do
+ * mého (je přiřazený jinam) a čekal by v seznamu na někoho, kdo o něm neví.
+ * „Má to udělat" znamená „vidí to" — a dělá se to mlčky, protože jiná
+ * odpověď než ano tu nedává smysl.
+ */
+export async function assignTask(id: string, userId: string | undefined): Promise<void> {
+  const task = await db.tasks.get(id)
+  if (!task) return
+  const hidden = userId ? (task.hiddenFrom ?? []).filter((u) => u !== userId) : task.hiddenFrom
+  await updateTask(id, {
+    assignedTo: userId,
+    hiddenFrom: hidden && hidden.length > 0 ? hidden : undefined,
+  })
+}
+
 // „Top 3 dne" — kolik úkolů smí být připíchnutých najednou. Tři je
 // záměrné: víc priorit než tři už není priorita.
 export const MAX_PINNED = 3
@@ -262,7 +287,10 @@ export async function togglePinned(id: string, day: string): Promise<boolean> {
 
 export async function completeTask(id: string): Promise<void> {
   const t = now()
-  await db.tasks.update(id, { status: 'done', completedAt: t, updatedAt: t })
+  // `completedAt` říká kdy, `completedBy` kdo. U sdíleného klienta je
+  // „hotovo" bez jména informace jen z poloviny — a ukazuje se stejně jen
+  // tehdy, když to nejsem já, takže pro práci o samotě je to neviditelné.
+  await db.tasks.update(id, { status: 'done', completedAt: t, completedBy: await mojeId(), updatedAt: t })
   const task = await db.tasks.get(id)
   if (task?.clientId) {
     await db.clients.update(task.clientId, { lastActivityAt: t, updatedAt: t })
@@ -295,6 +323,13 @@ async function respawnRecurring(task: Task | undefined, t: string): Promise<void
     dueDate: next,
     scheduledFor: undefined,
     completedAt: undefined,
+    completedBy: undefined,
+    // Razítko majitele patří řádku na serveru, ne úkolu: nový výskyt je
+    // nový řádek a orazítkuje ho až ten, kdo ho odešle. Aby přitom
+    // nepřeskočil k tomu, kdo zrovna odškrtl, nese si přiřazení dál —
+    // „ten měsíční report dělá Jana" platí i pro příští měsíc.
+    ownerId: undefined,
+    assignedTo: task.assignedTo ?? task.ownerId,
     calendarEventId: undefined,
     postponeCount: undefined, // nový výskyt začíná s čistým štítem
     subtasks: task.subtasks?.map((s) => ({ ...s, done: false })), // checklist znovu od nuly
@@ -307,7 +342,12 @@ export async function reopenTask(id: string): Promise<void> {
   const task = await db.tasks.get(id)
   if (!task) return
   const status: TaskStatus = task.dueDate || task.scheduledFor ? 'active' : 'inbox'
-  await db.tasks.update(id, { status, completedAt: undefined, updatedAt: now() })
+  await db.tasks.update(id, {
+    status,
+    completedAt: undefined,
+    completedBy: undefined,
+    updatedAt: now(),
+  })
   emitRepoWrite()
 }
 

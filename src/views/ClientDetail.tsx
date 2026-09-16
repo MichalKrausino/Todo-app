@@ -31,6 +31,8 @@ import { ProjektSheet } from '../components/ProjektSheet'
 import { useRozbaleno } from '../components/SbalenaSekce'
 import { DisclosureContent } from '../components/ui/Disclosure'
 import { TaskRow } from '../components/TaskRow'
+import { jeMuj, kdoMa } from '../lib/tymUkoly'
+import { useJa, useLide } from '../lib/useTym'
 import { Button } from '../components/ui/Button'
 
 export function ClientDetail({
@@ -71,6 +73,14 @@ export function ClientDetail({
   // ze seznamu kvadratickou práci, jen aby dohledalo jeden projekt.
   const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
 
+  // Detail klienta je společná pracovní plocha: jsou tu úkoly obou a u
+  // cizích stojí jméno. Dnes a Plán naopak ukazují jen moje — tam se
+  // odpovídá na „co mám dělat já", tady na „jak na tom klient je".
+  const ja = useJa()
+  const lide = useLide()
+  const kdoJmeno = (t: Task): string | undefined =>
+    jeMuj(t, ja) ? undefined : (lide.get(kdoMa(t, ja) ?? '') ?? 'někdo další')
+
   if (!client || client.deletedAt) return null
 
   // Úkoly uzavřeného (archivovaného) projektu by jinak zmizely úplně —
@@ -96,7 +106,14 @@ export function ClientDetail({
     .slice(0, 30)
 
   const row = (t: Task) => (
-    <TaskRow key={t.id} task={t} project={t.projectId ? projectMap.get(t.projectId) : undefined} onToggle={toggle} onOpen={onOpenTask} />
+    <TaskRow
+      key={t.id}
+      task={t}
+      project={t.projectId ? projectMap.get(t.projectId) : undefined}
+      onToggle={toggle}
+      onOpen={onOpenTask}
+      kdoMaJmeno={kdoJmeno(t)}
+    />
   )
 
   const submitTask = async (e: React.FormEvent) => {
