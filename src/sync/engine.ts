@@ -28,10 +28,18 @@ import {
   sharesFingerprint,
   type MyShare,
 } from './shareState'
+import { startRealtime, stopRealtime } from './realtime'
+import { claimInvites } from './shares'
 import { setSyncStatus } from './status'
 
 const PAGE_SIZE = 500
-const WRITE_DEBOUNCE_MS = 2500
+// Jak dlouho se čeká po zápisu, než se odešle. Sečkání slučuje dávku
+// (odškrtnutí sáhne i na klienta, triáž udělá deset změn za sebou), ale
+// je to zároveň ta polovina zpoždění, kterou kolega na druhé straně
+// opravdu vidí — s živými daty je druhá polovina skoro nulová. Proto
+// 1 s: dávka se pořád slučuje, ale odškrtnutí doletí dřív, než si toho
+// stihne kdokoli všimnout.
+const WRITE_DEBOUNCE_MS = 1000
 // Jak dlouho počkat, než se start sync vrstvy zkusí znovu (viz initSync).
 const START_RETRY_MS = 60_000
 
@@ -117,9 +125,15 @@ export async function initSync(): Promise<void> {
             if (error) console.warn('store_google_token:', error.message)
           })
       }
-      void syncNow()
+      // Čerstvě přihlášený kamarád má klienta vidět hned, ne za minutu.
+      void claimInvites(true).finally(() => void syncNow())
       void healPushSubscription()
+      // Živá data: událost ze serveru je jen ťuknutí, data pak přitečou
+      // obyčejným pullem (viz realtime.ts). Bez toho by odškrtnutí
+      // u kolegy bylo vidět až s dalším tikem plánovače, tedy za minutu.
+      startRealtime(sb!)
     } else {
+      stopRealtime(sb)
       setSyncStatus({ phase: 'signedOut', email: undefined })
     }
   })
@@ -244,6 +258,9 @@ async function ensureOwnerStamp(): Promise<void> {
 }
 
 async function ensureShareScope(): Promise<boolean> {
+  // Napřed pozvánky: co se právě proměnilo ve sdílení, se má promítnout
+  // do otisku hned, ne až za minutu.
+  await claimInvites()
   const shares = await fetchMyShares()
   // Nevíme, jak na tom sdílení je — nechat všechno být. Kdyby se selhání
   // bralo jako „nic nesdílím", vzal by výpadek sítě na pár vteřin za záminku
@@ -462,6 +479,9 @@ async function sweepVanished(): Promise<void> {
 
 const AUTH_ERRORS_CZ: Array<[RegExp, string]> = [
   [/invalid login credentials/i, 'Nesprávný e-mail nebo heslo.'],
+  [/token has expired|invalid.*(otp|token)|otp.*invalid/i, 'Kód nesedí, nebo už vypršel. Nech si poslat nový.'],
+  [/for security purposes|only request this after/i, 'Kód šel před chvílí — počkej minutu a zkus to znovu.'],
+  [/email.*rate.?limit|over_email_send/i, 'Odešlo moc e-mailů za sebou. Zkus to za chvíli.'],
   [/email not confirmed/i, 'E-mail ještě není potvrzený — klikni na odkaz v e-mailu.'],
   [/already registered/i, 'Účet s tímhle e-mailem už existuje — přihlas se.'],
   [/password should be at least/i, 'Heslo musí mít aspoň 6 znaků.'],
@@ -480,16 +500,34 @@ export async function signInWithPassword(email: string, password: string): Promi
   return error ? czAuthError(error.message) : null
 }
 
-// Registrace e-mailem. needsConfirm = Supabase poslal potvrzovací e-mail
-// a přihlášení bude fungovat až po kliknutí na odkaz v něm.
-export async function signUpWithPassword(
-  email: string,
-  password: string,
-): Promise<{ error?: string; needsConfirm?: boolean }> {
-  if (!sb) return { error: 'Synchronizace není nakonfigurovaná.' }
-  const { data, error } = await sb.auth.signUp({ email, password })
-  if (error) return { error: czAuthError(error.message) }
-  return { needsConfirm: !data.session }
+
+/**
+ * Přihlášení kódem z e-mailu — žádné heslo a hlavně BEZ ODCHODU Z APPKY.
+ *
+ * Registrace dosud znamenala: vymysli si heslo, najdi potvrzovací e-mail,
+ * klikni na odkaz (a appka sama hlásila, že „stránka může hlásit chybu,
+ * to nevadí"), vrať se a přihlas se. Čtyři kroky a jeden z nich je
+ * omluva. Odkaz je navíc na iPhonu past: otevře se v Safari, ne v appce
+ * na ploše, takže se člověk přihlásí jinam, než kde chtěl.
+ *
+ * Kód tohle celé ruší. `shouldCreateUser` je schválně zapnuté: mezi
+ * „registrací" a „přihlášením" tu není rozdíl, který by kohokoli zajímal
+ * — kdo dostane kód do svojí schránky, ten do appky patří.
+ */
+export async function sendLoginCode(email: string): Promise<string | null> {
+  if (!sb) return 'Synchronizace není nakonfigurovaná.'
+  const { error } = await sb.auth.signInWithOtp({
+    email,
+    options: { shouldCreateUser: true },
+  })
+  return error ? czAuthError(error.message) : null
+}
+
+/** Ověří kód a přihlásí. Úspěch pozná zbytek appky přes onAuthStateChange. */
+export async function verifyLoginCode(email: string, code: string): Promise<string | null> {
+  if (!sb) return 'Synchronizace není nakonfigurovaná.'
+  const { error } = await sb.auth.verifyOtp({ email, token: code.trim(), type: 'email' })
+  return error ? czAuthError(error.message) : null
 }
 
 export async function signInWithGoogle(): Promise<void> {
