@@ -9,6 +9,7 @@ import { initAppBadge } from './lib/badge'
 import { initTheme } from './lib/theme'
 import { initCalendar } from './sync/calendar'
 import { initSync } from './sync/engine'
+import { initLide } from './sync/lide'
 import { initLive } from './sync/live'
 import { initTodoist } from './sync/todoist'
 import './index.css'
@@ -34,6 +35,8 @@ initTheme()
 void initSync().catch((e) => console.warn('initSync:', e))
 initCalendar()
 initTodoist()
+// Jména lidí ke sdíleným id — kdo nic nesdílí, nestojí to ani jeden dotaz.
+initLide()
 // Udržuje data čerstvá, dokud je appka otevřená a je signál.
 initLive()
 initAppBadge()

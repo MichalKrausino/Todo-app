@@ -94,6 +94,14 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
 
   // detail úkolu: uložení změny (úkol s termínem „dnes“ je na Dnes)
   await page.getByText('první úkol').first().click(); await page.waitForTimeout(700)
+
+  // Kdo nic nesdílí, nesmí z týmové části vidět ANI JEDEN prvek (Fáze 10).
+  // Týmová appka pro jednoho člověka je horší než appka pro jednoho
+  // člověka — a je to jediná část těch změn, kterou pravítko nezměří:
+  // ostatní se pozná až na dvou účtech.
+  T_(await page.locator('[data-slot="kdo"]').count() === 0,
+     'bez sdílení není v detailu úkolu slot „Kdo to má"')
+
   await page.locator('#pole-ukol').fill('druhý úkol přejmenovaný')
   await page.getByRole('button',{name:'Uložit'}).click(); await page.waitForTimeout(700)
   T_(await page.getByText('přejmenovaný').count()>0,'přejmenování v detailu se uložilo')
@@ -531,6 +539,10 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   T_(await nadpis() === 'Vše', 'dvojité ťuknutí na Dnes otevře Vše')
   const vseUkolu = await page.evaluate(() => Number((document.body.innerText.match(/(\d+)\s+otevřen/) || [])[1]) || 0)
   T_(vseUkolu > 300, 'Vše počítá všechny otevřené úkoly, ne jen dnešek (' + vseUkolu + ')')
+  // Přepínač lidí se bez sdílení nenabízí: byla by to jediná skupina
+  // („Já"), tedy tlačítko, které nic nedělá (Fáze 10).
+  T_(await page.getByRole('button', { name: 'Kdo', exact: true }).count() === 0,
+     'bez sdílení není ve Vše přepínač „Kdo"')
 
   // Přepnutí záložky nahlédnutí vždycky složí — v režimu se nesmí uvíznout.
   await page.getByRole('button',{name:'Plán',exact:true}).click(); await page.waitForTimeout(900)

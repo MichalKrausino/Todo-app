@@ -1,5 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { mojeUkoly } from '../lib/tymUkoly'
+import { useJa } from '../lib/useTym'
 import type { Client, Task } from '../db/types'
 import {
   allClients,
@@ -148,8 +150,13 @@ export function TodayView({
   const openRaw = useLiveQuery(openTasks, [])
   const doneRaw = useLiveQuery(() => doneOn(today), [today])
   const nacteno = openRaw !== undefined && doneRaw !== undefined
-  const open = openRaw ?? []
-  const done = doneRaw ?? []
+  // Dnes je MOJE práce, ne všechno, na co appka dosáhne. U sdíleného
+  // klienta vrací `openTasks()` i kolegovy úkoly a bez tohohle filtru
+  // spadnou do dnešku, do počtu propadlých i do kroužku postupu — den
+  // pak nejde dodělat, protože půlka není moje. Viz src/lib/tymUkoly.ts.
+  const ja = useJa()
+  const open = useMemo(() => mojeUkoly(openRaw ?? [], ja), [openRaw, ja])
+  const done = useMemo(() => mojeUkoly(doneRaw ?? [], ja), [doneRaw, ja])
   const clients = useLiveQuery(allClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []
   const dayPlan = useLiveQuery(() => getDayPlan(today), [today])
@@ -314,9 +321,13 @@ export function TodayView({
   // `computeSignals` projde několikrát všechny úkoly i klienty — nejdražší
   // výpočet obrazovky. Na otevřeném panelu ani na tiknutí minuty nezávisí,
   // takže se drží stranou od překreslení.
+  // Signály se počítají ze VŠECH viditelných úkolů, ne jen z mých. Ptají
+  // se „nepropadá něco u klienta", ne „co mám dnes dělat": kdyby koukaly
+  // jen na moje, hlásily by „projekt bez dalšího kroku" pokaždé, když ten
+  // další krok má kolega — planý poplach na obrazovce, která má být tichá.
   const signalyData = useMemo(
-    () => computeSignals(clients, projects, [...open, ...done], today),
-    [clients, projects, open, done, today],
+    () => computeSignals(clients, projects, [...(openRaw ?? []), ...(doneRaw ?? [])], today),
+    [clients, projects, openRaw, doneRaw, today],
   )
   const signaly = signalRadky(signalyData, { onOpenClient, onOpenTask, onOpenInbox })
   const timeFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })

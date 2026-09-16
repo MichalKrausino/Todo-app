@@ -13,6 +13,12 @@ export interface BaseRecord {
   createdAt: string // ISO datetime
   updatedAt: string // ISO datetime
   deletedAt?: string // tombstone
+  // Kdo řádek na serveru vlastní, tedy kdo ho založil. NEPÍŠE se odsud:
+  // razítkuje ho stahování ze sloupce `user_id` (src/sync/merge.ts) a při
+  // odesílání se zase odstraní — je to odvozený údaj, ne obsah záznamu.
+  // Bez něj nejde po nasdílení klienta poznat moje úkoly od kolegových:
+  // v Dexie leží obojí vedle sebe a vypadá stejně.
+  ownerId?: string
 }
 
 // Klient zároveň slouží jako oblast („Interní“, „Osobní“).
@@ -88,6 +94,14 @@ export interface Task extends BaseRecord {
   // na řádek dosáhne. Rozhoduje o tom RLS na serveru, ne appka: filtr jen
   // v UI by data pořád posílal do cizího zařízení.
   hiddenFrom?: string[]
+  // Kdo to má udělat (Fáze 10). Prázdné = ten, kdo úkol založil (`ownerId`),
+  // takže u nesdíleného klienta i u staré databáze vychází „můj" samo od
+  // sebe a nic se nemusí přenastavovat. Ukládá se id, ne e-mail — ten by
+  // ve sdíleném řádku přečetl každý, kdo na něj dosáhne.
+  assignedTo?: string
+  // Kdo úkol odškrtl. `completedAt` říká kdy, tohle kdo — u sdíleného
+  // klienta je „hotovo" bez jména informace jen z poloviny.
+  completedBy?: string
   subtasks?: Subtask[] // checklist — po respawnu opakování se nuluje na nehotové
   isClientCheck?: boolean // pravidelná připomínka „zkontrolovat klienta" (marker přežívá respawn)
   // Úkol přišel z Todoistu (Fáze 8). Název, termín a priorita patří Todoistu —
