@@ -25,7 +25,8 @@ const online = () => navigator.onLine
 const visible = () => document.visibilityState === 'visible'
 
 // Vlastní data appky (Supabase) — nejlevnější a nejdůležitější, proto
-// nejčastěji. Kalendář a Todoist si cadenci hlídají samy uvnitř.
+// nejčastěji. Kalendář a Todoist si cadenci hlídají samy uvnitř; kalendář
+// stahuje celé okno po minutě.
 async function tick(): Promise<void> {
   const now = Date.now()
   if (wokeUp(lastTickAt, now, TICK_MS)) {
