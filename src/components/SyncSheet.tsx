@@ -28,6 +28,7 @@ import {
   type ThemeChoice,
 } from '../lib/theme'
 import { getTodoistStatus, subscribeTodoistStatus } from '../sync/todoist'
+import { nactiNastaveniRana, ulozNastaveniRana, type NastaveniRana } from '../sync/pushPrefs'
 import { HelpSheet } from './HelpSheet'
 import { Switch } from './ui/Switch'
 import { SharingSheet } from './SharingSheet'
@@ -437,7 +438,10 @@ function CalendarSection() {
   )
 }
 
-// Ranní návrh dne chodí pushem v 7:00 — přepínač odběru pro tohle zařízení.
+// Odběr push notifikací pro TOHLE zařízení. Je to povolení, ne nastavení:
+// říká jen „na tenhle mobil je smíš posílat", ne co a kdy. Co a kdy řeší
+// NastaveniRana pod ním — a to platí pro všechna zařízení naráz, protože
+// je to vlastnost člověka, ne mobilu.
 function PushToggle() {
   const [enabled, setEnabled] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -474,17 +478,144 @@ function PushToggle() {
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3 rounded-2xl bg-well px-3 py-2.5">
         <div className="text-sm">
-          <div className="font-medium">Ranní návrh dne</div>
-          <div className="text-xs text-ink-soft">Notifikace každý den v 7:00</div>
+          <div className="font-medium">Notifikace na tomhle zařízení</div>
+          <div className="text-xs text-ink-soft">Ranní návrh dne i připomínky termínů</div>
         </div>
         <Switch
           checked={enabled}
           disabled={busy}
           onCheckedChange={() => void toggle()}
-          aria-label="Ranní návrh dne"
+          aria-label="Notifikace na tomhle zařízení"
         />
       </div>
       {error && <p className="rounded-2xl bg-danger-wash px-3 py-2 text-xs text-danger">{error}</p>}
+      {enabled && <NastaveniRanaBlok />}
+    </div>
+  )
+}
+
+// V kolik ranní návrh chodí, jestli chodí a kam vede.
+//
+// Ukazuje se až pod zapnutými notifikacemi: nastavovat hodinu u zprávy,
+// která na tohle zařízení nesmí, je nabídka, co nikam nevede. Ukládá se
+// hned při změně — je to rozhodnutí, ne rozepsaný text.
+const CASY = ['05:00', '05:30', '06:00', '06:30', '07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00']
+
+function NastaveniRanaBlok() {
+  const [n, setN] = useState<NastaveniRana | null>(null)
+  const [nacetlo, setNacetlo] = useState(false)
+  const [chyba, setChyba] = useState<string | null>(null)
+
+  useEffect(() => {
+    let live = true
+    void nactiNastaveniRana().then((v) => {
+      if (!live) return
+      setN(v)
+      setNacetlo(true)
+    })
+    return () => {
+      live = false
+    }
+  }, [])
+
+  // Uloží se rovnou a v rozhraní se změna ukáže hned. Kdyby se čekalo na
+  // server, přepínač by se po ťuknutí vracel zpátky a vypadalo by to,
+  // že nefunguje.
+  const uloz = (dalsi: NastaveniRana) => {
+    setN(dalsi)
+    setChyba(null)
+    void ulozNastaveniRana(dalsi).then((err) => setChyba(err))
+  }
+
+  if (!nacetlo) return null
+  if (!n) {
+    return (
+      <p className="rounded-2xl bg-well px-3 py-2 text-xs text-ink-soft">
+        V kolik hodin má ranní návrh chodit, se ukládá na server — chce to
+        připojení a přihlášení.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-2 rounded-2xl bg-well px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm">
+          <div className="font-medium">Ranní návrh dne</div>
+          <div className="text-xs text-ink-soft">
+            {n.zapnuto ? `Chodí v ${n.cas}` : 'Nechodí'}
+          </div>
+        </div>
+        <Switch
+          checked={n.zapnuto}
+          onCheckedChange={(v) => uloz({ ...n, zapnuto: v })}
+          aria-label="Ranní návrh dne"
+        />
+      </div>
+
+      {n.zapnuto && (
+        <>
+          <div className="flex items-center gap-2">
+            <span className="shrink-0 text-[13px] text-ink-soft">V kolik</span>
+            <input
+              type="time"
+              value={n.cas}
+              aria-label="Čas ranního návrhu"
+              onChange={(e) => e.target.value && uloz({ ...n, cas: e.target.value })}
+              className="min-w-0 flex-1 rounded-full border border-transparent bg-card px-3 py-2 text-[15px] font-medium text-ink outline-none focus:border-accent/50"
+            />
+          </div>
+          {/* Rychlá volba pro prst — psát hodinu po číslicích kvůli půlhodině
+              je na telefonu zbytečná práce. Pole nad tím zůstává pro čas,
+              který v nabídce není. */}
+          <div className="radka-mizi -mx-3 flex gap-1.5 overflow-x-auto px-3" style={{ scrollbarWidth: 'none' }}>
+            {CASY.map((c) => (
+              <button
+                key={c}
+                type="button"
+                aria-pressed={n.cas === c}
+                onClick={() => uloz({ ...n, cas: c })}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium transition-transform duration-150 active:scale-95 ${n.cas === c ? 'bg-accent text-card' : 'bg-card text-ink'}`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between gap-2 pt-0.5">
+            <span className="shrink-0 text-[13px] text-ink-soft">Ťuknutí otevře</span>
+            <div className="flex shrink-0 gap-0.5 rounded-full bg-card p-0.5">
+              {([
+                ['navrh', 'Návrhy'],
+                ['dnes', 'Dnes'],
+              ] as const).map(([id, popis]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={n.cil === id}
+                  onClick={() => uloz({ ...n, cil: id })}
+                  className={`h-8 rounded-full px-3 text-[12px] font-medium transition-colors duration-150 ${n.cil === id ? 'bg-accent text-card' : 'text-ink-soft'}`}
+                >
+                  {popis}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <p className="text-[12px] text-ink-faint">
+            Platí pro všechna tvoje zařízení. V neděli místo návrhu přijde
+            týdenní ohlédnutí — ve stejný čas.
+          </p>
+        </>
+      )}
+
+      {/* Uložení se nepovedlo — nastavení zůstalo jen na téhle obrazovce
+          a server o něm neví. Mlčet by tu znamenalo tvrdit opak. */}
+      {chyba && (
+        <p className="rounded-xl bg-danger-wash px-3 py-2 text-[12px] text-danger">
+          Nastavení se neuložilo: {chyba}
+        </p>
+      )}
     </div>
   )
 }

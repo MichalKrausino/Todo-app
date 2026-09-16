@@ -129,12 +129,15 @@ export function TodayView({
     }
   }, [])
 
-  // Deep-link #shutdown z podvečerní notifikace otevře uzávěrku dne.
+  // Deep-linky z notifikací: #shutdown otevře uzávěrku dne, #navrh rovnou
+  // panel s ranními návrhy (volba „Ťuknutí otevře" v nastavení).
   // (#review řeší App — týdenní ohlédnutí bydlí v Plánu.)
   useEffect(() => {
     const check = () => {
-      if (window.location.hash !== '#shutdown') return
-      setShutdownOpen(true)
+      const hash = window.location.hash
+      if (hash !== '#shutdown' && hash !== '#navrh') return
+      if (hash === '#shutdown') setShutdownOpen(true)
+      else setNavrhOpen(true)
       history.replaceState(null, '', window.location.pathname + window.location.search)
     }
     check()
