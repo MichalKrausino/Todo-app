@@ -20,6 +20,7 @@ import { formatFullDate, todayISO } from '../lib/dates'
 import { WORK_END, WORK_START, freeGaps, freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { computeSignals } from '../lib/signals'
 import { plural } from '../lib/labels'
+import { poradiDne, type PolozkaDne } from '../lib/dnesPoradi'
 import { Chip } from '../components/Chip'
 import { HelpSheet } from '../components/HelpSheet'
 import { ShutdownSheet } from '../components/ShutdownSheet'
@@ -70,10 +71,8 @@ const RING = 2 * Math.PI * 7.5
 type Razeni = 'priorita' | 'klient'
 const RAZENI_KLIC = 'todo.dnes.razeni'
 
-interface Polozka {
-  task: Task
-  showDate: boolean
-}
+// Položka seznamu — tvar určuje `dnesPoradi`, ať se ty dva nerozejdou.
+type Polozka = PolozkaDne
 
 // Kontextový chip: jedna řádka nad seznamem, každý chip otevře panel.
 export function TodayView({
@@ -263,23 +262,13 @@ export function TodayView({
     />
   )
 
-  // Pořadí v seznamu: připnuté (Top 3 dne), propadlé, dnešní. Připnuté
-  // nese špendlík na řádku, propadlé červené datum — vlastní sekce
-  // s nadpisem k tomu nepotřebují.
-  const { visOverdue, poradi } = useMemo(() => {
-    const isPinned = (t: Task) => t.pinnedFor === today
-    const pinned = sortTasks(unfinished.filter(isPinned))
-    const vo = overdue.filter((t) => !isPinned(t))
-    const vt = todays.filter((t) => !isPinned(t))
-    return {
-      visOverdue: vo,
-      poradi: [
-        ...pinned.map((t) => ({ task: t, showDate: effectiveDate(t) !== today })),
-        ...vo.map((t) => ({ task: t, showDate: true })),
-        ...vt.map((t) => ({ task: t, showDate: false })),
-      ] as Polozka[],
-    }
-  }, [unfinished, overdue, todays, today])
+  // Pořadí seznamu je čistá logika s testy (`src/lib/dnesPoradi.ts`):
+  // připnuté nahoře, zbytek podle priority. Stojí a padá na něm odpověď
+  // obrazovky na „co teď?", tak ať se dá ověřit bez prohlížeče.
+  const { propadleNepripnute: visOverdue, poradi } = useMemo(
+    () => poradiDne(overdue, todays, today, sortTasks),
+    [overdue, todays, today],
+  )
   const otevrene = poradi.length
   const viditelne = useMemo(() => poradi.slice(0, limit), [poradi, limit])
   const zbyva = otevrene - viditelne.length
