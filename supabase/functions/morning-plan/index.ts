@@ -1,4 +1,8 @@
-// Ranní návrh dne (Fáze 6). Budí ho pg_cron v 5:00 UTC (7:00 léto / 6:00 zima).
+// Ranní návrh dne (Fáze 6). Budí ho pg_cron každou půlhodinu v okně
+// 3–11 UTC; v kolik má návrh u koho odejít, rozhoduje až tahle funkce
+// podle nastavení v `push_prefs` (čistá logika v kdy.ts). Dřív jel cron
+// jednou v 5:00 UTC, takže hodina byla pro všechny stejná a v zimě jiná
+// než v létě.
 //
 // Chytrou verzi plánu připravuje před 5:00 UTC naplánovaná Claude úloha
 // (předplatné, žádné API) — zapisuje day_plans se stejným deterministickým id.
@@ -14,6 +18,8 @@ import * as webpush from 'jsr:@negrel/webpush@0.3'
 // Skórování a výběr jsou čistá logika ve vlastním souboru — testuje je
 // pick.test.ts vitestem, sem se jen zavolají.
 import { addDaysISO, eff, HISTORIE_DNI, historieZPlanu, ohodnot, pickSuggestions } from './pick.ts'
+// Kdy návrh odejde a kam vede — taky čistá logika s testy (kdy.test.ts).
+import { cilOdkazu, maPoslat, type NastaveniRana } from './kdy.ts'
 
 type Rec = Record<string, unknown>
 
@@ -21,6 +27,16 @@ const APP_URL = 'https://michalkrausino.github.io/Todo-app/'
 
 const pragueToday = (): string =>
   new Date().toLocaleDateString('sv', { timeZone: 'Europe/Prague' })
+
+// Pražské HH:MM. Cron budí funkci každou půlhodinu v okně a teprve tohle
+// číslo rozhoduje, u koho už nastal jeho čas (viz kdy.ts).
+const pragueNow = (): string =>
+  new Date().toLocaleTimeString('sv', {
+    timeZone: 'Europe/Prague',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
 
 // Deterministické UUID (stejný algoritmus jako v appce) — opakované spuštění
 // téhož dne přepíše tentýž záznam, nevzniknou duplikáty.
@@ -56,7 +72,19 @@ Deno.serve(async () => {
     .select('id, user_id, subscription')
   if (subsErr) return Response.json({ error: subsErr.message }, { status: 500 })
 
+  // Nastavení všech lidí najednou — jeden dotaz místo jednoho na hlavu.
+  // Kdo řádek nemá, má výchozí stav (7:00, zapnuto): nastavení nikdo mít
+  // nemusí a chybějící řádek nesmí znamenat ticho.
+  const { data: prefsRows, error: prefsErr } = await admin
+    .from('push_prefs')
+    .select('user_id, morning_enabled, morning_time, morning_target, last_morning_on')
+  if (prefsErr) console.error('push_prefs', prefsErr.message)
+  const prefs = new Map<string, NastaveniRana>(
+    (prefsRows ?? []).map((r) => [r.user_id as string, r as NastaveniRana]),
+  )
+
   const today = pragueToday()
+  const nyni = pragueNow()
   // Neděle: místo ranního návrhu vede push na týdenní ohlédnutí (Fáze 7) —
   // návrh dne se přesto spočítá a uloží, v appce je vidět jako blok.
   const isSunday = new Date(`${today}T12:00:00Z`).getUTCDay() === 0
@@ -65,6 +93,11 @@ Deno.serve(async () => {
   let sent = 0
 
   for (const userId of users) {
+    // Nastal u tohohle člověka jeho čas? Většina probuzení skončí tady —
+    // a vypnutý ranní návrh se pozná dřív, než se sáhne na jediný úkol.
+    const nastaveni = prefs.get(userId)
+    if (!maPoslat(nastaveni, nyni, today)) continue
+
     const [tasksRes, prirazeneRes, clientsRes, plansRes] = await Promise.all([
       admin.from('tasks').select('data').eq('user_id', userId).is('deleted_at', null),
       // Co mi dal kolega u sdíleného klienta (Fáze 10). Je to jeho řádek,
@@ -205,7 +238,7 @@ Deno.serve(async () => {
       payload = JSON.stringify({
         title: 'Ranní návrh dne',
         body: `${suggestions.length} ${suggestions.length === 1 ? 'návrh' : suggestions.length < 5 ? 'návrhy' : 'návrhů'} · ${first.title} — ${first.reason}`,
-        url: APP_URL,
+        url: cilOdkazu(APP_URL, nastaveni?.morning_target),
         tag: 'morning-plan',
         badge,
       })
@@ -224,6 +257,14 @@ Deno.serve(async () => {
         }
       }
     }
+
+    // Dneškem je to pro tohohle člověka vyřízené. Bez razítka by
+    // půlhodinový budíček poslal tutéž zprávu do konce okna ještě
+    // šestkrát. Píše ho jen tahle funkce — appka na sloupec nedosáhne.
+    const { error: stampErr } = await admin
+      .from('push_prefs')
+      .upsert({ user_id: userId, last_morning_on: today }, { onConflict: 'user_id' })
+    if (stampErr) console.error('push_prefs stamp', stampErr.message)
   }
 
   return Response.json({ users: users.length, sent, date: today })
