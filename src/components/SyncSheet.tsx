@@ -13,12 +13,10 @@ import {
   getGoogleTokenError,
   getPushEnabled,
   isPushSupported,
-  sendLoginCode,
+  signIn,
   signInWithGoogle,
-  signInWithPassword,
   signOutUser,
   syncNow,
-  verifyLoginCode,
 } from '../sync/engine'
 import { getSyncStatus, subscribeSyncStatus, type SyncPhase } from '../sync/status'
 import { plural } from '../lib/labels'
@@ -621,69 +619,35 @@ function NastaveniRanaBlok() {
   )
 }
 
-// Přihlášení kódem z e-mailu. Dva kroky, žádné heslo, a hlavně: ANI
-// JEDEN KROK MIMO APPKU.
+// Přihlášení: e-mail, heslo, jedno tlačítko.
 //
-// Dosud to bylo čtyřkrokové — vymysli heslo, najdi potvrzovací e-mail,
-// klikni na odkaz (appka sama upozorňovala, že „stránka může hlásit
-// chybu, to nevadí"), vrať se a přihlas. Odkaz je navíc na iPhonu past:
-// otevře se v Safari, ne v appce na ploše, takže se člověk přihlásí
-// jinam, než kde chtěl.
+// Appku používá hrstka lidí, co se znají, takže rozdíl mezi „přihlásit
+// se" a „vytvořit účet" je pro ně rozdíl bez obsahu — a přesto se z něj
+// dřív muselo trefit správné tlačítko. Rozhoduje to teď `signIn` sám:
+// kdo účet má, přihlásí se, kdo ne, ten ho dostane.
 //
-// Heslo zůstává schované pod odkazem: kdo ho má z dřívějška, nesmí se
-// kvůli téhle změně zamknout venku.
+// Žádný e-mail se přitom neposílá. Dřív se posílal potvrzovací odkaz
+// a appka u něj musela stát a vysvětlovat, že „stránka může hlásit
+// chybu, to nevadí" — a na iPhonu ten odkaz navíc otevřel Safari místo
+// appky na ploše, takže se člověk přihlásil jinam, než kde chtěl.
 function SignInForm() {
   const [email, setEmail] = useState('')
-  const [code, setCode] = useState('')
-  const [poslano, setPoslano] = useState(false)
-  const [heslem, setHeslem] = useState(false)
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [info, setInfo] = useState<string | null>(null)
 
-  const posliKod = async () => {
-    const mail = email.trim()
-    if (!mail || busy) return
-    setBusy(true)
-    setError(null)
-    setInfo(null)
-    const err = await sendLoginCode(mail)
-    if (err) setError(err)
-    else {
-      setPoslano(true)
-      setInfo(`Kód je na cestě na ${mail}. Občas spadne do spamu.`)
-    }
-    setBusy(false)
-  }
-
-  const overKod = async () => {
-    if (code.trim().length < 6 || busy) return
-    setBusy(true)
-    setError(null)
-    const err = await verifyLoginCode(email.trim(), code)
-    if (err) setError(err)
-    setBusy(false)
-  }
-
-  const prihlasHeslem = async () => {
+  const odeslat = async (e: React.FormEvent) => {
+    e.preventDefault()
     if (!email.trim() || !password || busy) return
     setBusy(true)
     setError(null)
-    const err = await signInWithPassword(email.trim(), password)
+    const err = await signIn(email.trim(), password)
     if (err) setError(err)
     setBusy(false)
   }
 
-  const odeslat = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (heslem) void prihlasHeslem()
-    else if (poslano) void overKod()
-    else void posliKod()
-  }
-
   return (
-    <form onSubmit={odeslat} className="space-y-3">
+    <form onSubmit={(e) => void odeslat(e)} className="space-y-3">
       <p className="text-sm text-ink-soft">
         Přihlášením se data začnou zálohovat, synchronizovat mezi tvými
         zařízeními a půjde sdílet klienty s kolegy. Appka dál funguje
@@ -699,75 +663,28 @@ function SignInForm() {
         placeholder="E-mail"
         aria-label="E-mail"
         value={email}
-        disabled={poslano && !heslem}
         onChange={(e) => setEmail(e.target.value)}
-        className="w-full rounded-lg border border-line px-3 py-2 text-[16px] outline-none focus:border-accent/60 disabled:opacity-60"
+        className="w-full rounded-lg border border-line px-3 py-2 text-[16px] outline-none focus:border-accent/60"
+      />
+      <input
+        type="password"
+        autoComplete="current-password"
+        placeholder="Heslo (aspoň 6 znaků)"
+        aria-label="Heslo"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        className="w-full rounded-lg border border-line px-3 py-2 text-[16px] outline-none focus:border-accent/60"
       />
 
-      {/* Krok dva: kód. `one-time-code` je to podstatné — iOS ho pak
-          nabídne rovnou nad klávesnicí a nemusí se nikam přepínat. */}
-      {poslano && !heslem && (
-        <input
-          type="text"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          maxLength={6}
-          placeholder="Šestimístný kód"
-          aria-label="Kód z e-mailu"
-          value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-          className="w-full rounded-lg border border-line px-3 py-2 text-center text-[22px] font-medium tracking-[0.3em] outline-none focus:border-accent/60"
-        />
-      )}
-
-      {heslem && (
-        <input
-          type="password"
-          autoComplete="current-password"
-          placeholder="Heslo"
-          aria-label="Heslo"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-lg border border-line px-3 py-2 text-[16px] outline-none focus:border-accent/60"
-        />
-      )}
-
       {error && <p className="rounded-2xl bg-danger-wash px-3 py-2 text-xs text-danger">{error}</p>}
-      {info && !error && <p className="rounded-2xl bg-note px-3 py-2 text-xs text-note-ink">{info}</p>}
 
       <button
         type="submit"
-        disabled={busy || !email.trim() || (heslem && !password) || (poslano && !heslem && code.length < 6)}
+        disabled={busy || !email.trim() || !password}
         className="w-full rounded-xl bg-accent py-2.5 text-sm font-medium text-card disabled:opacity-40"
       >
-        {busy ? 'Pracuji…' : heslem ? 'Přihlásit se' : poslano ? 'Přihlásit se' : 'Poslat kód na e-mail'}
+        {busy ? 'Pracuji…' : 'Pokračovat'}
       </button>
-
-      {poslano && !heslem && (
-        <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              setPoslano(false)
-              setCode('')
-              setInfo(null)
-              setError(null)
-            }}
-            className="flex-1 rounded-xl border border-line py-2.5 text-sm font-medium text-ink-soft"
-          >
-            Jiný e-mail
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void posliKod()}
-            className="flex-1 rounded-xl border border-line py-2.5 text-sm font-medium text-ink-soft"
-          >
-            Poslat znovu
-          </button>
-        </div>
-      )}
 
       <button
         type="button"
@@ -779,18 +696,8 @@ function SignInForm() {
       </button>
 
       <p className="text-center text-[11px] text-ink-faint">
-        Přes Google se zároveň propojí tvůj Google kalendář.{' '}
-        <button
-          type="button"
-          onClick={() => {
-            setHeslem((v) => !v)
-            setError(null)
-            setInfo(null)
-          }}
-          className="underline"
-        >
-          {heslem ? 'Přihlásit kódem' : 'Mám heslo'}
-        </button>
+        Nový e-mail rovnou založí účet. Přes Google se navíc propojí
+        kalendář.
       </p>
     </form>
   )

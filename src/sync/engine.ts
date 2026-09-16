@@ -493,42 +493,46 @@ const AUTH_ERRORS_CZ: Array<[RegExp, string]> = [
 const czAuthError = (message: string): string =>
   AUTH_ERRORS_CZ.find(([re]) => re.test(message))?.[1] ?? message
 
-// Vrací česky přeloženou chybu, nebo null při úspěchu.
-export async function signInWithPassword(email: string, password: string): Promise<string | null> {
+/**
+ * Přihlásit, a když účet ještě není, rovnou ho založit.
+ *
+ * Appku používá hrstka lidí, co se znají. Rozdíl mezi „přihlásit se"
+ * a „vytvořit účet" je pro ně rozdíl bez obsahu: kdo sem přijde poprvé,
+ * nemá co přihlašovat, a kdo podruhé, nemá co zakládat — a přesto musel
+ * ze dvou tlačítek trefit to správné. Jedno tlačítko to rozhodnutí bere
+ * na sebe.
+ *
+ * Pořadí je schválně přihlášení první: kdyby se nejdřív zakládalo, každý
+ * návrat by začínal chybou „účet už existuje".
+ *
+ * Špatné heslo u existujícího účtu se nepozná z prvního pokusu (server
+ * úmyslně neprozrazuje, jestli e-mail existuje), pozná se až z druhého —
+ * `already registered` znamená „účet je, jen heslo nesedí". Bez téhle
+ * větve by se člověku s překlepem v hesle ukázalo „účet už existuje",
+ * což je pravda, která mu nijak nepomůže.
+ *
+ * Předpokladem je vypnuté potvrzování e-mailu v Supabase (Authentication
+ * → Sign In / Providers → Email → Confirm email). S ním by `signUp`
+ * nevrátil session a appka by čekala na odkaz, který se nikomu nechce
+ * hledat. Když je zapnuté, řekne se to nahlas místo tichého nic.
+ */
+export async function signIn(email: string, password: string): Promise<string | null> {
   if (!sb) return 'Synchronizace není nakonfigurovaná.'
   const { error } = await sb.auth.signInWithPassword({ email, password })
-  return error ? czAuthError(error.message) : null
+  if (!error) return null
+  if (!/invalid login credentials/i.test(error.message)) return czAuthError(error.message)
+
+  const { data, error: signUpError } = await sb.auth.signUp({ email, password })
+  if (signUpError) {
+    if (/already registered/i.test(signUpError.message)) return 'Heslo nesedí.'
+    return czAuthError(signUpError.message)
+  }
+  if (!data.session) {
+    return 'V Supabase je zapnuté potvrzování e-mailu — vypni ho v Authentication → Sign In / Providers → Email.'
+  }
+  return null
 }
 
-
-/**
- * Přihlášení kódem z e-mailu — žádné heslo a hlavně BEZ ODCHODU Z APPKY.
- *
- * Registrace dosud znamenala: vymysli si heslo, najdi potvrzovací e-mail,
- * klikni na odkaz (a appka sama hlásila, že „stránka může hlásit chybu,
- * to nevadí"), vrať se a přihlas se. Čtyři kroky a jeden z nich je
- * omluva. Odkaz je navíc na iPhonu past: otevře se v Safari, ne v appce
- * na ploše, takže se člověk přihlásí jinam, než kde chtěl.
- *
- * Kód tohle celé ruší. `shouldCreateUser` je schválně zapnuté: mezi
- * „registrací" a „přihlášením" tu není rozdíl, který by kohokoli zajímal
- * — kdo dostane kód do svojí schránky, ten do appky patří.
- */
-export async function sendLoginCode(email: string): Promise<string | null> {
-  if (!sb) return 'Synchronizace není nakonfigurovaná.'
-  const { error } = await sb.auth.signInWithOtp({
-    email,
-    options: { shouldCreateUser: true },
-  })
-  return error ? czAuthError(error.message) : null
-}
-
-/** Ověří kód a přihlásí. Úspěch pozná zbytek appky přes onAuthStateChange. */
-export async function verifyLoginCode(email: string, code: string): Promise<string | null> {
-  if (!sb) return 'Synchronizace není nakonfigurovaná.'
-  const { error } = await sb.auth.verifyOtp({ email, token: code.trim(), type: 'email' })
-  return error ? czAuthError(error.message) : null
-}
 
 export async function signInWithGoogle(): Promise<void> {
   await sb?.auth.signInWithOAuth({
