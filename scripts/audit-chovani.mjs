@@ -256,6 +256,65 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 3b. panel ustoupí klávesnici ---
+//
+// Nejde o kosmetiku: s klávesnicí venku zbyla z detailu úkolu na displeji
+// jen hlavička „Úkol / Připnout" a pole, do kterého se zrovna psalo, bylo
+// schované pod klávesnicí. Příčina je jedna a měřitelná — panel se
+// renderuje portálem do <body>, tedy MIMO .app-shell, který se na
+// viditelný obdélník (`--vv-top`/`--vvh`) chytá sám; `fixed inset-0` ho
+// proto drželo na spodní hraně STRÁNKY, kam klávesnice nedosáhne.
+//
+// Klávesnice se v Chromiu nevyvolá, ale appka o ní ví jedině z
+// `visualViewport` — přepsat ho a poslat `resize` je tedy přesně ta
+// událost, kterou na telefonu dostane. Měří se geometrie, ne styl:
+// spodní hrana panelu musí sednout na hranici klávesnice.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}, hasTouch:true, isMobile:true})
+  const page = await ctx.newPage()
+  await page.addInitScript(() => {
+    const vv = window.visualViewport
+    window.__klavesnice = (px) => {
+      Object.defineProperty(vv, 'height', { value: window.innerHeight - px, configurable: true })
+      Object.defineProperty(vv, 'offsetTop', { value: 0, configurable: true })
+      vv.dispatchEvent(new Event('resize'))
+    }
+  })
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  await page.getByRole('button',{name:'Nový úkol'}).click(); await page.waitForTimeout(300)
+  await page.locator('input[placeholder]').first().fill('úkol pod klávesnicí')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(900)
+  await page.getByText('úkol pod klávesnicí').first().click(); await page.waitForTimeout(900)
+
+  const dole = () => page.evaluate(() => Math.round(document.querySelector('.sheet-panel').getBoundingClientRect().bottom))
+  const bezKlavesnice = await dole()
+  T_(Math.abs(bezKlavesnice - 844) <= 2, 'bez klávesnice panel sedí na spodní hraně (' + bezKlavesnice + ' z 844)')
+
+  const KLAVESNICE = 320
+  await page.evaluate((px) => window.__klavesnice(px), KLAVESNICE)
+  await page.waitForTimeout(400)
+  const sKlavesnici = await dole()
+  T_(
+    Math.abs(sKlavesnici - (844 - KLAVESNICE)) <= 2,
+    'panel ustoupí klávesnici (spodní hrana ' + sKlavesnici + ', čekáno ' + (844 - KLAVESNICE) + ')',
+  )
+
+  // A to hlavní: pole, do kterého se píše, musí být celé nad klávesnicí.
+  const poleVidet = await page.evaluate((px) => {
+    const el = document.querySelector('#pole-ukol')
+    if (!el) return null
+    el.scrollIntoView({ block: 'center' })
+    const r = el.getBoundingClientRect()
+    return { dole: Math.round(r.bottom), mez: window.innerHeight - px }
+  }, KLAVESNICE)
+  T_(
+    !!poleVidet && poleVidet.dole <= poleVidet.mez,
+    'pole úkolu zůstane nad klávesnicí (' + (poleVidet ? poleVidet.dole + ' ≤ ' + poleVidet.mez : 'pole se nenašlo') + ')',
+  )
+
+  await ctx.close()
+}
+
 // --- 4. mazání se nepotvrzuje, ale jde vrátit ---
 // Tohle je pojistka proti nejhoršímu možnému výsledku téhle změny: když
 // „Vrátit" nefunguje, appka bez ptaní maže data nenávratně.

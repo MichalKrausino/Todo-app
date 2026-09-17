@@ -6,7 +6,19 @@ import { createPortal } from 'react-dom'
 // Děti dostávají close(), aby i tlačítka zavírala s animací; Escape
 // funguje na Macu. Zavírání řídí třída .closing na backdropu (index.css).
 // Renderuje se portálem do <body>, aby push-back transform obsahu
-// (.app-shell v index.css) nerozbil fixed pozici panelu.
+// (.app-shell v index.css) nerozbil fixed pozici panelu. Cenou za ten
+// portál je, že panel stojí MIMO .app-shell, a tím i mimo obal, který se
+// sám drží viditelného obdélníku — proto `inset-x-0` a svislé rozměry
+// z `--vv-top`/`--vvh` v index.css, ne `inset-0`. S `inset-0` seděl panel
+// na spodní hraně STRÁNKY, tedy pod otevřenou klávesnicí: z detailu úkolu
+// zbyla na displeji jen hlavička a pole, do kterého se zrovna psalo, bylo
+// schované. Strop výšky je `--sheet-max` (App.tsx) — nad klávesnicí celá
+// výška, jinak 90 %, ať je za panelem vidět kus appky.
+//
+// Odsazení zdola bere `--dock-safe`, ne `env(safe-area-inset-bottom)`
+// přímo: nad klávesnicí žádná domovní lišta není a safe-area by z něj
+// udělala prázdný pruh mezi tlačítky a klávesnicí.
+
 // Zásobník otevřených panelů — Escape smí zavřít jen ten navrchu.
 // Bez něj by jedno stisknutí zavřelo i vyhledávání pod detailem úkolu.
 const stack: symbol[] = []
@@ -273,17 +285,17 @@ export function Sheet({
 
   return createPortal(
     <div
-      className={`sheet-backdrop fixed inset-0 z-50 flex items-end justify-center bg-ink/35 backdrop-blur-[2px] ${
+      className={`sheet-backdrop fixed inset-x-0 z-50 flex items-end justify-center bg-ink/35 backdrop-blur-[2px] ${
         closing ? 'closing' : otevreno ? 'open' : ''
       }`}
       onClick={close}
     >
       <div
         ref={panelRef}
-        className={`sheet-panel max-h-[90dvh] w-full max-w-lg overflow-y-auto overflow-x-hidden overscroll-none rounded-t-[28px] p-4 shadow-sheet ${
+        className={`sheet-panel max-h-[var(--sheet-max,90%)] w-full max-w-lg overflow-y-auto overflow-x-hidden overscroll-none rounded-t-[28px] p-4 shadow-sheet ${
           tone === 'paper' ? 'bg-paper' : 'bg-card'
         } ${className}`}
-        style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+        style={{ paddingBottom: 'calc(1.5rem + var(--dock-safe, env(safe-area-inset-bottom)))' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Pruh na tažení. Musí být dost velký na prst a nesmí rolovat —

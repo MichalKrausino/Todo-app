@@ -241,6 +241,27 @@ jen mimo pole a bez modifikátorů, s otevřeným panelem
 poznámky je na řádku úkolu cíl k ťuknutí (první odkaz, `TaskRow`) a v
 detailu čipy s doménou; tečka, čárka a závorka za adresou patří větě.
 
+**Panel stojí na VIDITELNÉM obdélníku, ne na stránce** (`.sheet-backdrop`
+v `index.css`). Panel se renderuje portálem do `<body>`, tedy mimo
+`.app-shell` — a ten se na `--vv-top`/`--vvh` chytá sám. `fixed inset-0`
+ho proto drželo na spodní hraně STRÁNKY, kam otevřená klávesnice
+nedosáhne: z detailu úkolu zbyla na displeji jen hlavička „Úkol ·
+Připnout" a pole, do kterého se zrovna psalo, leželo pod klávesnicí
+(změřeno: spodní hrana panelu 844 místo 524, pole na 597). Že jde
+opravdu o tohle, bylo vidět na témž snímku — appka pod panelem klávesnici
+uhnula (dok vyjel nad ni), panel jediný ne. **`bottom` se musí přebít na
+`auto`**: s `top` i `bottom` zároveň vyhraje dopočítaná výška nad
+`height` a panel se natáhne zpátky pod klávesnici. Strop výšky je
+`--sheet-max` (nastavuje `App.tsx` vedle `--dock-safe`): **90 % je záměr**,
+ať je za panelem vidět kus appky, ale nad klávesnicí by těch 90 % nebylo
+z obrazovky, nýbrž z toho, co po ní zbylo — tam patří celá výška.
+Odsazení zdola bere `--dock-safe`, ne `env(safe-area-inset-bottom)` přímo:
+nad klávesnicí domovní lišta není a safe-area by z něj udělala prázdný
+pruh. Hlídá to audit chování — klávesnice se v Chromiu nevyvolá, ale appka
+o ní ví jedině z `visualViewport`, takže se přepíše a pošle `resize`, což
+je přesně ta událost, kterou dostane na telefonu; měří se geometrie, ne
+styl. Ověřeno vrácenou vadou: s `inset-0` spadnou obě kontroly.
+
 **Panel se zavře stažením — za úchyt i za plochu** (`Sheet.tsx` +
 `.sheet-grip`). Úchyt zůstává tou viditelnou nabídkou („chyť mě tady")
 a jediným místem s `touch-action: none`; stáhnout jde ale i za obsah,
