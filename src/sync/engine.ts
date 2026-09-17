@@ -28,10 +28,18 @@ import {
   sharesFingerprint,
   type MyShare,
 } from './shareState'
+import { startRealtime, stopRealtime } from './realtime'
+import { claimInvites } from './shares'
 import { setSyncStatus } from './status'
 
 const PAGE_SIZE = 500
-const WRITE_DEBOUNCE_MS = 2500
+// Jak dlouho se čeká po zápisu, než se odešle. Sečkání slučuje dávku
+// (odškrtnutí sáhne i na klienta, triáž udělá deset změn za sebou), ale
+// je to zároveň ta polovina zpoždění, kterou kolega na druhé straně
+// opravdu vidí — s živými daty je druhá polovina skoro nulová. Proto
+// 1 s: dávka se pořád slučuje, ale odškrtnutí doletí dřív, než si toho
+// stihne kdokoli všimnout.
+const WRITE_DEBOUNCE_MS = 1000
 // Jak dlouho počkat, než se start sync vrstvy zkusí znovu (viz initSync).
 const START_RETRY_MS = 60_000
 
@@ -117,9 +125,15 @@ export async function initSync(): Promise<void> {
             if (error) console.warn('store_google_token:', error.message)
           })
       }
-      void syncNow()
+      // Čerstvě přihlášený kamarád má klienta vidět hned, ne za minutu.
+      void claimInvites(true).finally(() => void syncNow())
       void healPushSubscription()
+      // Živá data: událost ze serveru je jen ťuknutí, data pak přitečou
+      // obyčejným pullem (viz realtime.ts). Bez toho by odškrtnutí
+      // u kolegy bylo vidět až s dalším tikem plánovače, tedy za minutu.
+      startRealtime(sb!)
     } else {
+      stopRealtime(sb)
       setSyncStatus({ phase: 'signedOut', email: undefined })
     }
   })
@@ -244,6 +258,9 @@ async function ensureOwnerStamp(): Promise<void> {
 }
 
 async function ensureShareScope(): Promise<boolean> {
+  // Napřed pozvánky: co se právě proměnilo ve sdílení, se má promítnout
+  // do otisku hned, ne až za minutu.
+  await claimInvites()
   const shares = await fetchMyShares()
   // Nevíme, jak na tom sdílení je — nechat všechno být. Kdyby se selhání
   // bralo jako „nic nesdílím", vzal by výpadek sítě na pár vteřin za záminku
@@ -462,6 +479,9 @@ async function sweepVanished(): Promise<void> {
 
 const AUTH_ERRORS_CZ: Array<[RegExp, string]> = [
   [/invalid login credentials/i, 'Nesprávný e-mail nebo heslo.'],
+  [/token has expired|invalid.*(otp|token)|otp.*invalid/i, 'Kód nesedí, nebo už vypršel. Nech si poslat nový.'],
+  [/for security purposes|only request this after/i, 'Kód šel před chvílí — počkej minutu a zkus to znovu.'],
+  [/email.*rate.?limit|over_email_send/i, 'Odešlo moc e-mailů za sebou. Zkus to za chvíli.'],
   [/email not confirmed/i, 'E-mail ještě není potvrzený — klikni na odkaz v e-mailu.'],
   [/already registered/i, 'Účet s tímhle e-mailem už existuje — přihlas se.'],
   [/password should be at least/i, 'Heslo musí mít aspoň 6 znaků.'],
@@ -473,24 +493,46 @@ const AUTH_ERRORS_CZ: Array<[RegExp, string]> = [
 const czAuthError = (message: string): string =>
   AUTH_ERRORS_CZ.find(([re]) => re.test(message))?.[1] ?? message
 
-// Vrací česky přeloženou chybu, nebo null při úspěchu.
-export async function signInWithPassword(email: string, password: string): Promise<string | null> {
+/**
+ * Přihlásit, a když účet ještě není, rovnou ho založit.
+ *
+ * Appku používá hrstka lidí, co se znají. Rozdíl mezi „přihlásit se"
+ * a „vytvořit účet" je pro ně rozdíl bez obsahu: kdo sem přijde poprvé,
+ * nemá co přihlašovat, a kdo podruhé, nemá co zakládat — a přesto musel
+ * ze dvou tlačítek trefit to správné. Jedno tlačítko to rozhodnutí bere
+ * na sebe.
+ *
+ * Pořadí je schválně přihlášení první: kdyby se nejdřív zakládalo, každý
+ * návrat by začínal chybou „účet už existuje".
+ *
+ * Špatné heslo u existujícího účtu se nepozná z prvního pokusu (server
+ * úmyslně neprozrazuje, jestli e-mail existuje), pozná se až z druhého —
+ * `already registered` znamená „účet je, jen heslo nesedí". Bez téhle
+ * větve by se člověku s překlepem v hesle ukázalo „účet už existuje",
+ * což je pravda, která mu nijak nepomůže.
+ *
+ * Předpokladem je vypnuté potvrzování e-mailu v Supabase (Authentication
+ * → Sign In / Providers → Email → Confirm email). S ním by `signUp`
+ * nevrátil session a appka by čekala na odkaz, který se nikomu nechce
+ * hledat. Když je zapnuté, řekne se to nahlas místo tichého nic.
+ */
+export async function signIn(email: string, password: string): Promise<string | null> {
   if (!sb) return 'Synchronizace není nakonfigurovaná.'
   const { error } = await sb.auth.signInWithPassword({ email, password })
-  return error ? czAuthError(error.message) : null
+  if (!error) return null
+  if (!/invalid login credentials/i.test(error.message)) return czAuthError(error.message)
+
+  const { data, error: signUpError } = await sb.auth.signUp({ email, password })
+  if (signUpError) {
+    if (/already registered/i.test(signUpError.message)) return 'Heslo nesedí.'
+    return czAuthError(signUpError.message)
+  }
+  if (!data.session) {
+    return 'V Supabase je zapnuté potvrzování e-mailu — vypni ho v Authentication → Sign In / Providers → Email.'
+  }
+  return null
 }
 
-// Registrace e-mailem. needsConfirm = Supabase poslal potvrzovací e-mail
-// a přihlášení bude fungovat až po kliknutí na odkaz v něm.
-export async function signUpWithPassword(
-  email: string,
-  password: string,
-): Promise<{ error?: string; needsConfirm?: boolean }> {
-  if (!sb) return { error: 'Synchronizace není nakonfigurovaná.' }
-  const { data, error } = await sb.auth.signUp({ email, password })
-  if (error) return { error: czAuthError(error.message) }
-  return { needsConfirm: !data.session }
-}
 
 export async function signInWithGoogle(): Promise<void> {
   await sb?.auth.signInWithOAuth({

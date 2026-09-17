@@ -20,6 +20,7 @@ export function ClientSharing({ clientId }: { clientId: string }) {
   const [shares, setShares] = useState<ClientShare[]>([])
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string>()
+  const [info, setInfo] = useState<string>()
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -41,9 +42,15 @@ export function ClientSharing({ clientId }: { clientId: string }) {
     if (!value || busy) return
     setBusy(true)
     setError(undefined)
-    const err = await shareClient(clientId, value)
-    if (err) setError(err)
+    setInfo(undefined)
+    const vysledek = await shareClient(clientId, value)
+    if (!vysledek.ok) setError(vysledek.chyba)
     else {
+      // Pozvánka se musí říct nahlas: navenek se nic nestalo a bez téhle
+      // věty by to vypadalo, že sdílení nefunguje.
+      if (vysledek.pozvanka) {
+        setInfo(`${value} tu zatím účet nemá — sdílení se uplatní, jakmile se poprvé přihlásí.`)
+      }
       setEmail('')
       await refresh()
     }
@@ -79,7 +86,8 @@ export function ClientSharing({ clientId }: { clientId: string }) {
         {signedIn && shares.length === 0 && (
           <p className="px-4 py-2.5 text-sm text-ink-faint">
             Klient je jen tvůj. Přidej e-mail a uvidíte na jeho úkoly oba —
-            kromě těch, které v jejich detailu vyjmeš.
+            kromě těch, které v jejich detailu vyjmeš. Účet mít nemusí:
+            pozvánka počká na jeho první přihlášení.
           </p>
         )}
 
@@ -95,7 +103,11 @@ export function ClientSharing({ clientId }: { clientId: string }) {
             <div className="min-w-0 text-sm">
               <div className="truncate font-medium">{m.email}</div>
               <div className="text-xs text-ink-faint">
-                {m.email === status.email ? 'To jsi ty' : 'Vidí a upravuje úkoly klienta'}
+                {m.pending
+                  ? 'Pozvánka čeká na první přihlášení'
+                  : m.email === status.email
+                    ? 'To jsi ty'
+                    : 'Vidí a upravuje úkoly klienta'}
               </div>
             </div>
             <button
@@ -103,7 +115,7 @@ export function ClientSharing({ clientId }: { clientId: string }) {
               disabled={busy}
               className="shrink-0 text-sm font-medium text-danger disabled:opacity-40"
             >
-              {m.email === status.email ? 'Odejít' : 'Odebrat'}
+              {m.pending ? 'Zrušit' : m.email === status.email ? 'Odejít' : 'Odebrat'}
             </button>
           </div>
         ))}
@@ -131,6 +143,7 @@ export function ClientSharing({ clientId }: { clientId: string }) {
       </section>
 
       {error && <p className="mt-1.5 px-1 text-xs text-danger">{error}</p>}
+      {info && <p className="mt-1.5 px-1 text-xs text-ink-soft">{info}</p>}
     </section>
   )
 }
