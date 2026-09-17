@@ -258,6 +258,11 @@ export default function App() {
       st.setProperty('--vv-bottom', `${below}px`)
       // nad klávesnicí není domovní lišta, safe-area by byla prázdný pruh
       st.setProperty('--dock-safe', below > 0 ? '0px' : 'env(safe-area-inset-bottom)')
+      // Totéž o patro výš: 90 % je záměr, ať je za panelem vidět kus appky
+      // („tohle leží NAD ní"). Nad klávesnicí ale těch 90 % není z obrazovky,
+      // nýbrž z toho, co po ní zbylo — a z devíti desetin půlky displeje
+      // zbude na detail úkolu tak titulek. Tam patří celá výška.
+      st.setProperty('--sheet-max', below > 0 ? '100%' : '90%')
       if (window.scrollY !== 0) window.scrollTo(0, 0)
     }
     vv?.addEventListener('resize', apply)

@@ -918,8 +918,21 @@ body:has(.sheet-backdrop:not(.closing)) .app-shell {
   }
 }
 
+/* Panel patří na VIDITELNÝ obdélník, ne na stránku.
+   `fixed inset-0` se drží layout viewportu, a ten se otevřením klávesnice
+   nezmění — panel proto zůstal přilepený ke hraně POD klávesnicí a
+   z detailu úkolu byla vidět jen hlavička „Úkol / Připnout". Že jde
+   opravdu o tohle, bylo vidět na týchž snímcích: appka pod panelem
+   klávesnici uhnula (dok vyjel nad ni), panel jediný ne — `.app-shell` se
+   na `--vv-top`/`--vvh` chytá odjakživa, jenže panel se renderuje
+   portálem do <body>, tedy mimo něj, a nikdo tu výšku nedal jemu.
+   `bottom` se musí přebít na `auto`: s `top` i `bottom` zároveň by výška
+   vyhrála nad `height` a panel by se natáhl zpátky pod klávesnici. */
 .sheet-backdrop {
   animation: fade-in 0.25s ease-out both;
+  top: var(--vv-top, 0px);
+  bottom: auto;
+  height: var(--vvh, 100dvh);
 }
 
 .sheet-backdrop.closing {
