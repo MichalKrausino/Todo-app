@@ -315,6 +315,55 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 3c. přepsaný termín překoná naplánování ---
+//
+// Úkol nese dvě data (`dueDate` a `scheduledFor`) a „kdy to je" je
+// DŘÍVĚJŠÍ z nich. Naplánování si přitom ve většině případů nenastavuje
+// člověk — razítkuje ho přijatý ranní návrh nebo večerní uzávěrka — a
+// v detailu leží jeho slot na konci vodorovné řádky, tedy na úzkém
+// displeji za hranou. Kdo pak přepsal Termín na pozdější den, viděl
+// úkol pořád na Dnes a nemohl poznat proč: to, co ho tam drží, na
+// obrazovce nebylo. Změřeno na skutečných datech (termín ne 20. 9.,
+// naplánování pá 18. 9.).
+//
+// Celý kruh jde přes rozhraní, protože vada byla mezi dvěma uloženími:
+// naplánovat na dnešek → zavřít → přepsat termín na zítřek → úkol musí
+// z Dnes zmizet.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  await page.getByRole('button',{name:'Nový úkol'}).click(); await page.waitForTimeout(300)
+  await page.locator('input[placeholder]').first().fill('dnes úkol s plánem')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(900)
+
+  const vDnesku = () => page.locator('main').getByText('úkol s plánem').count()
+  T_(await vDnesku() > 0, 'úkol na dnešek je na Dnes vidět')
+
+  // 1. naplánovat na dnešek (to, co jinak udělá přijatý ranní návrh)
+  await page.getByText('úkol s plánem').first().click(); await page.waitForTimeout(800)
+  await page.getByRole('button',{name:'Naplánovat na jiný den'}).click(); await page.waitForTimeout(400)
+  await page.locator('.sheet-panel').getByRole('button',{name:'Dnes',exact:true}).click(); await page.waitForTimeout(300)
+  await page.getByRole('button',{name:'Uložit'}).click(); await page.waitForTimeout(900)
+
+  // 2. přepsat Termín na zítřek a naplánování nechat být
+  await page.getByText('úkol s plánem').first().click(); await page.waitForTimeout(800)
+  await page.locator('.sheet-panel button[aria-label^="Termín"]').first().click(); await page.waitForTimeout(400)
+  await page.locator('.sheet-panel').getByRole('button',{name:'Zítra',exact:true}).click(); await page.waitForTimeout(300)
+  await page.getByRole('button',{name:'Uložit'}).click(); await page.waitForTimeout(1000)
+
+  T_(await vDnesku() === 0, 'přepsaný termín odsune úkol z Dnes (naplánování ho nedrží)')
+
+  // A hlavně: úkol se nesmí ztratit. Vše ukazuje všechny otevřené úkoly
+  // po koších, takže je vidět, že jen odešel na jiný den. (V Plánu by to
+  // šlo taky, ale ten ukazuje agendu VYBRANÉHO dne, tedy dneška.)
+  await page.getByRole('button',{name:'Dnes',exact:true}).dblclick(); await page.waitForTimeout(700)
+  const veVsem = await page.locator('main').getByText('úkol s plánem').count()
+  T_(veVsem > 0, 'úkol se neztratil — jen odešel na jiný den')
+
+  await ctx.close()
+}
+
 // --- 4. mazání se nepotvrzuje, ale jde vrátit ---
 // Tohle je pojistka proti nejhoršímu možnému výsledku téhle změny: když
 // „Vrátit" nefunguje, appka bez ptaní maže data nenávratně.
