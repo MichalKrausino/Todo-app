@@ -652,10 +652,44 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   T_(await page.getByRole('button', { name: 'Kdo', exact: true }).count() === 0,
      'bez sdílení není ve Vše přepínač „Kdo"')
 
+  // Seznam je JEDEN, podle priority — ne šest košů po dnech. „Kdy to je"
+  // říká Plán a hledání; tady se odpovídá na „co je nejdůležitější".
+  // Přes `data-id`, ne přes přístupný název: „Priorita" i „Klient" se
+  // jmenují i sloty v detailu úkolu a v zadávání, takže by selektor
+  // chytal dvě různá tlačítka.
+  const prepinac = (id) => page.locator(`main [data-id="${id}"]`)
+  T_(await prepinac('priorita').count() === 1, 'přepínač ve Vše nabízí Prioritu')
+  // Počítá se HLAVIČKA, ne její text: prázdné jméno by textovou kontrolou
+  // prošlo a řádka by na obrazovce přesto stála.
+  const hlavicky = () => page.evaluate(() => document.querySelectorAll('main ul li.skupina-li').length)
+  T_(await hlavicky() === 0, 'seznam podle priority nemá hlavičky skupin (' + (await hlavicky()) + ')')
+  const kosove = await page.evaluate(() => {
+    const t = document.querySelector('main ul')?.innerText ?? ''
+    return ['dnes ·', 'zítra ·', 'tento týden ·', 'později ·', 'bez termínu ·'].filter((h) => t.includes(h))
+  })
+  T_(kosove.length === 0, 'ani se nevrátily časové koše (' + (kosove.join(', ') || 'žádné') + ')')
+  // Skupiny se ale nezrušily — po klientech je hlavička pořád nese.
+  await prepinac('klient').click(); await page.waitForTimeout(700)
+  const poKlientech = await hlavicky()
+  T_(poKlientech > 0, 'po klientech se hlavičky skupin vrátí (' + poKlientech + ')')
+  await prepinac('priorita').click(); await page.waitForTimeout(700)
+  T_(await hlavicky() === 0, 'zpátky podle priority je seznam zase bez hlaviček')
+
   // Přepnutí záložky nahlédnutí vždycky složí — v režimu se nesmí uvíznout.
   await page.getByRole('button',{name:'Plán',exact:true}).click(); await page.waitForTimeout(900)
   await zalozkaDnes.click(); await page.waitForTimeout(900)
   T_(await nadpis() === 'Dnes', 'přepnutí záložky nahlédnutí složí zpátky')
+
+  // A hlavně: gesto musí jít i ODJINUD. Kdo stojí na Plánu, nemá vědět,
+  // že musí nejdřív přijít na Dnes a teprve pak ťuknout dvakrát — ruka
+  // umí jedinou věc: dvakrát klepnout na tu ikonu.
+  await page.getByRole('button',{name:'Plán',exact:true}).click(); await page.waitForTimeout(900)
+  T_(await nadpis() === 'Plán', 'stojíme na Plánu')
+  await zalozkaDnes.dblclick(); await page.waitForTimeout(900)
+  T_(await nadpis() === 'Vše', 'dvojité ťuknutí z jiné záložky otevře Vše rovnou')
+  // Zpátky se jde týmž gestem — jedno ťuknutí na už vybrané Dnes nemění nic.
+  await zalozkaDnes.dblclick(); await page.waitForTimeout(900)
+  T_(await nadpis() === 'Dnes', 'a týmž gestem zpátky')
 
   // Dvě pomalá ťuknutí jsou dvě ťuknutí, ne gesto.
   await zalozkaDnes.click(); await page.waitForTimeout(600)

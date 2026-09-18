@@ -191,25 +191,21 @@ export default function App() {
           setAddOpen(false)
           if (el instanceof HTMLElement) el.blur()
           break
+        // Dvojí „1" dělá totéž co dvojité ťuknutí na záložku — jedno
+        // pravidlo pro prst i klávesnici (`src/lib/dvojklik.ts`). Proto
+        // jdou všechny tři zkratky jednou cestou: i „2" a „3" musí stisk
+        // zapsat, jinak by 1 → 2 → 1 vyšlo jako dvojité ťuknutí na Dnes.
         case 'dnes':
-          // Dvojí „1" dělá totéž co dvojité ťuknutí na záložku — jedno
-          // pravidlo pro prst i klávesnici (`src/lib/dvojklik.ts`).
-          if (e.repeat) break
-          if (tabRef.current !== 'today') {
-            klavesa.current = null
-            setTab('today')
-          } else {
-            const r = vyhodnotStisk(klavesa.current, 'today', performance.now())
-            klavesa.current = r.stav
-            if (r.dvojite) setVse((v) => !v)
-          }
-          break
         case 'plan':
-          setTab('upcoming')
+        case 'klienti': {
+          if (e.repeat) break
+          const cil: Tab = akce === 'dnes' ? 'today' : akce === 'plan' ? 'upcoming' : 'clients'
+          const r = vyhodnotStisk(klavesa.current, cil, performance.now())
+          klavesa.current = r.stav
+          if (tabRef.current !== cil) setTab(cil)
+          if (r.dvojite && cil === 'today') setVse((v) => !v)
           break
-        case 'klienti':
-          setTab('clients')
-          break
+        }
       }
     }
     window.addEventListener('keydown', onKey)

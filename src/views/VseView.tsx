@@ -24,7 +24,7 @@ import type { Task } from '../db/types'
 import { allClients, allProjects, completeTask, openTasks, reopenTask, sortTasks } from '../db/repo'
 import { todayISO } from '../lib/dates'
 import { plural } from '../lib/labels'
-import { vseSkupiny } from '../lib/vseSkupiny'
+import { jePropadly } from '../lib/vseUkoly'
 import { Chip } from '../components/Chip'
 import { TaskRow } from '../components/TaskRow'
 import { TriageSheet } from '../components/TriageSheet'
@@ -38,11 +38,11 @@ const stagger = (i: number) => ({ '--stagger': i }) as React.CSSProperties
 // tři sta řádků najednou je zeď a pomalý telefon to odnese.
 const DAVKA = 30
 
-// Řazení: po dnech (koše od propadlých po „bez termínu"), nebo po
-// klientech — jeden klient v kuse, míň přepínání kontextu.
+// Řazení: jeden seznam podle priority (výchozí — viz `lib/vseUkoly.ts`),
+// nebo po klientech — jeden klient v kuse, míň přepínání kontextu.
 // „kdo" se nabízí jen tomu, kdo něco sdílí — jinak by to byl přepínač
 // s jedinou skupinou („Já"), tedy tlačítko, které nic nedělá.
-type Razeni = 'termin' | 'klient' | 'kdo'
+type Razeni = 'priorita' | 'klient' | 'kdo'
 const RAZENI_KLIC = 'todo.vse.razeni'
 
 interface Skupina {
@@ -61,8 +61,10 @@ export function VseView({
 }) {
   const dnes = todayISO()
   const [razeni, setRazeni] = useState<Razeni>(() => {
+    // Cokoli jiného (i staré uložené 'termin') padá na prioritu — neznámá
+    // volba je výchozí stav, ne prázdná obrazovka.
     const ulozene = localStorage.getItem(RAZENI_KLIC)
-    return ulozene === 'klient' || ulozene === 'kdo' ? ulozene : 'termin'
+    return ulozene === 'klient' || ulozene === 'kdo' ? ulozene : 'priorita'
   })
   const zmenRazeni = (r: Razeni) => {
     localStorage.setItem(RAZENI_KLIC, r)
@@ -90,16 +92,13 @@ export function VseView({
   const sdilim = useSdilim()
   // Uložená volba přežije i zrušení sdílení — pak by zůstal přepínač
   // ve stavu, který se nemá kde přepnout zpátky.
-  const razeniPlatne: Razeni = razeni === 'kdo' && !sdilim ? 'termin' : razeni
+  const razeniPlatne: Razeni = razeni === 'kdo' && !sdilim ? 'priorita' : razeni
 
-  // Koše se počítaly dvakrát za překreslení — jednou kvůli propadlým
-  // a podruhé kvůli seznamu. Je to týž průchod všemi úkoly.
-  const kose = useMemo(() => vseSkupiny(open, dnes, sortTasks), [open, dnes])
   // Triáž posouvá termíny, takže do fronty patří jen MOJE propadlé:
   // přeložit kolegovi termín z mojí obrazovky je zásah do jeho práce.
   const propadle = useMemo(
-    () => mojeUkoly(kose.find((k) => k.id === 'poTerminu')?.ukoly ?? [], ja),
-    [kose, ja],
+    () => sortTasks(mojeUkoly(open.filter((t) => jePropadly(t, dnes)), ja)),
+    [open, dnes, ja],
   )
 
   const skupiny: Skupina[] = useMemo(
@@ -133,8 +132,10 @@ export function VseView({
               ukoly: sortTasks(ukoly),
             }))
         })()
-      : kose.map((k) => ({ klic: k.id, jmeno: k.jmeno, ukoly: k.ukoly })),
-    [razeniPlatne, open, kose, clientMap, ja, lide],
+      : // Jeden seznam odshora dolů. Skupina je tu jen obal, ze kterého se
+        // dál počítá strop a dobírání — hlavičku nedostane (níž).
+        [{ klic: 'vse', jmeno: '', ukoly: sortTasks(open) }],
+    [razeniPlatne, open, clientMap, ja, lide],
   )
 
   // Strop platí na CELÝ seznam, ne na každou skupinu zvlášť — jinak by
@@ -205,8 +206,8 @@ export function VseView({
             {/* AnimatedBackground (motion-primitives): pilulka mezi volbami plyne */}
             <AnimatedBackground value={razeniPlatne} onValueChange={(id) => zmenRazeni(id as Razeni)} className="rounded-full bg-card shadow-card">
               {[
-                <button key="termin" data-id="termin" className="h-8 rounded-full px-2.5 text-[12px] font-medium text-ink-soft data-[checked=true]:text-ink">
-                  Termín
+                <button key="priorita" data-id="priorita" className="h-8 rounded-full px-2.5 text-[12px] font-medium text-ink-soft data-[checked=true]:text-ink">
+                  Priorita
                 </button>,
                 <button key="klient" data-id="klient" className="h-8 rounded-full px-2.5 text-[12px] font-medium text-ink-soft data-[checked=true]:text-ink">
                   Klient
@@ -249,11 +250,10 @@ export function VseView({
             <ul className="divide-y divide-line">
               {viditelne.map((s) => (
                 <Fragment key={s.klic}>
-                  {/* Koš „po termínu" hlavičku nedostane: řádka triáže nad
-                      ním říká přesně totéž a byla by to dvakrát tatáž věta
-                      pod sebou, jen jednou červeně. Řádka triáže JE jeho
-                      hlavička — a navíc nabízí cestu ven. */}
-                  {!(razeniPlatne === 'termin' && s.klic === 'poTerminu') && (
+                  {/* Seznam podle priority je JEDEN, takže nadpis nemá co
+                      pojmenovat — hlavičku dostávají jen skupiny (klient,
+                      kdo). */}
+                  {razeniPlatne !== 'priorita' && (
                     <li className="skupina-li">
                       <span className="flex items-center gap-1.5 px-4 pb-1 pt-3 text-[12px] font-medium text-ink-soft first-letter:uppercase">
                         {razeniPlatne === 'klient' && (
