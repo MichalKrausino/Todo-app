@@ -716,8 +716,16 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
 // 1–3 → záložky, ⌘↩ → uložit detail. Zkratky nesmí sebrat písmena
 // z psaní ani zabrat s otevřeným panelem. A odkaz v poznámce (Canva,
 // Drive) musí jít otevřít z řádku i z detailu — bez opisování.
+//
+// Šířka je 900, ne 1100: od 1024 px se appka přepne do širokého
+// rozvržení (`src/lib/siroko.ts`) a tři zdejší kontroly by tím ztichly —
+// „Esc složí zadávání" počítá tlačítka „Nový úkol" (v bočním panelu je
+// jedno pořád), „⌘↩ zavře" čeká `.sheet-panel` (sloupec žádný nemá)
+// a „s otevřeným panelem zkratky mlčí" by platilo jen díky tomu, že
+// kurzor stojí v poli. Zkratky na šířce nezávisí, panely ano — proto se
+// měří tam, kde panely jsou, a široké rozvržení má vlastní oddíl 12.
 {
-  const ctx = await b.newContext({viewport:{width:1100,height:800}})
+  const ctx = await b.newContext({viewport:{width:900,height:800}})
   const page = await ctx.newPage()
   await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
   const aktivni = () => page.evaluate(() => {
@@ -907,6 +915,65 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
     )
     T_(o.pocet <= 1, kde + ' → značka se nemnoží (je jich ' + o.pocet + ')')
   }
+  await ctx.close()
+}
+
+// --- 12. široké rozvržení: appka na MacBooku ---
+// Na 1440 px stála appka dosud jako telefon uprostřed monitoru (změřeno:
+// 512px sloupec, 464 px prázdna po každé straně) a dok — palcová
+// navigace — visel nad ním. Od 1024 px (`src/lib/siroko.ts`) se proto
+// rozvržení mění: navigace do bočního panelu vlevo, detail úkolu do
+// sloupce vpravo, obsah doprostřed se stropem šířky.
+//
+// Čtyři věci, které se tu dají rozbít a pravítkem se nepoznají:
+//
+//   1. Dok a boční panel se musí VYSTŘÍDAT, ne doplnit — dvě navigace
+//      naráz jsou dvě odpovědi na „kde to jsem".
+//   2. Zadávání úkolu bydlelo výhradně v doku. Když se dok na široko
+//      přestal kreslit, nešlo na Macu založit úkol vůbec — nejtišší
+//      možná vada: obrazovka vypadá v pořádku a appka se nedá používat.
+//   3. Detail musí být sloupec VEDLE seznamu, ne panel přes něj. To je
+//      celý důvod, proč se na Macu kreslí jinak: odškrtávám a přepisuji
+//      termíny a přitom se dívám na další řádek.
+//   4. Přepnutí musí být živé. Okno na Macu se roztahuje pořád (appka
+//      běží přes Safari → Přidat do Docku), takže se šířka nečte jednou
+//      při startu; zúžením se musí vrátit dok.
+{
+  const ctx = await b.newContext({viewport:{width:1440,height:900}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(700)
+  const bocni = () => page.locator('nav[aria-label="Hlavní navigace"]').count()
+  const dok = () => page.locator('footer .dock').count()
+  T_(await bocni() === 1, 'na 1440 px je navigace v bočním panelu')
+  T_(await dok() === 0, 'na 1440 px se dok nekreslí (jedna navigace, ne dvě)')
+
+  // (2) zakládání úkolu: tlačítko v panelu otevře pole a úkol vznikne
+  await page.getByRole('button',{name:'Nový úkol'}).click(); await page.waitForTimeout(500)
+  await page.keyboard.type('sirokoprvni')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(800)
+  T_(await page.getByText('sirokoprvni').count() >= 1, '„Nový úkol" v bočním panelu opravdu založí úkol')
+
+  // (3) detail je sloupec vedle seznamu, ne panel přes něj
+  await page.getByText('sirokoprvni').first().click(); await page.waitForTimeout(700)
+  const sloupec = page.locator('aside[aria-label="Detail úkolu"]')
+  T_(await sloupec.count() === 1, 'detail úkolu se otevře jako sloupec vpravo')
+  T_(await page.locator('.sheet-panel').count() === 0, 'detail úkolu na široko není panel zdola')
+  const vedleSebe = await page.evaluate(() => {
+    const m = document.querySelector('main')?.getBoundingClientRect()
+    const a = document.querySelector('aside[aria-label="Detail úkolu"]')?.getBoundingClientRect()
+    if (!m || !a) return null
+    return { prekryv: Math.round(Math.min(m.right, a.right) - Math.max(m.left, a.left)), seznam: Math.round(m.width) }
+  })
+  T_(vedleSebe !== null && vedleSebe.prekryv <= 0 && vedleSebe.seznam > 300,
+     'seznam zůstane vidět vedle detailu (překryv ' + (vedleSebe?.prekryv ?? '?') + ' px, seznam ' + (vedleSebe?.seznam ?? '?') + ' px)')
+  await page.keyboard.press('Escape'); await page.waitForTimeout(500)
+  T_(await sloupec.count() === 0, 'Escape sloupec zavře')
+
+  // (4) zúžení okna vrátí dok — šířka se čte pořád, ne jen při startu
+  await page.setViewportSize({width:390,height:844}); await page.waitForTimeout(600)
+  T_(await bocni() === 0 && await dok() === 1, 'zúžením okna se vrátí dok a boční panel zmizí')
+  await page.setViewportSize({width:1440,height:900}); await page.waitForTimeout(600)
+  T_(await bocni() === 1 && await dok() === 0, 'roztažením zpět se vrátí boční panel')
   await ctx.close()
 }
 

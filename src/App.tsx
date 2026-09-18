@@ -24,6 +24,8 @@ import { UpcomingView } from './views/UpcomingView'
 import { ClientsView } from './views/ClientsView'
 import { WeeklyReviewSheet } from './components/WeeklyReviewSheet'
 import { vyhodnotStisk, type Stisk } from './lib/dvojklik'
+import { useSiroko } from './lib/siroko'
+import { BocniPanel, type BocniId } from './components/BocniPanel'
 
 type Tab = 'today' | 'upcoming' | 'clients'
 
@@ -112,6 +114,9 @@ export default function App() {
   // záložky ho vždycky složí zpátky, takže se v něm nedá uvíznout.
   const [vse, setVse] = useState(false)
   const [editing, setEditing] = useState<Task | null>(null)
+  // Na Macu appka není telefon uprostřed monitoru: navigace jde do
+  // sloupce vlevo a detail úkolu do sloupce vpravo (`src/lib/siroko.ts`).
+  const siroko = useSiroko()
   // Týdenní ohlédnutí bydlí v Plánu, ale sheet drží App: notifikace
   // otevře appku na Dnes, takže deep-link #review musí zabrat bez ohledu
   // na to, který pohled je zrovna vykreslený.
@@ -320,7 +325,65 @@ export default function App() {
     // průhlednost a filtry si komponenty hlídají samy (src/lib/motion.ts).
     <MotionConfig reducedMotion="user">
     <TooltipProvider>
-    <div className="app-shell fixed inset-x-0 mx-auto flex max-w-lg flex-col bg-paper text-ink antialiased">
+    <div
+      className={`app-shell fixed inset-x-0 flex bg-paper text-ink antialiased ${
+        siroko ? 'flex-row' : 'mx-auto max-w-lg flex-col'
+      }`}
+    >
+      {/* Na Macu je navigace vidět pořád a VEDLE obsahu, ne přes něj.
+          Dok zůstává telefonu — viz `components/BocniPanel.tsx`. */}
+      {siroko && (
+        <BocniPanel
+          value={vse ? 'vse' : (tab as BocniId)}
+          onVyber={(id) => {
+            if (id === 'vse') {
+              setTab('today')
+              setVse(true)
+            } else {
+              setTab(id as Tab)
+            }
+          }}
+          onNovy={() => {
+            setAddOpen(true)
+            requestAnimationFrame(() => mainRef.current?.querySelector('input')?.focus())
+          }}
+          polozky={[
+            { id: 'today', label: 'Dnes', icon: TABS[0].icon(tab === 'today' && !vse, false) },
+            { id: 'vse', label: 'Vše', icon: TABS[0].icon(vse, true) },
+            { id: 'upcoming', label: 'Plán', icon: TABS[1].icon(tab === 'upcoming', false) },
+            { id: 'clients', label: 'Klienti', icon: TABS[2].icon(tab === 'clients', false) },
+          ]}
+          patka={
+            <>
+              <button
+                aria-label="Hledat"
+                onClick={() => setSearchOpen(true)}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-ink-soft transition-[background-color,transform] duration-150 active:scale-90 active:bg-well"
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="6.5" />
+                  <path d="M15.8 15.8L20 20" />
+                </svg>
+              </button>
+              <SyncButton onOpen={() => setSyncOpen(true)} />
+            </>
+          }
+        />
+      )}
+      {/* Prostřední sloupec. Lišta i dok jsou vůči němu absolutní, takže
+          na široko nesmí sahat přes boční panel — proto vlastní obal
+          s `relative`, ne `.app-shell`.
+
+          `min-h-0` je tu nutnost, ne úklid: flexový prvek má
+          `min-height: auto`, takže se roztáhne na výšku svého obsahu.
+          Dokud bylo `main` přímo v `.app-shell`, nevadilo to — `main` má
+          `overflow-y: auto` a u prvku s vlastním rolováním se `auto`
+          vyhodnotí jako nula. Tenhle obal rolování nemá, takže se na
+          Plánu s reálnými daty natáhl na 992 px uvnitř 844px obalu
+          a dok (absolutní k němu, `bottom-0`) skončil 148 px pod
+          displejem — nešel ani stisknout. Změřeno auditem rozhraní,
+          který na kliknutí na Klienti vypršel. */}
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {/* Horní lišta ve stylu iOS: v klidu průhledná (velký titulek si
           svítí sám), po odscrollování se zamlží a obsah pod ni podjede —
           jinak by ikony seděly přímo na textu úkolů. Průchozí na dotyk,
@@ -344,6 +407,7 @@ export default function App() {
         >
           {vse ? 'Vše' : TABS.find((t) => t.id === tab)?.label}
         </span>
+        {!siroko && (
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -361,10 +425,27 @@ export default function App() {
             Hledat <Kbd>{modifikator} K</Kbd>
           </TooltipContent>
         </Tooltip>
+        )}
+        {!siroko && (
         <span className="pointer-events-auto">
           <SyncButton onOpen={() => setSyncOpen(true)} />
         </span>
+        )}
       </div>
+
+      {/* Zadávání na Macu: pás nad obsahem. Na telefonu se rozvíjí v doku,
+          protože tam je to jediné místo nad klávesnicí — tady dok není
+          a pole má celý sloupec. Bez toho by na Macu NEŠLO založit úkol:
+          `QuickAdd` je uvnitř doku, který se na široko nevykresluje. */}
+      {siroko && addOpen && (
+        <div className="shrink-0 border-b border-line bg-card px-4 py-3" style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }}>
+          <QuickAdd
+            onShowUpcoming={tab === 'upcoming' ? undefined : () => setTab('upcoming')}
+            defaultToToday={tab === 'today'}
+            autoFocus
+          />
+        </div>
+      )}
 
       <main
         ref={mainRef}
@@ -382,9 +463,13 @@ export default function App() {
         className="flex-1 overflow-y-auto overflow-x-hidden px-4"
         style={{
           paddingTop: 'calc(1rem + env(safe-area-inset-top))',
-          paddingBottom: 'calc(var(--dock-h, 9rem) + 0.75rem)',
+          paddingBottom: siroko ? '2rem' : 'calc(var(--dock-h, 9rem) + 0.75rem)',
         }}
       >
+        {/* Na Macu má sloupec obsahu strop a stojí uprostřed: řádek úkolu
+            přes celých 828 px se čte špatně (oko ztratí řádek mezi
+            zaškrtávátkem a názvem) a prázdno vpravo je lepší než text,
+            který se nedá sledovat. Na telefonu strop nic nedělá. */}
         {/* key vynutí novou instanci pohledu → BlurFade (magicui) ho vynoří
             z rozostření ze strany, kam se v doku šlo.
             Obal s overflow-x: clip: nájezd posouvá obsah o 14 px do strany
@@ -392,7 +477,7 @@ export default function App() {
             vodorovné rolování a obsah zůstal odrolovaný (levý okraj 2 pt,
             pravý 30 pt). Clip přesah nepustí do rolovací plochy; záporná
             marže drží řádky chipů s -mx-4 dál až na hraně obrazovky. */}
-        <div className="-mx-4 overflow-x-clip px-4">
+        <div className={`-mx-4 overflow-x-clip px-4 ${siroko ? 'mx-auto w-full max-w-[760px]' : ''}`}>
         <BlurFade
           key={vse ? `${tab}-vse` : tab}
           // Vše je vrstva POD Dneškem: vytahuje se zespoda ('up') a při
@@ -434,11 +519,14 @@ export default function App() {
           prosvítá rozmazaný. Obal je průchozí na dotyk, klikatelná je
           jen samotná deska — u okrajů tak jde dál scrollovat obsah. */}
       {/* Závoj pod dokem: seznam se pod sklem nezařízne, ale rozpustí. */}
+      {!siroko && (
       <ProgressiveBlur
         direction="bottom"
         className="absolute inset-x-0 bottom-0 z-20 bg-linear-to-t from-paper/80 to-transparent"
         style={{ height: 'calc(var(--dock-h, 9rem) + 1.25rem)' }}
       />
+      )}
+      {!siroko && (
       <footer
         ref={dockRef}
         className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-3"
@@ -561,6 +649,8 @@ export default function App() {
           </ClickSpark>
         </motion.div>
       </footer>
+      )}
+      </div>
 
       {searchOpen && (
         <SearchSheet

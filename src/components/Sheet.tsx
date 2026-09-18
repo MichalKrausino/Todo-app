@@ -27,6 +27,32 @@ const stack: symbol[] = []
 // panel — klávesy tam patří jemu.
 export const jeOtevrenyPanel = () => stack.length > 0
 
+/**
+ * Přihlásí do téhož zásobníku něco, co panel není — na Macu sloupec
+ * s detailem úkolu (`DetailObal`).
+ *
+ * Bez toho se appka o Escape PERE: zkratky v `App.tsx` ho při otevřeném
+ * zadávání berou jako „zavři zadávání" a sloupec ho bere jako „zavři
+ * sloupec", oba posluchače visí na `window` a vyhrává ten, který se
+ * navěsil dřív. Změřeno: se zadáváním otevřeným pod detailem první
+ * Escape sloupec nezavřel (zavřel zadávání), druhý ano — tedy klávesa,
+ * která podle toho, co je zrovna otevřené, dělá něco jiného.
+ *
+ * Pravidlo je jedno pro panely i pro sloupec: **Escape patří tomu, co je
+ * navrchu**, a zkratky appky mlčí, dokud tam něco je.
+ */
+export function pripojNadPanel(): { navrchu: () => boolean; odpojit: () => void } {
+  const me = Symbol('sloupec')
+  stack.push(me)
+  return {
+    navrchu: () => stack[stack.length - 1] === me,
+    odpojit: () => {
+      const i = stack.indexOf(me)
+      if (i !== -1) stack.splice(i, 1)
+    },
+  }
+}
+
 // Stažení panelu dolů ho zavře — na iPhonu to člověk zkusí jako první.
 //
 // POSTAVENO PODLE OVĚŘENÉHO VZORU (vaul, drawer od Emila Kowalského),
