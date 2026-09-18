@@ -1,4 +1,4 @@
-// Dvojité ťuknutí na už vybranou záložku. Test existuje přesně z důvodu,
+// Dvojité ťuknutí na záložku. Test existuje přesně z důvodu,
 // který si soubor sám napsal do hlavičky: totéž pravidlo platí pro prst
 // (pointerup v doku) i pro klávesnici (dvakrát „1" na Macu), a bez testu
 // by se ty dvě cesty rozešly.
@@ -38,7 +38,9 @@ describe('dvojité ťuknutí', () => {
   })
 
   it('jiná záložka mezitím dvojité ťuknutí zruší', () => {
-    // Rychlé Klienti → Dnes → Dnes nesmí otevřít nic, co nikdo nechtěl.
+    // Klienti → Dnes → Dnes: první ťuknutí na Dnes jen přepne (odjinud
+    // přijít musí), druhé je teprve gesto. Kdyby počítadlo přepnutí
+    // nulovalo, muselo by se po příchodu na Dnes ťukat ještě dvakrát.
     let stav: Stisk | null = null
     for (const id of ['klienti', 'dnes']) {
       const r = vyhodnotStisk(stav, id, 1000)

@@ -1,13 +1,19 @@
-// Dvojité ťuknutí na už vybranou záložku doku.
+// Dvojité ťuknutí na záložku doku.
 //
 // Čistá logika schválně: stejné pravidlo musí platit pro prst (pointerup
 // v doku) i pro klávesnici (dvakrát „1" na Macu), a bez testu by se ty dvě
 // cesty rozešly. Okno 320 ms je práh dvojitého ťuknutí v iOS — kratší se
 // netrefí, delší začne spojovat dvě samostatná ťuknutí.
 //
-// Dvojité se počítá JEN na záložce, která už byla vybraná. Kdyby stačila
-// dvě ťuknutí po sobě, rychlé přepnutí Klienti → Dnes → Dnes by omylem
-// otevřelo něco, co člověk nechtěl.
+// Počítá se DVOJÍ ŤUKNUTÍ NA TUTÉŽ ZÁLOŽKU, ať už byla vybraná, nebo ne.
+// Dřív se gesto počítalo jen na už vybrané záložce — z Plánu se tedy
+// muselo ťuknout na Dnes, počkat, a teprve pak ťuknout dvakrát. To po
+// člověku chce, aby věděl, kde zrovna stojí, přitom ruka umí jedinou věc:
+// „chci všechny úkoly" = dvakrát klepnout na tu ikonu. První ťuknutí
+// přepne, druhé rozbalí, a mezi nimi není nic k zapamatování.
+//
+// Přepnutí na JINOU záložku počítadlo nuluje samo (`prev.id !== id`),
+// takže rychlé Dnes → Plán → Dnes žádné gesto nespustí.
 
 export const DVOJKLIK_MS = 320
 

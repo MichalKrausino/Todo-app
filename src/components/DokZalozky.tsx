@@ -112,7 +112,7 @@ export function DokZalozky({
 }: {
   value: string
   onChange: (id: string) => void
-  // Dvojité ťuknutí na UŽ vybranou záložku — viz `src/lib/dvojklik.ts`.
+  // Dvojité ťuknutí na tutéž záložku — viz `src/lib/dvojklik.ts`.
   onReselect?: (id: string) => void
   // Poloha vybrané záložky (Dnes ⇄ Vše). Když se změní, aniž by se
   // změnila záložka, čočka to řekne pulzem — jinak by se obrazovka
@@ -361,19 +361,19 @@ export function DokZalozky({
     konecTahu()
     const id = nejblizsi(e.clientX)
     if (!id) return
+    // Gesto se vyhodnocuje VŽDY, i při přepnutí z jiné záložky: dvojí
+    // ťuknutí na tutéž ikonu je jedno gesto, ať člověk stál kdekoli.
+    // Přepnutí jinam počítadlo nuluje samo — `prev.id` se nerovná `id`.
+    const r = vyhodnotStisk(stisky.current, id, performance.now())
+    stisky.current = r.stav
     if (id === value) {
       // Zůstává, kde je: čočka jen dosedne zpátky na ikonu.
       if (let_.current) let_.current.od = performance.now()
       naSvou()
-      // Druhé ťuknutí na tutéž vybranou záložku je vlastní gesto.
-      const r = vyhodnotStisk(stisky.current, id, performance.now())
-      stisky.current = r.stav
-      if (r.dvojite) onReselect?.(id)
     } else {
-      // Přepnutí počítadlo nuluje: rychlé Klienti → Dnes → Dnes není dvojité.
-      stisky.current = null
       onChange(id)
     }
+    if (r.dvojite) onReselect?.(id)
   }
   const zrusit = () => {
     konecTahu()

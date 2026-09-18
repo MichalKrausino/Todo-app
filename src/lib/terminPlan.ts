@@ -4,7 +4,7 @@
 //
 // Úkol umí nést dvě data: `dueDate` (Termín — kdy to má být hotové) a
 // `scheduledFor` (naplánování — kdy to udělám). „Kdy to je" se pak počítá
-// jako DŘÍVĚJŠÍ z obou (`denUkolu` ve vseSkupiny.ts), a to je jedno
+// jako DŘÍVĚJŠÍ z obou (`denUkolu` ve vseUkoly.ts), a to je jedno
 // pravidlo pro celou appku.
 //
 // Jenže naplánování si ve většině případů nenastavuje člověk — razítkuje
