@@ -140,13 +140,22 @@ describe('výběr návrhů', () => {
   })
 })
 
-const plan = (date: string, suggestions: Array<[string, string]>): Rec => ({
+const plan = (date: string, suggestions: Array<[string, string]>, seenAt?: string): Rec => ({
   id: `p-${date}`,
   date,
   suggestions: suggestions.map(([taskId, decision]) => ({ taskId, decision, reason: '' })),
+  ...(seenAt ? { seenAt } : {}),
 })
 
-const rozhodnuti = (date: string, taskId: string, decision: string): Rozhodnuti => ({ date, taskId, decision })
+// `videno` je ve výchozím stavu true: rozhodnutí v testu je vědomé,
+// pokud test neříká opak. Ráno, které člověk neviděl, se zapisuje
+// výslovně (`false`) — je to výjimka, ne norma.
+const rozhodnuti = (date: string, taskId: string, decision: string, videno = true): Rozhodnuti => ({
+  date,
+  taskId,
+  decision,
+  videno,
+})
 
 describe('paměť návrhu — historie z plánů', () => {
   it('bere jen posledních 14 dní a ne dnešek', () => {
@@ -171,10 +180,52 @@ describe('paměť návrhu — historie z plánů', () => {
       TODAY,
     )
     expect(h).toEqual([
-      { date: '2026-08-30', taskId: 'a', decision: 'ignored', until: undefined },
-      { date: '2026-08-30', taskId: 'b', decision: 'snoozed', until: '2026-09-02' },
-      { date: '2026-08-30', taskId: 'c', decision: 'snoozed', until: undefined },
+      { date: '2026-08-30', taskId: 'a', decision: 'ignored', until: undefined, videno: true },
+      { date: '2026-08-30', taskId: 'b', decision: 'snoozed', until: '2026-09-02', videno: true },
+      { date: '2026-08-30', taskId: 'c', decision: 'snoozed', until: undefined, videno: true },
     ])
+  })
+})
+
+describe('paměť návrhu — viděl to vůbec někdo', () => {
+  // Měřeno na 44 ránech skutečného provozu: 21 z nich nedostalo ani
+  // jednu odpověď a leželo v nich 85 % všech ignorovaných. Appka se
+  // učila z toho, že byla zavřená.
+  it('ráno bez jediné odpovědi a bez razítka se bere jako neviděné', () => {
+    const h = historieZPlanu([plan('2026-08-30', [['a', 'ignored'], ['b', 'ignored']])], TODAY)
+    expect(h.every((x) => x.videno)).toBe(false)
+  })
+
+  it('razítko z otevřeného panelu udělá ráno viděným, i když nikdo neodpověděl', () => {
+    const h = historieZPlanu(
+      [plan('2026-08-30', [['a', 'ignored']], '2026-08-30T06:12:00.000Z')],
+      TODAY,
+    )
+    expect(h[0]).toMatchObject({ taskId: 'a', decision: 'ignored', videno: true })
+  })
+
+  it('odpověď na JINÝ úkol prozradí otevřený panel i u starých plánů bez razítka', () => {
+    const h = historieZPlanu([plan('2026-08-30', [['a', 'ignored'], ['b', 'accepted']])], TODAY)
+    expect(h.map((x) => [x.taskId, x.videno])).toEqual([['a', true], ['b', true]])
+  })
+
+  it('neviděné ignorování úkol netrestá — ani když jich je přes strop', () => {
+    const neviděno = Array.from({ length: IGNOROVANI_STROP + 2 }, (_, i) =>
+      rozhodnuti(`2026-08-${String(20 + i).padStart(2, '0')}`, 'a', 'ignored', false),
+    )
+    expect(pametUkolu('a', neviděno, TODAY).delta).toBe(0)
+  })
+
+  it('a viděné ignorování trestá dál — jinak by se appka neučila vůbec', () => {
+    const videno = Array.from({ length: 2 }, (_, i) =>
+      rozhodnuti(`2026-08-${String(20 + i).padStart(2, '0')}`, 'a', 'ignored'),
+    )
+    expect(pametUkolu('a', videno, TODAY).delta).toBeCloseTo(-2 * ZTRATA_ZA_IGNOROVANI)
+  })
+
+  it('odmítnutí platí bez ohledu na razítko — je to vědomá odpověď', () => {
+    const p = pametUkolu('a', [rozhodnuti('2026-08-30', 'a', 'rejected', false)], TODAY)
+    expect(p.delta).toBeCloseTo(-ZTRATA_ZA_ODMITNUTI)
   })
 })
 

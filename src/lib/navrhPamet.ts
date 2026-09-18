@@ -77,6 +77,12 @@ export function kdySeVrati(
   dnes = todayISO(),
 ): string | undefined {
   const bezDnesniho = histZitra.filter((h) => !(h.date === dnes && h.taskId === taskId))
-  const p = pametUkolu(taskId, [...bezDnesniho, { date: dnes, taskId, decision, until }], posun(dnes, 1))
+  // `videno: true` je tu fakt, ne odhad: odpovídat jde jedině z otevřeného
+  // panelu návrhu, takže tenhle řádek vzniká přímo pod rukama člověka.
+  const p = pametUkolu(
+    taskId,
+    [...bezDnesniho, { date: dnes, taskId, decision, until, videno: true }],
+    posun(dnes, 1),
+  )
   return p.pauza ? p.pauzaDo : undefined
 }

@@ -171,4 +171,13 @@ export interface DayPlanSuggestion {
 export interface DayPlan extends BaseRecord {
   date: string // YYYY-MM-DD
   suggestions: DayPlanSuggestion[]
+  /**
+   * Kdy se panel s návrhem otevřel — tedy kdy ty úkoly někdo doopravdy
+   * viděl. Bez toho razítka nejde `ignored` („bez odpovědi") odlišit od
+   * rána, kdy člověk appku vůbec neotevřel, a učení z něj je učení
+   * z vlastního ticha (pravidlo `videno` v pick.ts, změřeno na 44
+   * ránech: 85 % ignorovaných pocházelo z rán bez jediné odpovědi).
+   * Razítkuje se jednou, při prvním otevření.
+   */
+  seenAt?: string
 }

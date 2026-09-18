@@ -988,6 +988,69 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 13. ranní návrh: razítko „viděl jsem to" ---
+// Appka se učí z toho, co s návrhem uděláš — a „bez odpovědi" počítala
+// i za rána, kdy ji člověk vůbec neotevřel. Změřeno na 44 ránech
+// skutečného provozu: 21 z nich nedostalo ani jednu odpověď a leželo
+// v nich 58 z 68 ignorovaných, tedy 85 % všeho, z čeho se appka učila.
+// Úkol nabídnutý čtyřikrát během dovolené spadl na strop ztráty
+// a vypadl z nabídky, aniž by ho člověk jedinkrát viděl.
+//
+// Razítko `seenAt` je jediné místo, kde se to rozhoduje, a **selže
+// tiše**: appka vypadá stejně, jen se přestane učit. Unit test ho
+// nechytí, protože vzniká až otevřením panelu. Proto se sem klika.
+//
+// Tři věci, které se dají rozbít: razítko nevznikne vůbec; vznikne už
+// z chipu na Dnes (ten ale ukáže POČET, ne jména — po něm se nedá nic
+// „nechat být"); nebo se přepíše při každém otevření, a tím pošle celý
+// plán znovu na server při každém nahlédnutí.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  await page.evaluate(async () => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    const t = new Date().toISOString()
+    const dnes = new Date().toISOString().slice(0, 10)
+    const put = (store, rows) => new Promise((res) => {
+      const tx = db.transaction(store, 'readwrite')
+      rows.forEach((r) => tx.objectStore(store).put(r))
+      tx.oncomplete = res
+    })
+    await put('tasks', [
+      { id:'nt1', createdAt:t, updatedAt:t, title:'Navržený úkol', priority:'normal', status:'inbox', order:0 },
+    ])
+    await put('dayPlans', [
+      { id:'np1', createdAt:t, updatedAt:t, date:dnes,
+        suggestions:[{ taskId:'nt1', reason:'leží v inboxu', decision:'ignored' }] },
+    ])
+  })
+  await page.reload({ waitUntil:'networkidle' }); await page.waitForTimeout(800)
+  const plan = () => page.evaluate(async () => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    return new Promise((res) => {
+      const r = db.transaction('dayPlans', 'readonly').objectStore('dayPlans').get('np1')
+      r.onsuccess = () => res({ seenAt: r.result?.seenAt ?? null, updatedAt: r.result?.updatedAt ?? null })
+    })
+  })
+  const chip = page.getByRole('button', { name: /Návrh · 1/ })
+  T_(await chip.count() === 1, 'návrh se na Dnes ukáže jako chip s počtem')
+  T_((await plan()).seenAt === null, 'chip sám o sobě razítko nedává — ukazuje počet, ne jména')
+
+  await chip.click(); await page.waitForTimeout(700)
+  const poPrvnim = await plan()
+  T_(poPrvnim.seenAt !== null, 'otevřený panel návrhu zapíše razítko „viděl jsem to"')
+
+  await page.keyboard.press('Escape'); await page.waitForTimeout(500)
+  await chip.click(); await page.waitForTimeout(700)
+  const poDruhem = await plan()
+  T_(poDruhem.seenAt === poPrvnim.seenAt && poDruhem.updatedAt === poPrvnim.updatedAt,
+     'druhé otevření razítko nepřepisuje (jinak by každé nahlédnutí poslalo plán znovu na server)')
+  await ctx.close()
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)
