@@ -445,6 +445,25 @@ export const calendarEventsBetween = (from: string, to: string) =>
 export const getDayPlan = (date: string) =>
   db.dayPlans.filter((p) => !p.deletedAt && p.date === date).first()
 
+/**
+ * Razítko „tenhle návrh jsem viděl" — zapisuje se při otevření panelu.
+ *
+ * Bez něj appka nepozná ráno, kdy člověk návrh přečetl a nechal ho být,
+ * od rána, kdy appku vůbec neotevřel; obojí vypadá jako `ignored` a obojí
+ * se učilo stejně (viz `videno` v pick.ts). Chip „Návrh · 3" na Dnes se
+ * za vidění schválně nepočítá — neřekne jediné jméno úkolu.
+ *
+ * **Píše se jen jednou.** Druhé otevření už nic nemění: jinak by každé
+ * nahlédnutí do panelu posunulo `updatedAt`, a tím poslalo celý plán
+ * znovu na server — zápis, ze kterého by nikdo nic neměl.
+ */
+export async function oznacNavrhVidenym(planId: string): Promise<void> {
+  const plan = await db.dayPlans.get(planId)
+  if (!plan || plan.seenAt) return
+  await db.dayPlans.update(planId, { seenAt: now(), updatedAt: now() })
+  emitRepoWrite()
+}
+
 // Reakce na návrh (přijmout/zamítnout) — synchronizuje se zpět na server,
 // aby se z rozhodnutí dalo později učit (Fáze 5).
 export async function decideDayPlanSuggestion(

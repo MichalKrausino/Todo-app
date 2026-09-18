@@ -19,9 +19,9 @@
 // tam nejdřív za tři dny — dvakrát „ne" chce aspoň pár dní klidu) a
 // ukládá ho k rozhodnutí, server ho jen ctí.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Client, Task } from '../db/types'
-import { decideDayPlanSuggestion, probudUkol, updateTask } from '../db/repo'
+import { decideDayPlanSuggestion, oznacNavrhVidenym, probudUkol, updateTask } from '../db/repo'
 import { deleteBlockForTask, scheduleBlockForTask } from '../sync/calendar'
 import { addDays, formatDayLabel, formatKdy, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { plural } from '../lib/labels'
@@ -73,6 +73,13 @@ export function NavrhSheet({
   odpocivajici: Odpocivajici[]
   onClose: () => void
 }) {
+  // Otevřený panel je ten okamžik, kdy člověk návrh VIDÍ — a jen z toho
+  // se pak smí vyvozovat „viděl a nechal být" (viz `videno` v pick.ts).
+  // Razítkuje se tady, ne u chipu na Dnes: chip ukáže počet, ne jména.
+  useEffect(() => {
+    void oznacNavrhVidenym(planId)
+  }, [planId])
+
   const [fronta] = useState(() => [...navrhy])
   const [hotovo, setHotovo] = useState<Krok[]>([])
   const [probuzene, setProbuzene] = useState<Set<string>>(new Set())

@@ -230,7 +230,8 @@ export function pickSuggestions(candidates: Scored[]): Scored[] {
 //     k rozhodnutí jako `until` — server ho jen ctí).
 //  3. Co necháš bez odpovědi, ustoupí jiným: každé ignorované nabídnutí
 //     ubere kousek skóre, takže se v inboxu vystřídají i další úkoly
-//     místo věčně stejné trojice nahoře.
+//     místo věčně stejné trojice nahoře. ALE JEN Z RÁNA, KTERÉ JSI
+//     OPRAVDU VIDĚL — viz `videno` níž.
 //  4. Paměť je krátká (14 dní): starší rozhodnutí se zapomenou.
 // Přijetí nic neupravuje: přijatý úkol dostane datum a dál se řídí jím.
 // Server i appka počítají TOUŽ funkcí (src/lib/navrhPamet.ts ji dováží),
@@ -242,6 +243,23 @@ export interface Rozhodnuti {
   decision: string
   /** den návratu zvolený při odpovědi (volnější den); bez něj +PAUZA_DNI */
   until?: string
+  /**
+   * Věděl o tom návrhu vůbec někdo? Jen tehdy je „bez odpovědi" odpověď.
+   *
+   * PROČ TO TU JE: `ignored` neznamenalo „viděl jsem a nechal být", ale
+   * „nikdo se k tomu nevyjádřil" — a to je taky ráno, kdy člověk appku
+   * vůbec neotevřel. Změřeno na 44 ránech skutečného provozu: 21 z nich
+   * (48 %) nedostalo ANI JEDNU odpověď a leželo v nich 58 z 68
+   * ignorovaných, tedy **85 % všeho, z čeho se appka učila, byl její
+   * vlastní neviděný návrh**. Úkol nabídnutý čtyřikrát během dovolené
+   * spadl na strop ztráty (−1,2) a vypadl z nabídky, aniž by ho člověk
+   * jedinkrát viděl. Appka se učila z vlastního ticha.
+   *
+   * Je to totéž pravidlo jako u zjišťování sdílení: **selhaný dotaz
+   * znamená „nevím", ne „nic"** — když appka neví, nesmí se chovat, jako
+   * by věděla.
+   */
+  videno: boolean
 }
 
 /** Jak daleko do minulosti se rozhodnutí počítají. */
@@ -266,6 +284,28 @@ export const DUVOD_NAVRATU = 'odložené se vrací — dnes je na to místo'
 
 const jeISODen = (s: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(s)
 
+/**
+ * Viděl člověk ten návrh? Dvě svědectví, obě ze samotného plánu:
+ *
+ *   1. `seenAt` — razítko, které appka zapíše ve chvíli, kdy se panel
+ *      s návrhem OTEVŘE (`oznacNavrhVidenym` v repo.ts). Chip „Návrh · 3"
+ *      na Dnes nestačí: neřekne jediné jméno úkolu, takže po něm nemůžeš
+ *      nic „nechat být".
+ *   2. Jakákoli odpověď v tom dni. Odpovídat jde jedině z otevřeného
+ *      panelu, takže odpověď je důkaz, že byl otevřený — a plány
+ *      z doby před razítkem (celá dosavadní historie) jinak nemají jak
+ *      se přiznat.
+ *
+ * Ráno, o kterém appka neví ani jedno, se nepočítá vůbec. Chyba padá
+ * úmyslně na stranu „radši se nepoučím": ráno, kdy člověk panel otevřel
+ * a všechny tři úkoly nechal být, vypadá u starých plánů stejně jako
+ * ráno bez otevření. Podcenit ticho znamená nabídnout úkol znovu;
+ * přecenit ho znamená ztratit úkol, který nikdo neviděl.
+ */
+const planVideno = (p: Rec, suggestions: Rec[]): boolean =>
+  (typeof p.seenAt === 'string' && p.seenAt !== '') ||
+  suggestions.some((s) => s && typeof s.decision === 'string' && s.decision !== 'ignored')
+
 /** Rozhodnutí z uložených plánů za posledních HISTORIE_DNI dní před `today` (ten den se nepočítá). */
 export function historieZPlanu(plans: Rec[], today: string): Rozhodnuti[] {
   const od = addDaysISO(today, -HISTORIE_DNI)
@@ -274,10 +314,11 @@ export function historieZPlanu(plans: Rec[], today: string): Rozhodnuti[] {
     const date = String(p.date ?? '')
     if (!jeISODen(date) || date < od || date >= today) continue
     const suggestions = Array.isArray(p.suggestions) ? (p.suggestions as Rec[]) : []
+    const videno = planVideno(p, suggestions)
     for (const s of suggestions) {
       if (!s || typeof s.taskId !== 'string') continue
       const until = typeof s.until === 'string' && jeISODen(s.until) ? s.until : undefined
-      out.push({ date, taskId: s.taskId, decision: String(s.decision ?? 'ignored'), until })
+      out.push({ date, taskId: s.taskId, decision: String(s.decision ?? 'ignored'), until, videno })
     }
   }
   return out
@@ -309,7 +350,9 @@ export function pametUkolu(taskId: string, hist: Rozhodnuti[], today: string): P
     if (h.taskId !== taskId) continue
     if (h.decision === 'rejected') odmitnuti.push(h)
     else if (h.decision === 'snoozed') prodluz(navratPo(h))
-    else if (h.decision === 'ignored') ignorovani++
+    // „Bez odpovědi" se počítá jen z rána, které člověk viděl — jinak
+    // by se appka učila z toho, že byla zavřená (viz `videno`).
+    else if (h.decision === 'ignored' && h.videno) ignorovani++
   }
   if (odmitnuti.length >= ODMITNUTI_PAUZA) {
     prodluz(navratPo(odmitnuti.reduce((a, b) => (a.date > b.date ? a : b))))

@@ -24,7 +24,7 @@ import {
   togglePinned,
   updateTask,
 } from '../db/repo'
-import { Sheet } from './Sheet'
+import { DetailObal } from './DetailObal'
 import { TodoistTalk } from './TodoistTalk'
 import { AutoTextarea, VyberDne, velkePismeno } from './VyberDne'
 import { Button } from './ui/Button'
@@ -275,7 +275,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   }
 
   return (
-    <Sheet onClose={onClose} className="space-y-4">
+    <DetailObal onClose={onClose}>
       {(close) => {
         closeRef.current = close
         saveRef.current = () => void save(closeRef.current)
@@ -865,6 +865,6 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
         </>
         )
       }}
-    </Sheet>
+    </DetailObal>
   )
 }
