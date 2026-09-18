@@ -30,6 +30,7 @@ import { AutoTextarea, VyberDne, velkePismeno } from './VyberDne'
 import { Button } from './ui/Button'
 import { SlotChip, pill } from './SlotChip'
 import { najdiOdkazy } from '../lib/links'
+import { planPoZmeneTerminu } from '../lib/terminPlan'
 import { nabidniVraceni, ukazToast } from '../lib/toast'
 import { TaskSharing } from './TaskSharing'
 import { jeMuj, kdoMa, kratkaJmena } from '../lib/tymUkoly'
@@ -184,7 +185,16 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
 
   const save = async (close: () => void) => {
     if (!title.trim()) return
-    const hasDate = Boolean(dueDate || scheduledFor)
+    // Přepsaný Termín překoná naplánování, se kterým člověk nehnul — jinak
+    // by ho drželo na starém dni a v appce by se po změně termínu
+    // nezměnilo nic (viz src/lib/terminPlan.ts).
+    const plan = planPoZmeneTerminu({
+      puvodniTermin: task.dueDate,
+      novyTermin: dueDate,
+      puvodniPlan: task.scheduledFor,
+      novyPlan: scheduledFor,
+    })
+    const hasDate = Boolean(dueDate || plan)
     await updateTask(task.id, {
       title: title.trim(),
       notes: notes.trim() || undefined,
@@ -194,7 +204,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
       dueDate: dueDate || undefined,
       // čas bez data nedává smysl — deadline s časem se váže na den
       dueTime: dueDate && dueTime ? dueTime : undefined,
-      scheduledFor: scheduledFor || undefined,
+      scheduledFor: plan,
       recurrenceRule: rule ?? undefined,
       status: task.status === 'inbox' && hasDate ? 'active' : task.status,
     })
@@ -204,8 +214,9 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
       await updateTask(task.id, { todoistDirty: true })
       void pushTodoistEdits()
     }
-    // Zrušené naplánování uvolní i blok v kalendáři „Todo".
-    if (task.calendarEventId && !scheduledFor) void deleteBlockForTask(task)
+    // Zrušené naplánování uvolní i blok v kalendáři „Todo" — včetně toho,
+    // které právě překonal přepsaný termín.
+    if (task.calendarEventId && !plan) void deleteBlockForTask(task)
     close()
   }
 
