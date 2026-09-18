@@ -466,10 +466,18 @@ export default function App() {
           paddingBottom: siroko ? '2rem' : 'calc(var(--dock-h, 9rem) + 0.75rem)',
         }}
       >
-        {/* Na Macu má sloupec obsahu strop a stojí uprostřed: řádek úkolu
-            přes celých 828 px se čte špatně (oko ztratí řádek mezi
-            zaškrtávátkem a názvem) a prázdno vpravo je lepší než text,
-            který se nedá sledovat. Na telefonu strop nic nedělá. */}
+        {/* Na Macu má sloupec obsahu strop 760 px: řádek úkolu přes celých
+            828 px se čte špatně (oko ztratí řádek mezi zaškrtávátkem
+            a názvem) a prázdno vpravo je lepší než text, který se nedá
+            sledovat. Na telefonu strop nic nedělá.
+
+            Stojí VLEVO, ne uprostřed. Uprostřed vypadá na prázdné appce
+            vyváženěji, ale prostřední sloupec mění šířku podle toho,
+            jestli je otevřený detail (1208 → 788 px), takže se s ním
+            vystředěný obsah hýbe: změřeno, titulek Dnes skočil z 472 na
+            264 px — o 208 px do strany jen tím, že člověk otevřel úkol.
+            Appka přitom stojí na tom, že všechno začíná na jedné
+            svislici. Vlevo je ta svislice pořád tatáž (248 px). */}
         {/* key vynutí novou instanci pohledu → BlurFade (magicui) ho vynoří
             z rozostření ze strany, kam se v doku šlo.
             Obal s overflow-x: clip: nájezd posouvá obsah o 14 px do strany
@@ -477,7 +485,7 @@ export default function App() {
             vodorovné rolování a obsah zůstal odrolovaný (levý okraj 2 pt,
             pravý 30 pt). Clip přesah nepustí do rolovací plochy; záporná
             marže drží řádky chipů s -mx-4 dál až na hraně obrazovky. */}
-        <div className={`-mx-4 overflow-x-clip px-4 ${siroko ? 'mx-auto w-full max-w-[760px]' : ''}`}>
+        <div className={`-mx-4 overflow-x-clip px-4 ${siroko ? 'w-full max-w-[760px]' : ''}`}>
         <BlurFade
           key={vse ? `${tab}-vse` : tab}
           // Vše je vrstva POD Dneškem: vytahuje se zespoda ('up') a při

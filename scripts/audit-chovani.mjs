@@ -953,8 +953,19 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await page.keyboard.press('Enter'); await page.waitForTimeout(800)
   T_(await page.getByText('sirokoprvni').count() >= 1, '„Nový úkol" v bočním panelu opravdu založí úkol')
 
-  // (3) detail je sloupec vedle seznamu, ne panel přes něj
+  // (3) detail je sloupec vedle seznamu, ne panel přes něj — a obsah se
+  // při jeho otevření nesmí hnout do strany. Prostřední sloupec mění
+  // šířku (1208 → 788 px), takže vystředěný obsah s ním jezdí: změřeno,
+  // titulek skočil z 472 na 264 px jen tím, že člověk otevřel úkol.
+  const hranaTitulku = () => page.evaluate(() => {
+    const h1 = document.querySelector('main h1')
+    return h1 ? Math.round(h1.getBoundingClientRect().left) : -1
+  })
+  const predOtevrenim = await hranaTitulku()
   await page.getByText('sirokoprvni').first().click(); await page.waitForTimeout(700)
+  const poOtevreni = await hranaTitulku()
+  T_(predOtevrenim === poOtevreni,
+     'obsah stojí na téže svislici, ať je detail otevřený nebo ne (' + predOtevrenim + ' → ' + poOtevreni + ' px)')
   const sloupec = page.locator('aside[aria-label="Detail úkolu"]')
   T_(await sloupec.count() === 1, 'detail úkolu se otevře jako sloupec vpravo')
   T_(await page.locator('.sheet-panel').count() === 0, 'detail úkolu na široko není panel zdola')
