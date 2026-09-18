@@ -456,6 +456,50 @@ Obrys sleduje zaoblení prvku sám od sebe. Měkký roh tam, kde si prvek
 — nulová specifičnost, takže každé `rounded-*` z markupu vyhraje.
 Obojí hlídá audit rozhraní (`tvar pri fokusu`).
 
+**Na MacBooku je to jiné rozvržení, ne zvětšený telefon**
+(`src/lib/siroko.ts` — čistá funkce s testy, `components/BocniPanel.tsx`,
+`components/DetailObal.tsx`). Na 1440 px stála appka jako telefon
+uprostřed monitoru — změřeno: sloupec 512 px a 464 px prázdna po každé
+straně — a navigaci držel dok, tedy kapsle pro palec, která visí NAD
+obsahem, protože na 390 px není kam ji dát. **Rozhoduje šířka okna, ne
+druh zařízení**: iPad na šířku i Mac s appkou v poloviční obrazovce jsou
+tentýž případ, a kdyby se appka ptala na `pointer: fine`, zůstala by na
+dotykovém iPadu navždy telefonem. Práh je 1024 px — nejmenší šířka, kde
+se vedle sebe vejde boční panel (232), seznam a detail (420). Čte se
+**živě** (`useSiroko` poslouchá `resize`): appka běží přes Safari →
+Přidat do Docku, takže se okno roztahuje pořád. Co se od prahu mění:
+(1) **navigace je boční panel a dok se nekreslí** — dvě navigace naráz
+jsou dvě odpovědi na „kde to jsem"; „Vše" tu dostává **vlastní řádek**,
+protože důvod, proč je v doku jen druhou polohou Dneška (tři sloty po
+64 px čtvrtý nesnesou), tady neplatí a skryté gesto je na Macu horší než
+položka, kterou je vidět — dvojí „1" funguje dál; (2) **detail úkolu je
+sloupec vpravo, ne panel zdola** — to je celý důvod, proč se na Macu
+kreslí jinak: odškrtávám a přepisuji termíny a přitom se dívám na další
+řádek. Ostatní panely (nastavení, triáž, klient, ohlédnutí) zůstávají
+modální i tady, protože jsou to úkony, které se dělají **místo** práce se
+seznamem, ne vedle ní; (3) **obsah má strop 760 px a stojí uprostřed** —
+řádek úkolu přes celých 828 px se čte špatně, oko ztratí řádek mezi
+zaškrtávátkem a názvem. Tři věci, které se tu dají rozbít, všechny tiše:
+(a) **zadávání úkolu bydlelo výhradně v doku**, takže jakmile se dok na
+široko přestal kreslit, nešlo na Macu založit úkol vůbec — obrazovka
+vypadá v pořádku a appka se nedá používat; na široko má vlastní lištu nad
+obsahem; (b) prostřední sloupec potřebuje **`min-h-0`** — flexový prvek
+má `min-height: auto`, takže se roztáhne na výšku obsahu; dokud bylo
+`main` přímo v `.app-shell`, nevadilo to (prvek s vlastním rolováním má
+`auto` = nula), ale obal rolování nemá a na Plánu s reálnými daty se
+natáhl na 992 px uvnitř 844px obalu, takže dok (absolutní k němu,
+`bottom-0`) skončil 148 px pod displejem a nešel stisknout — našel audit
+rozhraní; (c) o **Escape** se praly dva posluchače na `window` (zkratky
+v `App.tsx` ho při otevřeném zadávání berou jako „zavři zadávání") a
+vyhrál ten navěšený dřív — první Escape sloupec nezavřel, teprve druhý.
+Sloupec se proto hlásí do **téhož zásobníku jako panely**
+(`pripojNadPanel` v `Sheet.tsx`): Escape patří tomu, co je navrchu, a
+zkratky appky mlčí. Hlídá to audit chování (oddíl 12, devět kontrol,
+každá ověřená vrácenou vadou) a oddíl 9 se kvůli prahu vrátil na 900 px —
+od 1024 by tři jeho kontroly ztichly: „Esc složí zadávání" počítá
+tlačítka „Nový úkol", kterých je v bočním panelu jedno pořád, a dvě další
+čekají `.sheet-panel`, který sloupec nemá.
+
 **Obrazovka není soubor.** Dvě největší komponenty se návrhem zjednodušily,
 ale soubor se nezmenšil: `ClientsView.tsx` měl 808 řádků a `TaskEditSheet.tsx`
 969. Rozděleno podle toho, co spolu doopravdy souvisí, ne podle délky:
