@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Task } from '../db/types'
 import { sortTasks } from '../db/repo'
-import { denUkolu, jePropadly } from './vseUkoly'
+import { denUkolu, jeNestihnuty, jePropadly, maPropadlyTermin, popisPropadlych } from './vseUkoly'
 
 const u = (id: string, extra: Partial<Task> = {}): Task => ({
   id,
@@ -62,5 +62,46 @@ describe('pořadí na Vše', () => {
   it('při shodné prioritě rozhoduje termín', () => {
     const ukoly = [u('pozdě', { dueDate: '2026-12-01' }), u('brzy', { dueDate: '2026-09-18' })]
     expect(sortTasks(ukoly).map((t) => t.id)).toEqual(['brzy', 'pozdě'])
+  })
+})
+
+describe('propadlý termín vs. nestihnutý vlastní plán', () => {
+  // Změřeno na skutečných datech: řádka hlásila červeně „po termínu · 8"
+  // a ani jeden z těch osmi po termínu nebyl.
+  it('naplánování v minulosti není propadlý termín', () => {
+    const t = u('a', { scheduledFor: '2026-09-16' })
+    expect(jePropadly(t, DNES)).toBe(true)
+    expect(maPropadlyTermin(t, DNES)).toBe(false)
+    expect(jeNestihnuty(t, DNES)).toBe(true)
+  })
+
+  it('termín, který teprve přijde, taky ne — ani když naplánování minulo', () => {
+    const t = u('a', { scheduledFor: '2026-09-16', dueDate: '2026-09-18' })
+    expect(jePropadly(t, DNES)).toBe(true)
+    expect(maPropadlyTermin(t, DNES)).toBe(false)
+    expect(jeNestihnuty(t, DNES)).toBe(true)
+  })
+
+  it('propadlý termín je propadlý termín', () => {
+    const t = u('a', { dueDate: '2026-09-16' })
+    expect(maPropadlyTermin(t, DNES)).toBe(true)
+    expect(jeNestihnuty(t, DNES)).toBe(false)
+  })
+
+  it('bez jediného propadlého termínu se řádka nejmenuje „po termínu" a není červená', () => {
+    const p = popisPropadlych([u('a', { scheduledFor: '2026-09-15' }), u('b', { scheduledFor: '2026-09-16' })], DNES)
+    expect(p).toEqual({ slovo: 'nestihnuto', pocet: 2, tone: 'note' })
+  })
+
+  it('s propadlým termínem mluví řádka o něm a počítá jen jeho', () => {
+    const p = popisPropadlych(
+      [u('a', { dueDate: '2026-09-15' }), u('b', { scheduledFor: '2026-09-16' }), u('c', { scheduledFor: '2026-09-16' })],
+      DNES,
+    )
+    expect(p).toEqual({ slovo: 'po termínu', pocet: 1, tone: 'danger' })
+  })
+
+  it('bez propadlých není řádka žádná', () => {
+    expect(popisPropadlych([u('a', { dueDate: DNES }), u('b', { scheduledFor: '2026-09-20' })], DNES)).toBeUndefined()
   })
 })
