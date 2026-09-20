@@ -1123,6 +1123,136 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 15. den má strop a appka to řekne, KDYŽ SE NA NĚJ SYPE PRÁCE ---
+// Přetížený den appka poznala odjakživa (`isOverloaded`), ale uměla to
+// jen na obrazovce Dnes — tedy v den, kdy už se s tím nedá nic dělat.
+// Ve chvíli, kdy se práce na budoucí den sype, mlčela.
+//
+// Změřeno na skutečných datech (12 dní provozu): čtvrtek se 7 úkoly a
+// 495 minutami dal 1 odškrtnutí, pátek se 4 úkoly a 225 minutami nula —
+// zatímco obě soboty, na které se neplánovalo nic, daly po dvou. Dny,
+// které se naplní, jsou přesně ty, co spadnou.
+//
+// Unit testy hlídají pravidlo (`kapacitaDne`), tohle hlídá, co z něj
+// člověk uvidí a hlavně KDY: toast ve chvíli zadání, cesta ven jedním
+// ťuknutím, a ticho na dni, který plný není. Pruhem to změřit nejde —
+// přeplněný den se stlačí na celý pruh a vypadá jako přesně plný.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+
+  // Den, na který se sype: o tři dny dál a jistě v zobrazeném měsíci
+  // (u konce měsíce se couvne zpátky, ať se nemusí listovat).
+  const cil = await page.evaluate(() => {
+    const d = new Date(); d.setDate(d.getDate() + 3)
+    if (d.getMonth() !== new Date().getMonth()) { d.setTime(Date.now()); d.setDate(d.getDate() + 1) }
+    return d.toISOString().slice(0, 10)
+  })
+  const volny = await page.evaluate((c) => {
+    const d = new Date(c); d.setDate(d.getDate() - 1)
+    return d.toISOString().slice(0, 10)
+  }, cil)
+
+  // Plný den: šest úkolů po 90 minutách = 9 h, tedy přes strop i s tolerancí.
+  const nasyp = (den, kolik) => page.evaluate(async ({ den, kolik }) => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    await new Promise((res) => {
+      const tx = db.transaction('tasks', 'readwrite')
+      const st = tx.objectStore('tasks')
+      st.clear()
+      const t = new Date().toISOString()
+      for (let i = 0; i < kolik; i++) st.put({
+        id: 'sp' + i, createdAt: t, updatedAt: t, title: 'Plnivo ' + i,
+        priority: 'normal', status: 'active', order: i, dueDate: den, estimateMinutes: 90,
+      })
+      tx.oncomplete = res
+    })
+  }, { den, kolik })
+
+  const doPlanu = async () => {
+    await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+    await page.getByRole('button', { name: 'Plán', exact: true }).click()
+    await page.waitForTimeout(700)
+  }
+  const zadej = async (den, nazev) => {
+    await page.locator(`button[data-day="${den}"]`).click(); await page.waitForTimeout(400)
+    const pole = page.locator('main input[placeholder^="Nový úkol na"]')
+    await pole.fill(nazev)
+    await pole.press('Enter')
+    await page.waitForTimeout(600)
+  }
+  const toast = () => page.evaluate(() => {
+    const t = document.querySelector('[role="status"]')
+    if (!t) return null
+    return { text: t.innerText.replace(/\s+/g, ' ').trim(), tlacitka: [...t.querySelectorAll('button')].map((b) => b.innerText.trim()) }
+  })
+  const denUkolu = (nazev) => page.evaluate(async (nazev) => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    const all = await new Promise((res) => { const r = db.transaction('tasks').objectStore('tasks').getAll(); r.onsuccess = () => res(r.result) })
+    const t = all.find((x) => x.title === nazev && !x.deletedAt)
+    return t ? (t.scheduledFor ?? t.dueDate ?? null) : null
+  }, nazev)
+
+  // (1) na přeplněný den appka práci pustí, ale řekne to a nabídne cestu ven
+  await nasyp(cil, 6)
+  await doPlanu()
+  await zadej(cil, 'Sedmý na plný den')
+  const plny = await toast()
+  T_(plny !== null && /h práce/.test(plny.text), 'zadání na plný den řekne, kolik na něm stojí (' + (plny?.text ?? 'bez toastu') + ')')
+  T_(plny !== null && plny.tlacitka.includes('Jinam'), 'a nabídne „Jinam" — appka neradí, appka uhne')
+  T_(await denUkolu('Sedmý na plný den') === cil, 'a úkol na tom dni ZŮSTANE, dokud člověk sám nepohne (appka nezakazuje)')
+
+  // (2) „Jinam" úkol opravdu přesune a neztratí ho.
+  // Tlačítko se klikne, jen když existuje: chybějící prvek má být NÁLEZ,
+  // ne výjimka, která shodí zbytek oddílu a udělá z něj mlčení.
+  const jinam = page.locator('[role="status"] button', { hasText: 'Jinam' })
+  if (await jinam.count() > 0) { await jinam.click(); await page.waitForTimeout(700) }
+  const poJinam = await denUkolu('Sedmý na plný den')
+  T_(poJinam !== null, '„Jinam" úkol neztratí')
+  T_(poJinam !== null && poJinam !== cil, 'a opravdu ho odnese z plného dne (' + poJinam + ' ≠ ' + cil + ')')
+
+  // (3) na dni, který plný není, appka mlčí — signál, co svítí pořád, není signál
+  await nasyp(cil, 6)
+  await doPlanu()
+  await zadej(volny, 'První na volný den')
+  const volnyToast = await toast()
+  T_(volnyToast !== null && !/h práce/.test(volnyToast.text), 'na volný den se o stropu nemluví (' + (volnyToast?.text ?? 'bez toastu') + ')')
+  T_(volnyToast !== null && !volnyToast.tlacitka.includes('Jinam'), 'a „Jinam" se tam nenabízí')
+
+  // (4) v mřížce je plný den poznat — a to je jediné místo, kde se den vybírá
+  const popisy = await page.evaluate(({ cil, volny }) => ({
+    plny: document.querySelector(`button[data-day="${cil}"]`)?.getAttribute('aria-label') ?? '',
+    volny: document.querySelector(`button[data-day="${volny}"]`)?.getAttribute('aria-label') ?? '',
+  }), { cil, volny })
+  T_(/přeplněno/.test(popisy.plny), 'buňka plného dne to má v popisu (' + popisy.plny + ')')
+  T_(!/přeplněno/.test(popisy.volny), 'a buňka dne pod stropem ne (' + popisy.volny + ')')
+
+  // …a hlavně je to VIDĚT. Pruh v buňce se přes strop natáhnout nemůže,
+  // takže den s osmi a den s třinácti hodinami kreslí totéž; nese to
+  // proto barva čísla. Čte se ze skutečné obrazovky, ne z pravidla —
+  // tenhle signál se dá ztratit, aniž by se pravidlo hnulo (stačí
+  // vypustit větev v JSX) a přístupný popis by zůstal v pořádku.
+  // Porovnává se s TOKENEM, ne s jiným dnem v mřížce. Srovnání „plný den
+  // vs nějaký jiný" je planá kontrola: kdyby se tón vůbec nekreslil,
+  // vyšel by plný den jako `ink` a ten druhý jako víkendový `ink-soft` —
+  // dvě různé barvy, kontrola projde a signál přitom není.
+  const barvy = await page.evaluate((cil) => {
+    const sonda = document.createElement('span')
+    sonda.style.color = 'var(--color-note-ink)'
+    document.body.append(sonda)
+    const token = getComputedStyle(sonda).color
+    sonda.remove()
+    const el = document.querySelector(`button[data-day="${cil}"] span`)
+    return { plny: el ? getComputedStyle(el).color : '', token }
+  }, cil)
+  T_(barvy.plny !== '' && barvy.plny === barvy.token,
+     'a číslo plného dne je v tónu note-ink (' + barvy.plny + ' vs token ' + barvy.token + ')')
+  await ctx.close()
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)

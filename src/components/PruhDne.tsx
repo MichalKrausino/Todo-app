@@ -11,23 +11,39 @@
 // z něj byla černá lišta — na Dnes hned pod titulkem nejhlasitější prvek
 // obrazovky. Barevná je práce pro klienta, všechno ostatní je podklad.
 import { PLNY_DEN_MIN, minutyDilu, type Dil } from '../lib/pruhDne'
+import { jePreplneno } from '../lib/kapacitaDne'
 
 export function PruhDne({
   dily,
   klid,
   className = 'h-2.5',
+  znackaPreteceni = true,
 }: {
   dily: Dil[]
   klid: boolean
   /** výška a cokoli navíc — v Plánu h-2.5, na Dnes tenčí */
   className?: string
+  /**
+   * Značka useknuté osy na konci. V pruhu přes celou šířku je to pětipixelový
+   * proužek z ~350, tedy přesně tak tichá, jak má být. V buňce mřížky je pruh
+   * 28 px široký a týž proužek z něj zabere pětinu — změřeno na snímku ve
+   * čtyřnásobném zvětšení a čte se jako DALŠÍ KLIENT, ne jako „useknuto".
+   * Mřížka proto přetečení říká barvou čísla dne a značku si vypíná.
+   */
+  znackaPreteceni?: boolean
 }) {
   const celkem = minutyDilu(dily)
-  // Přetečený den se stlačí na celý pruh; že přetekl, řekne popisek.
+  // Přetečený den se stlačí na celý pruh — délka je čas a delší než den
+  // být nemůže. Že přetekl, proto musí říct ZNAČKA NA KONCI: pod agendou
+  // je pod pruhem popisek, ale v mřížce Plánu žádný není, takže tam
+  // vypadal den s osmi hodinami a den s třinácti úplně stejně — a mřížka
+  // je přitom to jediné místo, kde se den vybírá. Je to tentýž způsob,
+  // jakým se v grafu značí sloupec useknutý osou.
+  const preplneno = jePreplneno(celkem) && znackaPreteceni
   const zaklad = Math.max(celkem, PLNY_DEN_MIN)
   return (
     <span
-      className={`flex w-full gap-px overflow-hidden rounded-full ${celkem > 0 ? 'bg-well' : 'bg-well/60'} ${className}`}
+      className={`relative flex w-full gap-px overflow-hidden ${preplneno ? 'rounded-l-full' : 'rounded-full'} ${celkem > 0 ? 'bg-well' : 'bg-well/60'} ${className}`}
     >
       {dily.map((dil, i) => (
         <span
@@ -41,6 +57,14 @@ export function PruhDne({
           }}
         />
       ))}
+      {preplneno && (
+        // Vlasová mezera v barvě stránky před značkou: bez ní vypadal
+        // proužek na konci jako další klient, ne jako useknutá osa.
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-0 w-[5px] border-l border-paper bg-note-ink"
+        />
+      )}
     </span>
   )
 }

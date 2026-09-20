@@ -23,6 +23,8 @@ const DNY_ZKRATKY = ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne']
 export interface DenZnacka {
   dily: Dil[]
   popis: string
+  /** na ten den je víc práce, než se do něj vejde */
+  preplneno?: boolean
 }
 
 export function MesicniMrizka({
@@ -62,15 +64,23 @@ export function MesicniMrizka({
         const jeDnes = iso === dnes
         const minulost = iso < dnes
         const vikend = [0, 6].includes(fromISODate(iso).getDay())
+        // Přeplněný den nese svou zprávu ČÍSLEM, ne pruhem: pruh je dlouhý
+        // jako čas a přes strop se natáhnout nemůže, takže by den s osmi
+        // a den s třinácti hodinami vypadal stejně — a mřížka je přitom
+        // jediné místo, kde se den vybírá. Výběr a dnešek zůstávají nad
+        // tím: kde zrovna stojím, je vždycky důležitější než jak je tam
+        // nabito.
         const cislo = vybrano
           ? 'bg-accent font-semibold text-card'
           : jeDnes
             ? 'font-semibold text-accent-deep ring-1 ring-accent'
             : minulost
               ? 'text-ink-faint'
-              : vikend
-                ? 'text-ink-soft'
-                : 'text-ink'
+              : znacka?.preplneno
+                ? 'font-semibold text-note-ink'
+                : vikend
+                  ? 'text-ink-soft'
+                  : 'text-ink'
         return (
           <li key={iso}>
             <button
@@ -89,7 +99,9 @@ export function MesicniMrizka({
               {/* Pevná výška i u prázdného dne — jinak by čísla v řádce
                   stála každé jinde podle toho, kdo má práci. */}
               <span className="block h-1 w-7">
-                {znacka && <PruhDne dily={znacka.dily} klid={klid} className="h-1" />}
+                {znacka && (
+                  <PruhDne dily={znacka.dily} klid={klid} className="h-1" znackaPreteceni={false} />
+                )}
               </span>
             </button>
           </li>

@@ -18,7 +18,7 @@ const naDen = (iso: string): string => {
   return formatFullDateNa(fromISODate(iso))
 }
 import { plural } from '../lib/labels'
-import { ukazToast } from '../lib/toast'
+import { ukazToast, type ToastAkce } from '../lib/toast'
 import { Sheet } from './Sheet'
 
 export function BezTerminuSheet({
@@ -26,6 +26,7 @@ export function BezTerminuSheet({
   clients,
   cilovyDen,
   odpociva,
+  stropDne,
   onOpenTask,
   onClose,
 }: {
@@ -35,6 +36,11 @@ export function BezTerminuSheet({
   cilovyDen?: string
   /** úkoly, které zrovna odpočívají mimo ranní návrh → den návratu */
   odpociva?: Map<string, string>
+  /**
+   * Strop dne: když se úkol posílá na den, který už je plný, vrátí větu
+   * a akci „Jinam". Počítá ho Plán — jen on má nálož všech dnů v ruce.
+   */
+  stropDne?: (den: string, t: Task) => { text: string; akce: ToastAkce } | undefined
   onOpenTask: (t: Task) => void
   onClose: () => void
 }) {
@@ -47,7 +53,12 @@ export function BezTerminuSheet({
     if (!cilovyDen) return
     void updateTask(t.id, { dueDate: cilovyDen, status: 'active' })
     setPoslane((s) => new Set(s).add(t.id))
-    ukazToast(`${formatDayLabel(cilovyDen)} — „${t.title}"`, [
+    // Přeplněný den se pozná TEĎ, ne až na něj dojde řada. „Zpět" ale
+    // zůstává vždycky: zrušit se musí dát i krok, po kterém appka něco
+    // namítla — jinak by z upozornění byla past.
+    const strop = stropDne?.(cilovyDen, t)
+    ukazToast(strop ? strop.text : `${formatDayLabel(cilovyDen)} — „${t.title}"`, [
+      ...(strop ? [strop.akce] : []),
       {
         popisek: 'Zpět',
         kdyz: () => {

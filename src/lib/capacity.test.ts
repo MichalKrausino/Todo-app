@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_DAY_CAPACITY_MIN, isOverloaded, plannedMinutes } from './capacity'
 import type { Task } from '../db/types'
+import { PLNY_DEN_MIN } from './pruhDne'
 
 const task = (estimateMinutes?: number) => ({ estimateMinutes }) as Task
 
@@ -21,5 +22,12 @@ describe('isOverloaded', () => {
   it('bez kalendáře srovnává s výchozí kapacitou', () => {
     expect(isOverloaded(DEFAULT_DAY_CAPACITY_MIN, null)).toBe(false)
     expect(isOverloaded(DEFAULT_DAY_CAPACITY_MIN + 31, null)).toBe(true)
+  })
+
+  // Jedna appka, jeden strop: kdyby se výchozí kapacita rozešla s délkou
+  // pruhu, ukazoval by pruh pod titulkem Dnes neplný den a věta pod ním
+  // by u téhož dne tvrdila, že je toho moc.
+  it('výchozí kapacita je týž strop, jaký kreslí pruh dne', () => {
+    expect(DEFAULT_DAY_CAPACITY_MIN).toBe(PLNY_DEN_MIN)
   })
 })

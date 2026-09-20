@@ -32,16 +32,19 @@ import {
   openTasks,
   reopenTask,
   sortTasks,
+  updateTask,
 } from '../db/repo'
-import { plannedMinutes } from '../lib/capacity'
-import { addDays, formatEventRange, formatFullDate, formatFullDateNa, fromISODate, mondayOf, toISODate, todayISO } from '../lib/dates'
+import { DEFAULT_TASK_MINUTES, plannedMinutes } from '../lib/capacity'
+import { jePreplneno, popisPreplneneho } from '../lib/kapacitaDne'
+import { minutyPoDnech, volnejsiDen } from '../lib/volnyDen'
+import { addDays, formatDayLabel, formatEventRange, formatFullDate, formatFullDateNa, fromISODate, mondayOf, toISODate, todayISO } from '../lib/dates'
 import { minutesToLabel } from '../lib/freeSlot'
 import { plural } from '../lib/labels'
 import { dnyMesice, kotvaMesice, posunMesic } from '../lib/mesic'
 import { klidovyRezim } from '../lib/motion'
-import { PLNY_DEN_MIN, dilyDne, minutyDilu, type Dil } from '../lib/pruhDne'
+import { dilyDne, minutyDilu, type Dil } from '../lib/pruhDne'
 import { parseQuickAdd } from '../lib/quickAdd'
-import { ukazToast } from '../lib/toast'
+import { ukazToast, type ToastAkce } from '../lib/toast'
 import { useNavrhPamet } from '../lib/navrhPamet'
 import { TaskRow } from '../components/TaskRow'
 import { DlouhySeznam } from '../components/DlouhySeznam'
@@ -57,6 +60,10 @@ const effectiveDate = (t: Task): string | undefined => {
 }
 
 const monthFmt = new Intl.DateTimeFormat('cs-CZ', { month: 'long' })
+
+// Okno, ve kterém se hledá volnější den — týž strop jako v triáži
+// propadlých a v ranním návrhu: odložit o měsíc není odložení.
+const OKNO_JINAM = 7
 
 /** Nálož jednoho dne: minuty podle klienta (bez barvy = schůzka / bez klienta). */
 interface DenNaloz {
@@ -190,7 +197,17 @@ export function UpcomingView({
   // mřížka a den pod ní nikdy neřeknou dvě různá čísla.
   const znacky = useMemo(() => {
     const m = new Map<string, DenZnacka>()
-    for (const [den, n] of naloz) m.set(den, { dily: n.dily, popis: popisDne(n) })
+    // Slovo „přeplněno" patří JEN sem. Pod agendou stojí červené „přes
+    // 8 h" hned vedle čísel, takže by tam byla dvě jména pro totéž na
+    // jedné řádce; v buňce naopak není nic než pruh, a ten se přes strop
+    // nemůže natáhnout — bez slova by den s osmi a den s třinácti
+    // hodinami zněl pro čtečku stejně.
+    for (const [den, n] of naloz)
+      m.set(den, {
+        dily: n.dily,
+        popis: popisDne(n) + (jePreplneno(n.minuty) ? ' · přeplněno' : ''),
+        preplneno: jePreplneno(n.minuty),
+      })
     return m
   }, [naloz])
 
@@ -234,7 +251,57 @@ export function UpcomingView({
       notes: parsed.notes,
     })
     setNovy('')
-    ukazToast(`${nazevDne(iso)} — „${task.title}"`)
+    if (!hlidejStrop(iso, task)) ukazToast(`${nazevDne(iso)} — „${task.title}"`)
+  }
+
+  /**
+   * Den má strop a appka to říká VE CHVÍLI, KDY SE NA NĚJ SYPE PRÁCE.
+   *
+   * Nezakazuje: úkol na ten den opravdu jde a zůstane tam, dokud s ním
+   * člověk sám nepohne — zakazovat by znamenalo dialog a ty v téhle appce
+   * nejsou. Říká výsledek a nabízí cestu ven, stejně jako u mazání.
+   *
+   * „Jinam" je tentýž volnější den, jaký volí triáž propadlých i ranní
+   * návrh (`volnejsiDen`) — appka nesmí mít dvě různé představy o tom,
+   * kam se odkládá. Hledá se od DALŠÍHO dne: ten vybraný je plný, takže
+   * kdyby byl v okně nejlehčí, vrátil by se sám a tlačítko by nic
+   * neudělalo.
+   *
+   * Minuty se sčítají z nálože téhle obrazovky PLUS odhad nového úkolu —
+   * živý dotaz o něm ještě neví a čekat na překreslení by znamenalo hlásit
+   * strop až o úkol později, tedy zase pozdě.
+   */
+  const stropDne = useCallback(
+    (iso: string, t: Task): { text: string; akce: ToastAkce } | undefined => {
+      const minuty = (naloz.get(iso)?.minuty ?? 0) + (t.estimateMinutes ?? DEFAULT_TASK_MINUTES)
+      if (!jePreplneno(minuty)) return undefined
+      const od = toISODate(addDays(fromISODate(iso), 1))
+      const doDne = toISODate(addDays(fromISODate(iso), OKNO_JINAM))
+      const jinam = volnejsiDen(minutyPoDnech(open, events, od, doDne, today), od, OKNO_JINAM)
+      return {
+        // Krátký popisek dne („so 12. 9."), ne „sobota 12. září": toast
+        // má `max-w-48` a delší věta se v něm ořízne — hlášku, kterou
+        // není vidět celou, je zbytečné psát.
+        text: popisPreplneneho(formatDayLabel(iso), minuty),
+        akce: {
+          popisek: 'Jinam',
+          kdyz: () => {
+            void updateTask(t.id, { dueDate: jinam })
+            ukazToast(`${nazevDne(jinam)} — „${t.title}"`)
+          },
+        },
+      }
+    },
+    // `nazevDne` i `naloz` se mění s rendererem; `open`/`events` jsou
+    // z živých dotazů, takže drží referenci, dokud se dotaz nespustí znovu.
+    [naloz, open, events, today], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  function hlidejStrop(iso: string, t: Task): boolean {
+    const strop = stropDne(iso, t)
+    if (!strop) return false
+    ukazToast(strop.text, [strop.akce])
+    return true
   }
 
   const stitekMesice = (kotva: string) => {
@@ -273,7 +340,11 @@ export function UpcomingView({
   }
 
   const denNaloz = naloz.get(vybrany)
-  const preteklo = (denNaloz?.minuty ?? 0) > PLNY_DEN_MIN
+  // Týž strop jako pruh, mřížka i toast. Dokud se tu porovnávalo holé
+  // `> PLNY_DEN_MIN`, měla appka na jedné obrazovce tři různé představy
+  // o plném dni: den s osmi hodinami a čtvrt tu svítil červeně, pruh nad
+  // ním byl plný tak akorát a toast při zadávání mlčel.
+  const preteklo = jePreplneno(denNaloz?.minuty ?? 0)
   const dayTasks = sortTasks(podleDne.get(vybrany) ?? [])
   const dayEvents = [...(eventsPerDay.get(vybrany) ?? [])].sort(
     (a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start),
@@ -439,6 +510,7 @@ export function UpcomingView({
           clients={clientMap}
           cilovyDen={inbox.cil}
           odpociva={pamet.odpociva}
+          stropDne={stropDne}
           onOpenTask={onOpenTask}
           onClose={() => setInbox(null)}
         />
