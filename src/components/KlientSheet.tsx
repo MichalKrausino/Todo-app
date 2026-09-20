@@ -21,6 +21,7 @@ import {
 } from '../db/clientCheck'
 import { COLOR_NAMES, KIND_LABELS, plural } from '../lib/labels'
 import { formatDayLabel, formatDaysAgo } from '../lib/dates'
+import { HLIDANI_VYCHOZI_DNI } from '../lib/signals'
 import { nabidniVraceni } from '../lib/toast'
 import { ClientSharing } from './ClientSharing'
 import { ColorPicker } from './ColorPicker'
@@ -87,10 +88,21 @@ export function KlientSheet({
     if (name !== client.name) void updateClient(id, { name })
   }
 
+  // Prázdno = „nech to na appce" (výchozí práh u klienta), 0 = „nehlídej".
+  // Rozdíl je podstatný: jedno je nerozhodnutí, druhé rozhodnutí.
   const setWatch = (value: string) => {
-    const n = Number(value)
-    void updateClient(id, { checkIntervalDays: n > 0 ? n : undefined })
+    const t = value.trim()
+    if (t === '') return void updateClient(id, { checkIntervalDays: undefined })
+    const n = Number(t)
+    void updateClient(id, { checkIntervalDays: Number.isFinite(n) && n > 0 ? n : 0 })
   }
+
+  const hlidaniPopis =
+    client.checkIntervalDays === 0
+      ? 'nehlídá se'
+      : client.checkIntervalDays === undefined && client.kind === 'client'
+        ? `hlídá se po ${HLIDANI_VYCHOZI_DNI} dnech`
+        : undefined
 
   // Bez ptaní, ale vratně. Systémový `confirm()` rozbíjel dojem nativní
   // appky a stejně nechrání — kdo ho vidí pokaždé, odklepne ho po očku.
@@ -193,12 +205,20 @@ export function KlientSheet({
                 />
               </div>
               <div className={row}>
+                {/* Prázdné pole znamená VÝCHOZÍ práh, ne vypnuto — a řádka
+                    to teď říká nahlas. Dřív tu stál `placeholder="14"`,
+                    tedy slib čtrnácti dní, který logika nedodala: bez
+                    ručního nastavení hlídání nefungovalo vůbec (viz
+                    `neglectedDays` v src/lib/signals.ts). Vypnout jde
+                    nulou, protože „nechci to hlídat" je rozhodnutí,
+                    které musí jít vyslovit. */}
                 <div className="min-w-0 text-sm">
                   <div className="font-medium">Hlídat zanedbání</div>
                   <div className="text-xs text-ink-soft">
                     {client.lastActivityAt
                       ? `Poslední aktivita ${formatDaysAgo(client.lastActivityAt)}`
                       : 'Zatím žádná aktivita'}
+                    {hlidaniPopis && ` · ${hlidaniPopis}`}
                   </div>
                 </div>
                 <label className="flex shrink-0 items-center gap-1.5 text-sm text-ink-soft">
@@ -209,7 +229,7 @@ export function KlientSheet({
                     inputMode="numeric"
                     aria-label="Hlídat zanedbání po dnech"
                     defaultValue={client.checkIntervalDays ?? ''}
-                    placeholder="14"
+                    placeholder={String(HLIDANI_VYCHOZI_DNI)}
                     onBlur={(e) => setWatch(e.target.value)}
                     className="h-9 w-14 rounded-full bg-well text-center text-[15px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
                   />

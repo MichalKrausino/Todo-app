@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Client, Project, Task } from '../db/types'
-import { computeSignals, hasAnySignal } from './signals'
+import { computeSignals, hasAnySignal, HLIDANI_VYCHOZI_DNI, neglectedDays } from './signals'
 
 const TODAY = '2026-07-29'
 
@@ -96,5 +96,47 @@ describe('computeSignals', () => {
     const deleted = task({ id: 'b', deletedAt: '2026-07-20T10:00:00.000Z', postponeCount: 9 })
     const s = computeSignals([], [], [doneT, deleted], TODAY)
     expect(hasAnySignal(s)).toBe(false)
+  })
+})
+
+describe('hlídání zanedbání se nemusí zapínat', () => {
+  // Změřeno na skutečných datech: `checkIntervalDays` neměl nastavený
+  // ANI JEDEN z pěti klientů, takže signál zanedbání nemohl vzniknout
+  // vůbec — a jeden klient byl 45 dní bez jediné stopy. Bezpečnostní
+  // síť, kterou si musíš u každého klienta zvlášť zapnout, není síť.
+  const pred = (dni: number) => {
+    const d = new Date(`${TODAY}T12:00:00.000Z`)
+    d.setDate(d.getDate() - dni)
+    return d.toISOString()
+  }
+
+  it('klient bez nastavení se hlídá po výchozím prahu', () => {
+    expect(neglectedDays(client({ lastActivityAt: pred(45) }), TODAY)).toBe(45)
+  })
+
+  it('a pod prahem mlčí', () => {
+    expect(neglectedDays(client({ lastActivityAt: pred(HLIDANI_VYCHOZI_DNI) }), TODAY)).toBeNull()
+  })
+
+  it('oblast bez nastavení se nehlídá — není to vztah, který utichá', () => {
+    expect(neglectedDays(client({ kind: 'personal', lastActivityAt: pred(99) }), TODAY)).toBeNull()
+    expect(neglectedDays(client({ kind: 'internal', lastActivityAt: pred(99) }), TODAY)).toBeNull()
+  })
+
+  it('vlastní práh se ctí i u oblasti — to je vyslovené rozhodnutí', () => {
+    expect(neglectedDays(client({ kind: 'internal', checkIntervalDays: 7, lastActivityAt: pred(30) }), TODAY)).toBe(30)
+  })
+
+  it('nula je „nehlídej" a přebije i výchozí práh', () => {
+    expect(neglectedDays(client({ checkIntervalDays: 0, lastActivityAt: pred(99) }), TODAY)).toBeNull()
+  })
+
+  it('bez jediné aktivity se nehlídá nic', () => {
+    expect(neglectedDays(client({}), TODAY)).toBeNull()
+  })
+
+  it('a signál z toho opravdu vyjde i bez nastavení', () => {
+    const s = computeSignals([client({ lastActivityAt: pred(45) })], [], [], TODAY)
+    expect(s.neglected.map((n) => n.days)).toEqual([45])
   })
 })
