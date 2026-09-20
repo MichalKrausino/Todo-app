@@ -402,6 +402,18 @@ export const getTask = (id: string) => db.tasks.get(id)
 // Pro globální vyhledávání — všechny nesmazané úkoly včetně hotových.
 export const allTasks = () => db.tasks.filter((t) => !t.deletedAt).toArray()
 
+/**
+ * Dokončené úkoly od daného dne — podklad pro osobní průtok (`prutok.ts`).
+ * Bere se jen okno, ne celá historie: strop má odpovídat tomu, jak člověk
+ * pracuje TEĎ, a starý archiv by ho držel v minulosti.
+ */
+export const hotoveOd = (dateISO: string) =>
+  db.tasks
+    .where('status')
+    .equals('done')
+    .filter((t) => !t.deletedAt && (t.completedAt ?? '') >= dateISO)
+    .toArray()
+
 export const doneOn = (dateISO: string) =>
   db.tasks
     .where('status')

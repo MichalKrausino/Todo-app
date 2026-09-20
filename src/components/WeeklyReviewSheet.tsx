@@ -4,6 +4,7 @@ import { fromISODate, todayISO } from '../lib/dates'
 import { computeWeekStats } from '../lib/weekReview'
 import { Sheet } from './Sheet'
 import { plural } from '../lib/labels'
+import { hodiny } from '../lib/kapacitaDne'
 import { AnimatedNumber } from './ui/AnimatedNumber'
 
 const stagger = (i: number) => ({ '--stagger': i }) as React.CSSProperties
@@ -55,6 +56,18 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
             </div>
           </div>
         </div>
+
+        {/* Proč appka někdy namítne „přeplněno" na dni, do kterého by se
+            podle hodin ještě spousta věcí vešla. Bez téhle řádky je strop
+            číslo, které nikde nestojí — a takovému se nedá věřit. */}
+        {stats.prutok && (
+          <p className="rise text-[13px] text-ink-soft" style={stagger(2)}>
+            Za den ti projde obvykle {hodiny(stats.prutok.median)}, v dobrý den{' '}
+            {hodiny(stats.prutok.dobryDen)} (z {stats.prutok.dnu}{' '}
+            {plural(stats.prutok.dnu, 'dne', 'dnů', 'dnů')} práce). Plán proto hlídá{' '}
+            {hodiny(stats.stropDne)} na den.
+          </p>
+        )}
 
         {stats.completedCount === 0 && (
           <p className="rise rounded-2xl bg-card px-4 py-3 text-sm text-ink-soft shadow-card" style={stagger(3)}>

@@ -51,13 +51,20 @@ export const TOLERANCE_MIN = 30
  * O kolik minut den přetéká přes strop. Do tolerance včetně vrací 0,
  * takže „přetéká" a „je toho moc" je jedno a totéž číslo.
  */
-export function prebytekDne(minuty: number): number {
-  const pres = minuty - PLNY_DEN_MIN
+export function prebytekDne(minuty: number, strop: number = PLNY_DEN_MIN): number {
+  const pres = minuty - strop
   return pres > TOLERANCE_MIN ? pres : 0
 }
 
-/** Je na ten den víc práce, než se do něj vejde? */
-export const jePreplneno = (minuty: number): boolean => prebytekDne(minuty) > 0
+/**
+ * Je na ten den víc práce, než se do něj vejde?
+ *
+ * `strop` je ve výchozím stavu pracovní doba, ale obrazovky ho podávají
+ * z vlastní historie (`useOsobniStrop` v `prutok.ts`): osm hodin je
+ * poctivé číslo o hodinách, ne o tom, kolik práce projde TOUHLE appkou.
+ */
+export const jePreplneno = (minuty: number, strop: number = PLNY_DEN_MIN): boolean =>
+  prebytekDne(minuty, strop) > 0
 
 /**
  * Minuty jako hodiny po česku („8,3 h"). Desetina hodiny je nejjemnější

@@ -1253,6 +1253,79 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 16. strop je OSOBNÍ, ne nominální ---
+// Strop z oddílu 15 měřil proti pracovní době, tedy osmi hodinám. To je
+// poctivé číslo o hodinách, ale o téhle appce neříká nic: v ní nestojí
+// celý den, jen práce, kterou si do ní člověk zapíše.
+//
+// Změřeno na sedmnácti dnech skutečného provozu: medián 120 min za den,
+// NEJLEPŠÍ DEN 150. Nominální strop byl tedy víc než trojnásobek
+// životního rekordu — strážce, který se nemá jak ozvat.
+//
+// Tahle kontrola je přesně o tom rozdílu: den, který by osmihodinový
+// strop propustil bez hlesnutí, musí appka po poznání člověka zachytit.
+// Unit testy hlídají výpočet (`prutok.test.ts`); tohle hlídá, že se to
+// číslo opravdu dostane až na obrazovku.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+
+  const cil = await page.evaluate(() => {
+    const d = new Date(); d.setDate(d.getDate() + 3)
+    if (d.getMonth() !== new Date().getMonth()) { d.setTime(Date.now()); d.setDate(d.getDate() + 1) }
+    return d.toISOString().slice(0, 10)
+  })
+
+  // Historie: osm dnů po hodině hotové práce → dobrý den 60 min, strop
+  // spadne na spodní hranici 120 min. Na cíl pak tři hodiny práce, tedy
+  // dvojnásobek stropu — ale jen 3/8 nominálního dne.
+  const nasyp = (den, historie) => page.evaluate(async ({ den, historie }) => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    await new Promise((res) => {
+      const tx = db.transaction('tasks', 'readwrite')
+      const st = tx.objectStore('tasks')
+      st.clear()
+      const t = new Date().toISOString()
+      for (let i = 0; i < 3; i++) st.put({
+        id: 'op' + i, createdAt: t, updatedAt: t, title: 'Otevřený ' + i,
+        priority: 'normal', status: 'active', order: i, dueDate: den, estimateMinutes: 60,
+      })
+      if (historie) {
+        for (let i = 0; i < 8; i++) {
+          const d = new Date(); d.setDate(d.getDate() - (i + 1))
+          st.put({
+            id: 'ho' + i, createdAt: t, updatedAt: t, title: 'Hotový ' + i,
+            priority: 'normal', status: 'done', order: i, estimateMinutes: 60,
+            completedAt: d.toISOString(),
+          })
+        }
+      }
+      tx.oncomplete = res
+    })
+  }, { den, historie })
+
+  const popisCile = async () => {
+    await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(1000)
+    await page.getByRole('button', { name: 'Plán', exact: true }).click(); await page.waitForTimeout(700)
+    return page.evaluate((c) => document.querySelector(`button[data-day="${c}"]`)?.getAttribute('aria-label') ?? '', cil)
+  }
+
+  // (1) bez historie appka člověka nezná a drží se pracovní doby
+  await nasyp(cil, false)
+  const bezHistorie = await popisCile()
+  T_(/3 úkoly/.test(bezHistorie) && !/přeplněno/.test(bezHistorie),
+     'bez historie se tři hodiny práce do dne vejdou — appka si strop nevymýšlí (' + bezHistorie + ')')
+
+  // (2) s historií týž den přeplněný je
+  await nasyp(cil, true)
+  const sHistorii = await popisCile()
+  T_(/přeplněno/.test(sHistorii),
+     'a s osmi dny historie je týž den přeplněný — strop zná člověka (' + sHistorii + ')')
+  await ctx.close()
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)

@@ -18,6 +18,7 @@ export function PruhDne({
   klid,
   className = 'h-2.5',
   znackaPreteceni = true,
+  strop,
 }: {
   dily: Dil[]
   klid: boolean
@@ -31,6 +32,8 @@ export function PruhDne({
    * Mřížka proto přetečení říká barvou čísla dne a značku si vypíná.
    */
   znackaPreteceni?: boolean
+  /** strop dne v minutách; bez něj platí pracovní doba (viz kapacitaDne.ts) */
+  strop?: number
 }) {
   const celkem = minutyDilu(dily)
   // Přetečený den se stlačí na celý pruh — délka je čas a delší než den
@@ -39,8 +42,12 @@ export function PruhDne({
   // vypadal den s osmi hodinami a den s třinácti úplně stejně — a mřížka
   // je přitom to jediné místo, kde se den vybírá. Je to tentýž způsob,
   // jakým se v grafu značí sloupec useknutý osou.
-  const preplneno = jePreplneno(celkem) && znackaPreteceni
-  const zaklad = Math.max(celkem, PLNY_DEN_MIN)
+  const preplneno = jePreplneno(celkem, strop) && znackaPreteceni
+  // Celý pruh = STROP DNE, ne nominálních osm hodin. Jinak by pruh a
+  // verdikt nad ním říkaly každý něco jiného: den se třemi hodinami by
+  // vypadal ze čtvrtiny plný a přitom by byl u konce toho, co tímhle
+  // člověkem za den projde.
+  const zaklad = Math.max(celkem, strop ?? PLNY_DEN_MIN)
   return (
     <span
       className={`relative flex w-full gap-px overflow-hidden ${preplneno ? 'rounded-l-full' : 'rounded-full'} ${celkem > 0 ? 'bg-well' : 'bg-well/60'} ${className}`}
