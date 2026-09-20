@@ -10,6 +10,13 @@ import { addDays, daysSince, fromISODate, toISODate } from './dates'
 export const INBOX_AGE_DAYS = 7 // po kolika dnech je nezařazený úkol „ležák"
 export const POSTPONE_THRESHOLD = 3 // kolik odkladů už stojí za zmínku
 export const NEW_ENTITY_GRACE_DAYS = 3 // novým klientům/projektům se nenadává hned
+/**
+ * Po kolika dnech ticha se ozve hlídání u klienta, který si vlastní práh
+ * nenastavil. Je to TÁŽ čtrnáctka, kterou pole v nastavení klienta
+ * odjakživa ukazuje jako `placeholder` — rozhraní ji slibovalo, jen ji
+ * logika nedodala.
+ */
+export const HLIDANI_VYCHOZI_DNI = 14
 
 export interface Signals {
   /** klienti s hlídáním, u kterých se dlouho nic nedělo (dny bez aktivity) */
@@ -24,10 +31,41 @@ export interface Signals {
   postponed: Task[]
 }
 
+/**
+ * Kolik dní je u klienta ticho, když už stojí za řeč — jinak `null`.
+ *
+ * CHYBĚJÍCÍ NASTAVENÍ ZNAMENÁ VÝCHOZÍ STAV, NE VYPNUTO
+ *
+ * Tohle pravidlo má appka zapsané u ranních návrhů („nesmyslný čas taky
+ * ne — notifikace, která tiše zmizí, je horší než notifikace ve špatnou
+ * hodinu") a tady ho porušovala: hlídání zanedbaných klientů je jedna
+ * z věcí, kvůli kterým appka vůbec vznikla, a **nešlo ho spustit jinak
+ * než ručně u každého klienta zvlášť**. Bezpečnostní síť, kterou si
+ * musíš u každého klienta zvlášť zapnout, není bezpečnostní síť.
+ *
+ * Změřeno na skutečných datech: `checkIntervalDays` nemá nastavený ANI
+ * JEDEN z pěti klientů, takže signál nemohl vzniknout vůbec — zatímco
+ * `lastActivityAt` se poctivě razítkuje u všech (založení i dokončení
+ * úkolu). Appka to celou dobu věděla a mlčela: klient „Chcinadhled" byl
+ * **45 dní bez jediné stopy** a bez jediného otevřeného úkolu.
+ *
+ * Čtrnáct dní není odhad — je to číslo, které pole v nastavení klienta
+ * odjakživa ukazuje jako `placeholder`. Rozhraní ho slibovalo, logika
+ * ne. Na jeho datech se ozve právě u toho jednoho klienta, který
+ * doopravdy vypadl (45 dní), a mlčí u zbylých tří (12, 5 a 1 den) —
+ * signál má zůstat vzácný a zasloužený.
+ *
+ * **Výchozí práh platí jen pro KLIENTA, ne pro oblast.** „Osobní"
+ * a „Interní" jsou přihrádky na moji vlastní práci, ne vztah, který může
+ * utichnout — nadávat mi, že jsem si čtrnáct dní nezaložil osobní úkol,
+ * je hluk. Vlastní `checkIntervalDays` se naopak ctí u čehokoli: kdo si
+ * ho nastavil, rozhodl se.
+ */
 export function neglectedDays(c: Client, today?: string): number | null {
-  if (!c.checkIntervalDays || !c.lastActivityAt) return null
+  const prah = c.checkIntervalDays ?? (c.kind === 'client' ? HLIDANI_VYCHOZI_DNI : undefined)
+  if (!prah || !c.lastActivityAt) return null
   const days = daysSince(c.lastActivityAt, today)
-  return days > c.checkIntervalDays ? days : null
+  return days > prah ? days : null
 }
 
 const effectiveDate = (t: Task): string | undefined => {

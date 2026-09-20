@@ -135,8 +135,33 @@ describe('stav klienta', () => {
     expect(casti[1].text).toMatch(/^ticho /)
   })
 
-  it('ticho mlčí, dokud klient nemá nastavený interval kontroly', () => {
+  it('ticho se ozve i bez ručně nastaveného intervalu — u klienta hlídá appka sama', () => {
+    // Dřív tu stálo opačné tvrzení („ticho mlčí, dokud klient nemá
+    // nastavený interval"). Změřeno na skutečných datech: interval
+    // neměl nastavený ANI JEDEN z pěti klientů, takže hlídání
+    // zanedbání nemohlo vzniknout vůbec — a jeden klient byl přitom
+    // 45 dní bez jediné stopy.
     const c = klient({ lastActivityAt: `${posun(-99)}T09:00:00.000Z` })
+    expect(texty(stavKlienta(c, []))).toEqual(['ticho 99 dní', 'žádné úkoly'])
+  })
+
+  it('čerstvý klient pod výchozím prahem mlčí dál', () => {
+    const c = klient({ lastActivityAt: `${posun(-5)}T09:00:00.000Z` })
+    expect(texty(stavKlienta(c, []))).toEqual(['žádné úkoly'])
+  })
+
+  it('oblast se nehlídá — „Osobní" není vztah, který může utichnout', () => {
+    const c = klient({ kind: 'personal', lastActivityAt: `${posun(-99)}T09:00:00.000Z` })
+    expect(texty(stavKlienta(c, []))).not.toContain('ticho 99 dní')
+  })
+
+  it('…ale vlastní interval se ctí i u oblasti — to je rozhodnutí', () => {
+    const c = klient({ kind: 'personal', checkIntervalDays: 7, lastActivityAt: `${posun(-99)}T09:00:00.000Z` })
+    expect(texty(stavKlienta(c, []))).toContain('ticho 99 dní')
+  })
+
+  it('nula vypíná hlídání i u klienta', () => {
+    const c = klient({ checkIntervalDays: 0, lastActivityAt: `${posun(-99)}T09:00:00.000Z` })
     expect(texty(stavKlienta(c, []))).toEqual(['žádné úkoly'])
   })
 })
