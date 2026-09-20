@@ -29,23 +29,32 @@ export function stavKlienta(
   volby: { sdileno?: boolean; todoist?: boolean } = {},
   today: string = todayISO(),
 ): StavovaCast[] {
+  // Propadlé se rozpadají na dvě věci a řádka je nesmí slít do jedné:
+  // propadlý TERMÍN je slib klientovi, kdežto nestihnutý vlastní plán je
+  // moje vnitřní věc. Dřív se počítalo obojí jako „po termínu" a psalo
+  // červeně, takže klient „hořel" jen proto, že jsem si jeho úkol
+  // naplánoval na včerejšek. Viz `src/lib/vseUkoly.ts`.
   let hori = 0
+  let nestihnuto = 0
   let den: string | undefined
   for (const t of otevrene) {
     const d = effectiveDate(t)
     if (!d) continue
-    if (d < today) hori++
-    else if (!den || d < den) den = d
+    if (d < today) {
+      if (t.dueDate !== undefined && t.dueDate < today) hori++
+      else nestihnuto++
+    } else if (!den || d < den) den = d
   }
 
   const casti: StavovaCast[] = []
   if (hori > 0) casti.push({ text: `${hori} po termínu`, tone: 'danger' })
+  if (nestihnuto > 0) casti.push({ text: `${nestihnuto} nestihnuto`, tone: 'note' })
   const ticho = neglectedDays(client, today)
   if (ticho !== null) casti.push({ text: `ticho ${ticho} dní`, tone: 'note' })
   if (otevrene.length === 0) casti.push({ text: 'žádné úkoly' })
   else if (den) casti.push({ text: formatDayLabel(den).toLowerCase() })
   // „nic naplánováno" vedle propadlých je hluk — propadlé řeknou dost.
-  else if (!hori) casti.push({ text: 'nic naplánováno' })
+  else if (!hori && !nestihnuto) casti.push({ text: 'nic naplánováno' })
   // U oblastí („Interní", „Osobní") se druh hlásí — u klienta je zbytečný.
   if (client.kind !== 'client') casti.push({ text: KIND_LABELS[client.kind] })
   if (volby.sdileno) casti.push({ text: 'sdíleno' })

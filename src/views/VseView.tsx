@@ -24,7 +24,7 @@ import type { Task } from '../db/types'
 import { allClients, allProjects, completeTask, openTasks, reopenTask, sortTasks } from '../db/repo'
 import { todayISO } from '../lib/dates'
 import { plural } from '../lib/labels'
-import { jePropadly } from '../lib/vseUkoly'
+import { jePropadly, popisPropadlych } from '../lib/vseUkoly'
 import { Chip } from '../components/Chip'
 import { TaskRow } from '../components/TaskRow'
 import { TriageSheet } from '../components/TriageSheet'
@@ -100,6 +100,9 @@ export function VseView({
     () => sortTasks(mojeUkoly(open.filter((t) => jePropadly(t, dnes)), ja)),
     [open, dnes, ja],
   )
+  // Táž řádka jako na Dnes, tedy i totéž jméno a tón: „po termínu" jen
+  // když nějaký termín opravdu propadl (`src/lib/vseUkoly.ts`).
+  const popis = useMemo(() => popisPropadlych(propadle, dnes), [propadle, dnes])
 
   const skupiny: Skupina[] = useMemo(
     () =>
@@ -228,15 +231,19 @@ export function VseView({
       <section className="rise" style={stagger(2)}>
         {open.length > 0 ? (
           <div className="seznam-na-papire">
-            {propadle.length > 0 && (
+            {popis && (
               // Táž řádka triáže jako na Dnes: kde jsou propadlé vidět,
               // tam musí být i cesta ven po jednom.
               <button
                 onClick={() => setTriageOpen(true)}
                 className="flex w-full items-center justify-between gap-2 border-b border-line px-4 py-2.5 text-left transition-colors duration-150 active:bg-well/60"
               >
-                <span className="text-[13px] font-medium text-danger first-letter:uppercase">
-                  po termínu · {propadle.length}
+                <span
+                  className={`text-[13px] font-medium first-letter:uppercase ${
+                    popis.tone === 'danger' ? 'text-danger' : 'text-note-ink'
+                  }`}
+                >
+                  {popis.slovo} · {popis.pocet}
                 </span>
                 <span className="flex shrink-0 items-center gap-1 text-[13px] font-medium text-accent-deep">
                   Projít

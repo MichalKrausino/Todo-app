@@ -579,7 +579,10 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
     const ukoly = Array.from({ length: 400 }, (_, i) => ({
       id: 'zk' + i, createdAt: ted, updatedAt: ted, title: 'Zátěžový úkol ' + i,
       priority: 'normal', status: 'active', order: i,
-      scheduledFor: den(i % 3 === 0 ? -2 : i % 10), // část po termínu, část dopředu
+      // Část do minula, část dopředu. Je to NAPLÁNOVÁNÍ, ne termín, takže
+      // se ta hromádka jmenuje „nestihnuto" — proto čtení níž bere obě
+      // jména (`popisPropadlych` v src/lib/vseUkoly.ts).
+      scheduledFor: den(i % 3 === 0 ? -2 : i % 10),
     }))
     await zapis('tasks', ukoly)
     return ukoly.length
@@ -593,7 +596,7 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   // Hlavička ale musí říkat pravdu — počet je celkový, ne kolik se kreslí.
   const hlavicka = await page.evaluate(() => {
     const t = document.body.innerText || ''
-    const m = t.match(/po termínu[^0-9]*(\d+)/i) || t.match(/dnes[^0-9]*(\d+)/i)
+    const m = t.match(/(?:po termínu|nestihnuto)[^0-9]*(\d+)/i) || t.match(/dnes[^0-9]*(\d+)/i)
     return m ? m[1] : 'nenalezeno: ' + t.slice(0, 120).replace(/\n/g, ' | ')
   })
   T_(Number(hlavicka) > 100, 'počet v hlavičce sekce je celkový, ne jen vykreslený (' + hlavicka + ')')
@@ -611,9 +614,9 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
 
   // --- triáž propadlých: odpověď musí úkol opravdu posunout a jít vzít zpět
   await page.getByRole('button',{name:'Dnes',exact:true}).click(); await page.waitForTimeout(900)
-  const poTerminu = async () => Number((await page.evaluate(() => (document.body.innerText.match(/po termínu[^0-9]*(\d+)/i) || [])[1])) || 0)
+  const poTerminu = async () => Number((await page.evaluate(() => (document.body.innerText.match(/(?:po termínu|nestihnuto)[^0-9]*(\d+)/i) || [])[1])) || 0)
   const pred = await poTerminu()
-  T_(pred > 100, 'sekce po termínu je plná (' + pred + ')')
+  T_(pred > 100, 'sekce propadlých je plná (' + pred + ')')
 
   await page.getByRole('button',{name:/Projít/}).click(); await page.waitForTimeout(800)
   T_(await page.locator('.sheet-panel').count() > 0, 'triáž se otevřela')
@@ -1048,6 +1051,75 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   const poDruhem = await plan()
   T_(poDruhem.seenAt === poPrvnim.seenAt && poDruhem.updatedAt === poPrvnim.updatedAt,
      'druhé otevření razítko nepřepisuje (jinak by každé nahlédnutí poslalo plán znovu na server)')
+  await ctx.close()
+}
+
+// --- 14. propadlé mají dvě jména a jen jedno z nich je červené ---
+// Řádka triáže nad seznamem říkala VŠEMU „po termínu" a psala to
+// červeně. Jenže „kdy to je" je dřívější z termínu a NAPLÁNOVÁNÍ, a
+// naplánování je den, který si člověk vybral sám — nestihnout ho je
+// běžný čtvrtek, ne propásnutý slib.
+//
+// Změřeno na skutečných datech: appka hlásila „po termínu · 8" a ani
+// jeden z těch osmi po termínu nebyl — sedm žádný termín nemělo a osmý
+// ho měl až ZÍTRA. Řádek úkolu přitom mlčel (`TaskRow` barví datum jen
+// podle `dueDate`), takže nad seznamem bez jediné červené položky stálo
+// červené číslo a obrazovka si protiřečila.
+//
+// Unit testy hlídají pravidlo (`popisPropadlych`), tohle hlídá to, co
+// z něj člověk uvidí: JMÉNO a BARVU na skutečné obrazovce. Ta se dá
+// rozbít i beze změny pravidla — stačí do JSX vrátit natvrdo napsané
+// „po termínu" nebo `text-danger`.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  const nasyp = (rows) => page.evaluate(async (rows) => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    await new Promise((res) => {
+      const tx = db.transaction('tasks', 'readwrite')
+      const st = tx.objectStore('tasks')
+      st.clear()
+      const t = new Date().toISOString()
+      const den = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
+      rows.forEach((r, i) => st.put({
+        id: 'px' + i, createdAt: t, updatedAt: t, title: r.title,
+        priority: 'normal', status: 'active', order: i,
+        ...(r.due !== undefined ? { dueDate: den(r.due) } : {}),
+        ...(r.sched !== undefined ? { scheduledFor: den(r.sched) } : {}),
+      }))
+      tx.oncomplete = res
+    })
+  }, rows)
+  const radka = () => page.evaluate(() => {
+    const b = [...document.querySelectorAll('main button')].find((e) => /Projít/.test(e.innerText))
+    if (!b) return null
+    const s = b.querySelector('span')
+    return { text: s.innerText.trim(), barva: getComputedStyle(s).color }
+  })
+
+  // (1) jen nestihnutý vlastní plán — žádný termín nikde
+  await nasyp([{ title: 'Vlastní plán A', sched: -2 }, { title: 'Vlastní plán B', sched: -1 }])
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(1000)
+  const jenPlan = await radka()
+  T_(jenPlan !== null && /nestihnuto/i.test(jenPlan.text), 'bez propadlého termínu se řádka jmenuje „nestihnuto" (' + (jenPlan?.text ?? 'chybí') + ')')
+  T_(jenPlan !== null && !/po termínu/i.test(jenPlan.text), 'a netvrdí „po termínu", když žádný termín nepropadl')
+
+  // (2) termín, který teprve přijde, z minulého naplánování průšvih nedělá
+  await nasyp([{ title: 'Termín až zítra', sched: -1, due: 1 }])
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(1000)
+  const zitra = await radka()
+  T_(zitra !== null && /nestihnuto/i.test(zitra.text), 'termín zítra se dnes nehlásí jako propásnutý (' + (zitra?.text ?? 'chybí') + ')')
+
+  // (3) skutečně propadlý termín — a teprve ten je červený
+  await nasyp([{ title: 'Propadlý termín', due: -1 }, { title: 'Vlastní plán', sched: -2 }])
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(1000)
+  const skutecny = await radka()
+  T_(skutecny !== null && /po termínu/i.test(skutecny.text), 'propadlý termín se jmenuje „po termínu" (' + (skutecny?.text ?? 'chybí') + ')')
+  T_(skutecny !== null && /\b1\b/.test(skutecny.text), 'a počítá jen termíny, ne celou hromádku (' + (skutecny?.text ?? 'chybí') + ')')
+  T_(jenPlan !== null && skutecny !== null && jenPlan.barva !== skutecny.barva,
+     'tón se liší — červená patří jen propadlému termínu (' + (jenPlan?.barva ?? '?') + ' vs ' + (skutecny?.barva ?? '?') + ')')
   await ctx.close()
 }
 

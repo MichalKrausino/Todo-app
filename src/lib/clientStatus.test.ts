@@ -63,6 +63,28 @@ describe('stav klienta', () => {
     expect(texty(stavKlienta(klient(), [ukol({ dueDate: posun(-1) })]))).toEqual(['1 po termínu'])
   })
 
+  it('nestihnutý vlastní plán nehoří — klient za to nemůže', () => {
+    // Naplánování je den, který jsem si vybral já. Dřív se počítalo jako
+    // „po termínu" a klient v seznamu svítil červeně, i když mu žádný
+    // slib propásnutý nebyl.
+    const casti = stavKlienta(klient(), [ukol({ scheduledFor: posun(-2) })])
+    expect(casti[0]).toEqual({ text: '1 nestihnuto', tone: 'note' })
+  })
+
+  it('a nestihnuté se nezamění ani za „nic naplánováno"', () => {
+    expect(texty(stavKlienta(klient(), [ukol({ scheduledFor: posun(-2) })]))).toEqual(['1 nestihnuto'])
+  })
+
+  it('obojí naráz stojí vedle sebe, termín první', () => {
+    const casti = stavKlienta(klient(), [ukol({ dueDate: posun(-1) }), ukol({ scheduledFor: posun(-2) })])
+    expect(texty(casti)).toEqual(['1 po termínu', '1 nestihnuto'])
+  })
+
+  it('termín, který teprve přijde, nedělá z minulého naplánování průšvih', () => {
+    const casti = stavKlienta(klient(), [ukol({ scheduledFor: posun(-1), dueDate: posun(3) })])
+    expect(casti[0]).toEqual({ text: '1 nestihnuto', tone: 'note' })
+  })
+
   it('scheduledFor vyhrává nad pozdějším dueDate', () => {
     const casti = stavKlienta(klient(), [ukol({ dueDate: posun(9), scheduledFor: posun(1) })])
     expect(texty(casti)).toEqual(['zítra'])

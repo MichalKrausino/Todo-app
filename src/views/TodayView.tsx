@@ -23,6 +23,7 @@ import { WORK_END, WORK_START, freeGaps, freeMinutes, minutesToLabel, type BusyI
 import { computeSignals } from '../lib/signals'
 import { plural } from '../lib/labels'
 import { poradiDne, type PolozkaDne } from '../lib/dnesPoradi'
+import { popisPropadlych } from '../lib/vseUkoly'
 import { Chip } from '../components/Chip'
 import { HelpSheet } from '../components/HelpSheet'
 import { ShutdownSheet } from '../components/ShutdownSheet'
@@ -279,6 +280,9 @@ export function TodayView({
     () => poradiDne(overdue, todays, today, sortTasks),
     [overdue, todays, today],
   )
+  // Co ta hromádka doopravdy je — propadlé termíny, nebo jen vlastní
+  // plán, na který nedošlo (`src/lib/vseUkoly.ts`).
+  const popis = useMemo(() => popisPropadlych(visOverdue, today), [visOverdue, today])
   const otevrene = poradi.length
   const viditelne = useMemo(() => poradi.slice(0, limit), [poradi, limit])
   const zbyva = otevrene - viditelne.length
@@ -480,15 +484,24 @@ export function TodayView({
             </div>
 
             <div className="seznam-na-papire">
-              {visOverdue.length > 0 && (
+              {popis && (
                 // Řádka triáže: u stovky propadlých je seznam slepá ulička —
                 // průchod po jednom je jediná cesta ven.
                 <button
                   onClick={() => setTriageOpen(true)}
                   className="flex w-full items-center justify-between gap-2 border-b border-line px-4 py-2.5 text-left transition-colors duration-150 active:bg-well/60"
                 >
-                  <span className="text-[13px] font-medium text-danger first-letter:uppercase">
-                    po termínu · {visOverdue.length}
+                  {/* Jméno i barva se řídí tím, co v hromádce doopravdy
+                      je: „po termínu" jen s propadlým TERMÍNEM, jinak
+                      tiché „nestihnuto" (`popisPropadlych`). Dřív tu
+                      stálo červené „po termínu" i nad osmi úkoly, z nichž
+                      ani jeden termín neměl. */}
+                  <span
+                    className={`text-[13px] font-medium first-letter:uppercase ${
+                      popis.tone === 'danger' ? 'text-danger' : 'text-note-ink'
+                    }`}
+                  >
+                    {popis.slovo} · {popis.pocet}
                   </span>
                   <span className="flex shrink-0 items-center gap-1 text-[13px] font-medium text-accent-deep">
                     Projít
