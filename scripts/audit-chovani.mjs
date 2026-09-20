@@ -1128,15 +1128,19 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
 // jen na obrazovce Dnes — tedy v den, kdy už se s tím nedá nic dělat.
 // Ve chvíli, kdy se práce na budoucí den sype, mlčela.
 //
-// Změřeno na skutečných datech (12 dní provozu): čtvrtek se 7 úkoly a
-// 495 minutami dal 1 odškrtnutí, pátek se 4 úkoly a 225 minutami nula —
-// zatímco obě soboty, na které se neplánovalo nic, daly po dvou. Dny,
-// které se naplní, jsou přesně ty, co spadnou.
+// Změřeno na 12 dnech provozu: čtvrtek se SEDMI úkoly dal jedno
+// odškrtnutí, pátek se čtyřmi nula — zatímco obě soboty, na které se
+// neplánovalo nic, daly po dvou. Dny, které se naplní, jsou přesně ty,
+// co spadnou.
 //
-// Unit testy hlídají pravidlo (`kapacitaDne`), tohle hlídá, co z něj
-// člověk uvidí a hlavně KDY: toast ve chvíli zadání, cesta ven jedním
-// ťuknutím, a ticho na dni, který plný není. Pruhem to změřit nejde —
-// přeplněný den se stlačí na celý pruh a vypadá jako přesně plný.
+// MĚŘÍ SE V ÚKOLECH, NE V MINUTÁCH. `estimateMinutes` je hádaný (53 %
+// úkolů ho nemá vůbec, zbytek má jen dvě hodnoty) a s realitou se nikdy
+// neporovná — verdikt na něm stavět nejde. Počet úkolů je fakt.
+//
+// Unit testy hlídají pravidlo (`kapacitaDne`, `prutok`); tohle hlídá,
+// co z něj člověk uvidí a hlavně KDY: toast ve chvíli zadání, cesta ven
+// jedním ťuknutím, ticho na dni, který plný není, a čitelná značka
+// v mřížce.
 {
   const ctx = await b.newContext({viewport:{width:390,height:844}})
   const page = await ctx.newPage()
@@ -1154,8 +1158,10 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
     return d.toISOString().slice(0, 10)
   }, cil)
 
-  // Plný den: šest úkolů po 90 minutách = 9 h, tedy přes strop i s tolerancí.
-  const nasyp = (den, kolik) => page.evaluate(async ({ den, kolik }) => {
+  // `historie` = osm dnů po dvou hotových úkolech → dobrý den 2, strop 2,
+  // takže se appka ozve od ČTYŘ úkolů na den (strop + tolerance 1).
+  // `otevrenych` je, kolik jich na cílový den leží předem.
+  const nasyp = (den, otevrenych, historie) => page.evaluate(async ({ den, otevrenych, historie }) => {
     const req = indexedDB.open('todo')
     const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
     await new Promise((res) => {
@@ -1163,13 +1169,22 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
       const st = tx.objectStore('tasks')
       st.clear()
       const t = new Date().toISOString()
-      for (let i = 0; i < kolik; i++) st.put({
-        id: 'sp' + i, createdAt: t, updatedAt: t, title: 'Plnivo ' + i,
-        priority: 'normal', status: 'active', order: i, dueDate: den, estimateMinutes: 90,
+      for (let i = 0; i < otevrenych; i++) st.put({
+        id: 'op' + i, createdAt: t, updatedAt: t, title: 'Otevřený ' + i,
+        priority: 'normal', status: 'active', order: i, dueDate: den,
       })
+      if (historie) {
+        for (let i = 0; i < 8; i++) {
+          const d = new Date(); d.setDate(d.getDate() - (i + 1))
+          for (let k = 0; k < 2; k++) st.put({
+            id: `ho${i}_${k}`, createdAt: t, updatedAt: t, title: `Hotový ${i}/${k}`,
+            priority: 'normal', status: 'done', order: i, completedAt: d.toISOString(),
+          })
+        }
+      }
       tx.oncomplete = res
     })
-  }, { den, kolik })
+  }, { den, otevrenych, historie })
 
   const doPlanu = async () => {
     await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
@@ -1197,29 +1212,31 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   }, nazev)
 
   // (1) na přeplněný den appka práci pustí, ale řekne to a nabídne cestu ven
-  await nasyp(cil, 6)
+  await nasyp(cil, 3, true)
   await doPlanu()
-  await zadej(cil, 'Sedmý na plný den')
+  await zadej(cil, 'Čtvrtý na plný den')
   const plny = await toast()
-  T_(plny !== null && /h práce/.test(plny.text), 'zadání na plný den řekne, kolik na něm stojí (' + (plny?.text ?? 'bez toastu') + ')')
+  T_(plny !== null && /obvykle \d/.test(plny.text), 'zadání na plný den řekne, kolik jich tam je a kolik obvykle zvládneš (' + (plny?.text ?? 'bez toastu') + ')')
   T_(plny !== null && plny.tlacitka.includes('Jinam'), 'a nabídne „Jinam" — appka neradí, appka uhne')
-  T_(await denUkolu('Sedmý na plný den') === cil, 'a úkol na tom dni ZŮSTANE, dokud člověk sám nepohne (appka nezakazuje)')
+  T_(await denUkolu('Čtvrtý na plný den') === cil, 'a úkol na tom dni ZŮSTANE, dokud člověk sám nepohne (appka nezakazuje)')
 
   // (2) „Jinam" úkol opravdu přesune a neztratí ho.
   // Tlačítko se klikne, jen když existuje: chybějící prvek má být NÁLEZ,
   // ne výjimka, která shodí zbytek oddílu a udělá z něj mlčení.
   const jinam = page.locator('[role="status"] button', { hasText: 'Jinam' })
   if (await jinam.count() > 0) { await jinam.click(); await page.waitForTimeout(700) }
-  const poJinam = await denUkolu('Sedmý na plný den')
+  const poJinam = await denUkolu('Čtvrtý na plný den')
   T_(poJinam !== null, '„Jinam" úkol neztratí')
   T_(poJinam !== null && poJinam !== cil, 'a opravdu ho odnese z plného dne (' + poJinam + ' ≠ ' + cil + ')')
 
-  // (3) na dni, který plný není, appka mlčí — signál, co svítí pořád, není signál
-  await nasyp(cil, 6)
+  // (3) na dni, který plný není, appka mlčí — signál, co svítí pořád, není signál.
+  // Cílový den má rovnou čtyři úkoly, tedy nad stropem: na něm pak čte
+  // kontrola (4) mřížku, aniž by se muselo seít potřetí.
+  await nasyp(cil, 4, true)
   await doPlanu()
   await zadej(volny, 'První na volný den')
   const volnyToast = await toast()
-  T_(volnyToast !== null && !/h práce/.test(volnyToast.text), 'na volný den se o stropu nemluví (' + (volnyToast?.text ?? 'bez toastu') + ')')
+  T_(volnyToast !== null && !/obvykle \d/.test(volnyToast.text), 'na volný den se o stropu nemluví (' + (volnyToast?.text ?? 'bez toastu') + ')')
   T_(volnyToast !== null && !volnyToast.tlacitka.includes('Jinam'), 'a „Jinam" se tam nenabízí')
 
   // (4) v mřížce je plný den poznat — a to je jediné místo, kde se den vybírá
@@ -1230,15 +1247,10 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   T_(/přeplněno/.test(popisy.plny), 'buňka plného dne to má v popisu (' + popisy.plny + ')')
   T_(!/přeplněno/.test(popisy.volny), 'a buňka dne pod stropem ne (' + popisy.volny + ')')
 
-  // …a hlavně je to VIDĚT. Pruh v buňce se přes strop natáhnout nemůže,
-  // takže den s osmi a den s třinácti hodinami kreslí totéž; nese to
-  // proto barva čísla. Čte se ze skutečné obrazovky, ne z pravidla —
-  // tenhle signál se dá ztratit, aniž by se pravidlo hnulo (stačí
-  // vypustit větev v JSX) a přístupný popis by zůstal v pořádku.
-  // Porovnává se s TOKENEM, ne s jiným dnem v mřížce. Srovnání „plný den
-  // vs nějaký jiný" je planá kontrola: kdyby se tón vůbec nekreslil,
-  // vyšel by plný den jako `ink` a ten druhý jako víkendový `ink-soft` —
-  // dvě různé barvy, kontrola projde a signál přitom není.
+  // …a hlavně je to VIDĚT. Čte se proti TOKENU, ne proti jinému dni:
+  // srovnání „plný den vs nějaký jiný" je planá kontrola — kdyby se tón
+  // nekreslil vůbec, vyšel by plný den jako `ink` a ten druhý jako
+  // víkendový `ink-soft`, tedy dvě různé barvy a kontrola projde.
   const barvy = await page.evaluate((cil) => {
     const sonda = document.createElement('span')
     sonda.style.color = 'var(--color-note-ink)'
@@ -1253,19 +1265,19 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
-// --- 16. strop je OSOBNÍ, ne nominální ---
-// Strop z oddílu 15 měřil proti pracovní době, tedy osmi hodinám. To je
-// poctivé číslo o hodinách, ale o téhle appce neříká nic: v ní nestojí
-// celý den, jen práce, kterou si do ní člověk zapíše.
+// --- 16. bez historie appka nehlídá NIC ---
+// Strop se počítá z vlastní historie (`prutok.ts`): kolik úkolů za den
+// tímhle člověkem opravdu projde. Dokud jich appka nemá dost (`MIN_DNU`),
+// nevrací žádné číslo a nehlídá se.
 //
-// Změřeno na sedmnácti dnech skutečného provozu: medián 120 min za den,
-// NEJLEPŠÍ DEN 150. Nominální strop byl tedy víc než trojnásobek
-// životního rekordu — strážce, který se nemá jak ozvat.
+// Dřív se v té situaci sahalo po pracovní době, tedy po osmi hodinách —
+// jenže to nebyla znalost, jen náhradní číslo, které se tvářilo jako
+// znalost. A protože odhady času jsou hádané, byl z toho strop, který
+// se na skutečných datech nemohl ozvat: nejlepší den za celý provoz měl
+// 150 minut, strop byl 480.
 //
-// Tahle kontrola je přesně o tom rozdílu: den, který by osmihodinový
-// strop propustil bez hlesnutí, musí appka po poznání člověka zachytit.
-// Unit testy hlídají výpočet (`prutok.test.ts`); tohle hlídá, že se to
-// číslo opravdu dostane až na obrazovku.
+// Tahle kontrola je přesně o tom rozdílu: týž den, tytéž úkoly — jednou
+// bez historie (ticho), podruhé s ní (ozve se).
 {
   const ctx = await b.newContext({viewport:{width:390,height:844}})
   const page = await ctx.newPage()
@@ -1277,9 +1289,6 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
     return d.toISOString().slice(0, 10)
   })
 
-  // Historie: osm dnů po hodině hotové práce → dobrý den 60 min, strop
-  // spadne na spodní hranici 120 min. Na cíl pak tři hodiny práce, tedy
-  // dvojnásobek stropu — ale jen 3/8 nominálního dne.
   const nasyp = (den, historie) => page.evaluate(async ({ den, historie }) => {
     const req = indexedDB.open('todo')
     const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
@@ -1288,17 +1297,16 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
       const st = tx.objectStore('tasks')
       st.clear()
       const t = new Date().toISOString()
-      for (let i = 0; i < 3; i++) st.put({
+      for (let i = 0; i < 4; i++) st.put({
         id: 'op' + i, createdAt: t, updatedAt: t, title: 'Otevřený ' + i,
-        priority: 'normal', status: 'active', order: i, dueDate: den, estimateMinutes: 60,
+        priority: 'normal', status: 'active', order: i, dueDate: den,
       })
       if (historie) {
         for (let i = 0; i < 8; i++) {
           const d = new Date(); d.setDate(d.getDate() - (i + 1))
-          st.put({
-            id: 'ho' + i, createdAt: t, updatedAt: t, title: 'Hotový ' + i,
-            priority: 'normal', status: 'done', order: i, estimateMinutes: 60,
-            completedAt: d.toISOString(),
+          for (let k = 0; k < 2; k++) st.put({
+            id: `ho${i}_${k}`, createdAt: t, updatedAt: t, title: `Hotový ${i}/${k}`,
+            priority: 'normal', status: 'done', order: i, completedAt: d.toISOString(),
           })
         }
       }
@@ -1312,11 +1320,11 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
     return page.evaluate((c) => document.querySelector(`button[data-day="${c}"]`)?.getAttribute('aria-label') ?? '', cil)
   }
 
-  // (1) bez historie appka člověka nezná a drží se pracovní doby
+  // (1) bez historie se nehlídá nic — appka si strop nevymýšlí
   await nasyp(cil, false)
   const bezHistorie = await popisCile()
-  T_(/3 úkoly/.test(bezHistorie) && !/přeplněno/.test(bezHistorie),
-     'bez historie se tři hodiny práce do dne vejdou — appka si strop nevymýšlí (' + bezHistorie + ')')
+  T_(/4 úkoly/.test(bezHistorie) && !/přeplněno/.test(bezHistorie),
+     'bez historie appka nenamítá nic, ani proti čtyřem úkolům na den (' + bezHistorie + ')')
 
   // (2) s historií týž den přeplněný je
   await nasyp(cil, true)

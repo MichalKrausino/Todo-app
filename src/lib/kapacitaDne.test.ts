@@ -1,73 +1,59 @@
 import { describe, expect, it } from 'vitest'
-import {
-  hodiny,
-  jePreplneno,
-  popisPreplneneho,
-  prebytekDne,
-  STROP_DNE_MIN,
-  TOLERANCE_MIN,
-} from './kapacitaDne'
-import { PLNY_DEN_MIN } from './pruhDne'
+import { jePreplneno, popisPreplneneho, prebytekDne, TOLERANCE_UKOLU } from './kapacitaDne'
+
+// Strop 2 = „dobrý den" z měřených dat (17 dnů, medián 2, rekord 3).
+const STROP = 2
 
 describe('strop dne', () => {
-  it('je týž jako celý pruh dne — appka nemá dvě míry vytížení', () => {
-    expect(STROP_DNE_MIN).toBe(PLNY_DEN_MIN)
+  // Nejdůležitější vlastnost celé věci: appka, která toho člověka ještě
+  // nezná, nehlídá nic. Náhradní číslo, které se tváří jako znalost, je
+  // horší než ticho.
+  it('bez stropu není přeplněné nic, ani třicet úkolů', () => {
+    expect(jePreplneno(0, undefined)).toBe(false)
+    expect(jePreplneno(30, undefined)).toBe(false)
+    expect(prebytekDne(30, undefined)).toBe(0)
   })
 
   it('prázdný a poloprázdný den mlčí', () => {
-    expect(jePreplneno(0)).toBe(false)
-    expect(jePreplneno(PLNY_DEN_MIN / 2)).toBe(false)
+    expect(jePreplneno(0, STROP)).toBe(false)
+    expect(jePreplneno(1, STROP)).toBe(false)
   })
 
-  it('přesně plný den ještě není přeplněný', () => {
-    expect(jePreplneno(PLNY_DEN_MIN)).toBe(false)
-    expect(prebytekDne(PLNY_DEN_MIN)).toBe(0)
+  it('den přesně na stropu ještě není přeplněný', () => {
+    expect(jePreplneno(STROP, STROP)).toBe(false)
+    expect(prebytekDne(STROP, STROP)).toBe(0)
   })
 
-  it('přesah do tolerance včetně se neřeší — signál, co svítí pořád, není signál', () => {
-    expect(jePreplneno(PLNY_DEN_MIN + TOLERANCE_MIN)).toBe(false)
-    expect(prebytekDne(PLNY_DEN_MIN + TOLERANCE_MIN)).toBe(0)
+  it('o úkol navíc je ambiciózní den, ne přeplněný', () => {
+    expect(jePreplneno(STROP + TOLERANCE_UKOLU, STROP)).toBe(false)
+    expect(prebytekDne(STROP + TOLERANCE_UKOLU, STROP)).toBe(0)
   })
 
   it('a hned za tolerancí se ozve', () => {
-    expect(jePreplneno(PLNY_DEN_MIN + TOLERANCE_MIN + 1)).toBe(true)
-    expect(prebytekDne(PLNY_DEN_MIN + TOLERANCE_MIN + 1)).toBe(TOLERANCE_MIN + 1)
+    expect(jePreplneno(STROP + TOLERANCE_UKOLU + 1, STROP)).toBe(true)
+    expect(prebytekDne(STROP + TOLERANCE_UKOLU + 1, STROP)).toBe(TOLERANCE_UKOLU + 1)
+  })
+
+  // Ty tři skutečné dny, kvůli kterým celá věc vznikla. Rozlišení sedí
+  // přesně: ozve se na obou dnech, které spadly, a mlčí na tom třetím.
+  it('skutečná data: čtvrtek se sedmi a pátek se čtyřmi ano, den se třemi ne', () => {
+    expect(jePreplneno(7, STROP)).toBe(true)
+    expect(jePreplneno(4, STROP)).toBe(true)
+    expect(jePreplneno(3, STROP)).toBe(false)
   })
 
   it('přebytek je celý přesah přes strop, ne přes toleranci', () => {
-    expect(prebytekDne(PLNY_DEN_MIN + 120)).toBe(120)
-  })
-
-  // Ten skutečný čtvrtek 17. 9.: 495 minut ÚKOLŮ, tedy 8,25 h z osmi
-  // hodin pracovní doby — plný, než se započítá první schůzka. Samotné
-  // úkoly se ještě vejdou do tolerance; přes strop ho přehodí schůzka
-  // delší než čtvrt hodiny. Přesně tak to má být: tolerance je pro
-  // obyčejný nabitý den, ne pro den, do kterého se ještě něco vejde.
-  it('nabitý den se pozná teprve i se schůzkami', () => {
-    expect(jePreplneno(495)).toBe(false)
-    expect(jePreplneno(495 + 30)).toBe(true)
-    expect(prebytekDne(495 + 30)).toBe(45)
-  })
-})
-
-describe('hodiny', () => {
-  it('píše desetinu hodiny s českou čárkou', () => {
-    expect(hodiny(495)).toBe('8,3 h')
-    expect(hodiny(90)).toBe('1,5 h')
-  })
-
-  it('celé hodiny nechává celé', () => {
-    expect(hodiny(480)).toBe('8 h')
-    expect(hodiny(60)).toBe('1 h')
-  })
-
-  it('nula je nula, ne prázdno', () => {
-    expect(hodiny(0)).toBe('0 h')
+    expect(prebytekDne(7, STROP)).toBe(5)
   })
 })
 
 describe('popis do toastu', () => {
-  it('říká výsledek, ne výtku', () => {
-    expect(popisPreplneneho('čtvrtek 17. 9.', 495)).toBe('čtvrtek 17. 9. má 8,3 h práce')
+  it('říká výsledek i měřítko, ne výtku', () => {
+    expect(popisPreplneneho('čt 17. 9.', 7, 2)).toBe('čt 17. 9. má 7 úkolů · obvykle 2')
+  })
+
+  it('skloňuje po česku', () => {
+    expect(popisPreplneneho('dnes', 1, 2)).toBe('dnes má 1 úkol · obvykle 2')
+    expect(popisPreplneneho('dnes', 4, 2)).toBe('dnes má 4 úkoly · obvykle 2')
   })
 })

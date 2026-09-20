@@ -10,47 +10,34 @@
 // `ink-faint` je barva textu a na pruhu, který může zabrat celou šířku,
 // z něj byla černá lišta — na Dnes hned pod titulkem nejhlasitější prvek
 // obrazovky. Barevná je práce pro klienta, všechno ostatní je podklad.
+//
+// PRUH NENESE VERDIKT
+//
+// Chvíli tu byla značka „tenhle den přetekl". Vzala se zpátky, protože
+// délka pruhu stojí na `estimateMinutes`, a to je HÁDANÉ číslo: 53 %
+// úkolů ho nemá vůbec (počítá se jim 60 min) a zbytek má jen dvě
+// hodnoty. Na takovém základě se dá kreslit hrubý obrázek „kolik a komu",
+// ale ne rozsudek „je toho moc". Ten se rozhoduje z POČTU úkolů
+// (`kapacitaDne.ts` + `prutok.ts`) a říká ho číslo dne v mřížce, řádka
+// pod agendou a toast při zadávání.
 import { PLNY_DEN_MIN, minutyDilu, type Dil } from '../lib/pruhDne'
-import { jePreplneno } from '../lib/kapacitaDne'
 
 export function PruhDne({
   dily,
   klid,
   className = 'h-2.5',
-  znackaPreteceni = true,
-  strop,
 }: {
   dily: Dil[]
   klid: boolean
   /** výška a cokoli navíc — v Plánu h-2.5, na Dnes tenčí */
   className?: string
-  /**
-   * Značka useknuté osy na konci. V pruhu přes celou šířku je to pětipixelový
-   * proužek z ~350, tedy přesně tak tichá, jak má být. V buňce mřížky je pruh
-   * 28 px široký a týž proužek z něj zabere pětinu — změřeno na snímku ve
-   * čtyřnásobném zvětšení a čte se jako DALŠÍ KLIENT, ne jako „useknuto".
-   * Mřížka proto přetečení říká barvou čísla dne a značku si vypíná.
-   */
-  znackaPreteceni?: boolean
-  /** strop dne v minutách; bez něj platí pracovní doba (viz kapacitaDne.ts) */
-  strop?: number
 }) {
   const celkem = minutyDilu(dily)
-  // Přetečený den se stlačí na celý pruh — délka je čas a delší než den
-  // být nemůže. Že přetekl, proto musí říct ZNAČKA NA KONCI: pod agendou
-  // je pod pruhem popisek, ale v mřížce Plánu žádný není, takže tam
-  // vypadal den s osmi hodinami a den s třinácti úplně stejně — a mřížka
-  // je přitom to jediné místo, kde se den vybírá. Je to tentýž způsob,
-  // jakým se v grafu značí sloupec useknutý osou.
-  const preplneno = jePreplneno(celkem, strop) && znackaPreteceni
-  // Celý pruh = STROP DNE, ne nominálních osm hodin. Jinak by pruh a
-  // verdikt nad ním říkaly každý něco jiného: den se třemi hodinami by
-  // vypadal ze čtvrtiny plný a přitom by byl u konce toho, co tímhle
-  // člověkem za den projde.
-  const zaklad = Math.max(celkem, strop ?? PLNY_DEN_MIN)
+  // Přetečený den se stlačí na celý pruh; že přetekl, řekne popisek.
+  const zaklad = Math.max(celkem, PLNY_DEN_MIN)
   return (
     <span
-      className={`relative flex w-full gap-px overflow-hidden ${preplneno ? 'rounded-l-full' : 'rounded-full'} ${celkem > 0 ? 'bg-well' : 'bg-well/60'} ${className}`}
+      className={`flex w-full gap-px overflow-hidden rounded-full ${celkem > 0 ? 'bg-well' : 'bg-well/60'} ${className}`}
     >
       {dily.map((dil, i) => (
         <span
@@ -64,14 +51,6 @@ export function PruhDne({
           }}
         />
       ))}
-      {preplneno && (
-        // Vlasová mezera v barvě stránky před značkou: bez ní vypadal
-        // proužek na konci jako další klient, ne jako useknutá osa.
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 right-0 w-[5px] border-l border-paper bg-note-ink"
-        />
-      )}
     </span>
   )
 }

@@ -1,82 +1,71 @@
-// Průtok — kolik práce projde tímhle člověkem za den doopravdy.
+// Průtok — kolik úkolů projde tímhle člověkem za den doopravdy.
 //
-// PROČ TO VZNIKLO (a proč hned po stropu dne)
+// PROČ SE POČÍTAJÍ KUSY, NE MINUTY
 //
-// Strop dne (`kapacitaDne.ts`) hlídá přeplněné dny proti délce pracovní
-// doby, tedy osmi hodinám. To je poctivé číslo o hodinách, jenže o TÉHLE
-// appce neříká nic: v ní nestojí celý den, ale jen práce, kterou si do ní
-// člověk zapíše. Schůzky, telefonáty, hašení a všechno ostatní jsou mimo.
+// První verze měřila průtok v minutách a strop dne s ní. Jenže minuta
+// v téhle appce není měřená, je HÁDANÁ: `estimateMinutes` razítkuje
+// heuristika o osmi klíčových slovech (`estimate.ts`) a co se netrefí,
+// nedostane odhad vůbec.
 //
-// Změřeno na sedmnácti dnech, ve kterých se něco dokončilo:
+// Změřeno na 45 úkolech skutečného provozu:
 //
-//   medián dne        120 min
-//   průměr dne         97 min
-//   NEJLEPŠÍ DEN      150 min
+//   bez odhadu          24  (53 %) → tiše se počítá 60 min
+//   odhad 30 min        11
+//   odhad 90 min        10
 //
-// Nominální strop byl tedy **víc než trojnásobek životního rekordu** —
-// strážce, který se prakticky nemá jak ozvat. Na dvanácti dnech skutečného
-// plánování by spustil jediný, a to ještě jen díky schůzkám. Čtvrtek se
-// 495 minutami přitom nebyl „o kousek přes": byl to **trojnásobek
-// nejlepšího dne, jaký kdy byl**.
+// Tedy: polovina konstanta, druhá polovina hod mincí mezi dvěma čísly —
+// a s realitou se to nikdy neporovná, protože appka čas neměří a měřit
+// nezačne (stopky v todo appce jsou práce navíc, kterou nikdo nedělá).
+// Stavět na tom verdikt „tenhle den je přeplněný" znamená stavět ho na
+// písku.
 //
-// PROTO SE STROP POČÍTÁ Z VLASTNÍ HISTORIE
+// Přitom ten nález, kvůli kterému strop vznikl, žádné minuty nepotřebuje:
 //
-// Ne z mediánu: strop na obvyklém dni by se ozval skoro pokaždé a signál,
-// který svítí pořád, přestane být signál (totéž pravidlo jako tolerance
-// ve `kapacitaDne.ts`). Bere se **dobrý den** (`PERCENTIL`) a k němu
-// **rezerva** — plánovat o něco víc, než je obvyklé, je zdravé; plánovat
-// trojnásobek není plán, ale přání.
+//   | den       | naplánováno | hotovo |
+//   |-----------|-------------|--------|
+//   | čt 17. 9. |   7 úkolů   |   1    |
+//   | pá 18. 9. |   4 úkoly   |   0    |
+//   | čt 10. 9. |   3 úkoly   |   0    |
 //
-// DVĚ VĚCI, KTERÉ TOHLE ČÍSLO NEŘÍKÁ
+// Ten příběh vypráví POČET, a počet je fakt. Měřeno na 17 dnech, ve
+// kterých se něco dokončilo: **medián 2 úkoly za den, dobrý den 2,
+// nejlepší den vůbec 3**. Na ten čtvrtek jich bylo naplánováno sedm.
 //
-// (1) Není to „kolik toho ten člověk nadělá" — je to, kolik projde APPKOU.
-//     Kdo si zapisuje každou maličkost, bude mít průtok vyšší, a je to tak
-//     správně: strop má hlídat právě tu evidenci, kterou appka vidí.
-// (2) Stojí na odhadech (`estimateMinutes`), ne na měřeném čase. Appka čas
-//     neměří a měřit nezačne — stopky v todo appce jsou práce navíc, kterou
-//     nikdo nedělá. Obě strany rovnice ale používají TÝŽ odhad, takže se
-//     případná chyba odhadu z porovnání „naplánováno vs. zvládnuto" krátí.
+// KDYŽ APPKA NEVÍ, MLČÍ
+//
+// Bez dostatečné historie nevrací strop žádné číslo (`undefined`) a nic
+// se nehlídá. Dřív se v té situaci sahalo po pracovní době, tedy po
+// osmi hodinách — to ale nebyla znalost, jen náhradní číslo, které se
+// tvářilo jako znalost.
 
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Task } from '../db/types'
 import { hotoveOd } from '../db/repo'
-import { DEFAULT_TASK_MINUTES } from './capacity'
 import { addDays, fromISODate, toISODate, todayISO } from './dates'
-import { PLNY_DEN_MIN } from './pruhDne'
 import { mojeUkoly } from './tymUkoly'
 import { useJa } from './useTym'
 
 /** Kolik dní zpátky se historie čte. */
 export const OKNO_DNI = 30
 /**
- * Kolik dní s hotovou prací musí být v okně, než se osobní strop vezme
- * vážně. Míň je anekdota, ne míra — a hlavně: nová appka nesmí novému
- * člověku hned nasadit strop spočítaný z jeho prvního odpoledne.
+ * Kolik dní s hotovou prací musí být v okně, než se strop vezme vážně.
+ * Míň je anekdota, ne míra — a nová appka nesmí nikomu nasadit strop
+ * spočítaný z jeho prvního odpoledne.
  */
 export const MIN_DNU = 7
 /** „Dobrý den" — ne obvyklý, viz hlavička. */
 export const PERCENTIL = 0.8
-/** Plánovat o něco víc než obvykle je zdravé. */
-export const REZERVA = 1.5
-/**
- * Pod tohle strop nikdy nespadne. Bez spodní hranice by týden dovolené
- * (pár krátkých úkolů) utáhl strop na půl hodiny a appka by pak namítala
- * proti každému druhému úkolu.
- */
-export const MIN_STROP_MIN = 120
 
 export interface Prutok {
   /** kolik dní s hotovou prací okno obsahuje */
   dnu: number
-  /** medián minut za den — „obvyklý den" */
+  /** medián úkolů za den — „obvyklý den" */
   median: number
-  /** dobrý den (PERCENTIL) — z něj se počítá strop */
+  /** dobrý den (PERCENTIL) — z něj je strop */
   dobryDen: number
   /** nejlepší den v okně */
   nejlepsi: number
 }
-
-const minutyUkolu = (t: Task): number => t.estimateMinutes ?? DEFAULT_TASK_MINUTES
 
 /** Kvantil ze setříděného pole (lineární interpolace). Prázdné pole = 0. */
 export function kvantil(setridene: number[], p: number): number {
@@ -90,19 +79,19 @@ export function kvantil(setridene: number[], p: number): number {
 }
 
 /**
- * Minuty hotové práce po dnech. Počítají se JEN dny, ve kterých se něco
+ * Počty hotových úkolů po dnech. Počítají se JEN dny, ve kterých se něco
  * dokončilo — den bez jediného odškrtnutí není den s nulovým průtokem,
  * ale nejspíš den, kdy se appka neotevřela (víkend, dovolená, schůzky
- * celý den). Kdyby se nuly počítaly, stáhly by strop k zemi za každý
- * volný týden.
+ * celý den). Kdyby se nuly počítaly, stáhl by strop k zemi každý volný
+ * týden.
  */
-export function minutyHotovePoDnech(ukoly: Task[], od: string, doDne: string): Map<string, number> {
+export function ukolyHotovePoDnech(ukoly: Task[], od: string, doDne: string): Map<string, number> {
   const out = new Map<string, number>()
   for (const t of ukoly) {
     if (t.deletedAt || t.status !== 'done') continue
     const den = (t.completedAt ?? '').slice(0, 10)
     if (den < od || den > doDne) continue
-    out.set(den, (out.get(den) ?? 0) + minutyUkolu(t))
+    out.set(den, (out.get(den) ?? 0) + 1)
   }
   return out
 }
@@ -110,7 +99,7 @@ export function minutyHotovePoDnech(ukoly: Task[], od: string, doDne: string): M
 /** Průtok z historie, nebo `undefined`, když je dat málo (viz `MIN_DNU`). */
 export function osobniPrutok(ukoly: Task[], dnes: string, okno = OKNO_DNI): Prutok | undefined {
   const od = toISODate(addDays(fromISODate(dnes), -okno))
-  const dny = [...minutyHotovePoDnech(ukoly, od, dnes).values()].sort((a, b) => a - b)
+  const dny = [...ukolyHotovePoDnech(ukoly, od, dnes).values()].sort((a, b) => a - b)
   if (dny.length < MIN_DNU) return undefined
   return {
     dnu: dny.length,
@@ -121,34 +110,32 @@ export function osobniPrutok(ukoly: Task[], dnes: string, okno = OKNO_DNI): Prut
 }
 
 /**
- * Strop dne pro TOHOHLE člověka. Bez dostatečné historie platí pracovní
- * doba — dokud appka nic neví, nevymýšlí si.
+ * Strop dne v úkolech, nebo `undefined`, když appka toho člověka ještě
+ * nezná — pak se nehlídá nic. Náhradní číslo, které se tváří jako
+ * znalost, je horší než ticho.
  *
- * Strop nikdy nepřeleze pracovní dobu (víc než den se do dne nevejde,
- * ať je kdo chce jak výkonný) a nikdy nespadne pod `MIN_STROP_MIN`.
+ * Strop je rovnou DOBRÝ DEN, bez přirážky: tolerance nad ním je v
+ * `kapacitaDne.ts` a je to celý jeden úkol, takže se appka ozve teprve
+ * na dni, kde je práce za dobrý den A JEŠTĚ VÍC NEŽ JEDEN úkol navíc.
  */
-export function stropZPrutoku(prutok: Prutok | undefined): number {
-  if (!prutok) return PLNY_DEN_MIN
-  const navrh = Math.round(prutok.dobryDen * REZERVA)
-  return Math.min(PLNY_DEN_MIN, Math.max(MIN_STROP_MIN, navrh))
+export function stropZPrutoku(prutok: Prutok | undefined): number | undefined {
+  return prutok ? Math.max(1, prutok.dobryDen) : undefined
 }
 
 // ── Živý strop pro obrazovky ────────────────────────────────────────────
-// Hook, ne výpočet v každé obrazovce zvlášť: Plán i Dnes musí kreslit
-// přetečení proti TÉMUŽ číslu. Kdyby si ho každá počítala po svém, byl by
-// na Dnes plný den jinde než v Plánu — přesně ten druh rozporu, kvůli
-// kterému strop vznikl.
-
+// Hook, ne výpočet v každé obrazovce zvlášť: Plán i Dnes musí soudit
+// podle TÉHOŽ čísla. Kdyby si ho každá počítala po svém, byl by plný den
+// na jedné jinde než na druhé — a přesně kvůli takovým rozporům strop
+// vznikl.
 
 /**
- * Osobní strop dne v minutách, živě z historie. Dokud dotaz nedoběhne
- * (nebo je dat málo), platí pracovní doba — appka radši nenamítá nic,
- * než aby namítala podle čísla, které ještě nezná.
+ * Osobní strop dne (v úkolech), živě z historie. Dokud dotaz nedoběhne
+ * nebo je dat málo, je `undefined` a nic se nehlídá.
  *
  * Počítá se jen z MOJÍ práce: u sdíleného klienta odškrtává i kolega a
  * jeho hotové úkoly by mi průtok nafoukly.
  */
-export function useOsobniStrop(): number {
+export function useOsobniStrop(): number | undefined {
   const dnes = todayISO()
   const od = toISODate(addDays(fromISODate(dnes), -OKNO_DNI))
   const ja = useJa()

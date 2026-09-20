@@ -33,10 +33,10 @@ export interface WeekStats {
   quietClients: Client[]
   /** počet otevřených úkolů na příštích 7 dní, den po dni */
   nextDays: Array<{ date: string; count: number }>
-  /** kolik práce projde za den (z posledních 30 dní); undefined = málo dat */
+  /** kolik ÚKOLŮ projde za den (z posledních 30 dní); undefined = málo dat */
   prutok: Prutok | undefined
-  /** strop dne, který z průtoku plyne — totéž číslo, jakým měří Plán */
-  stropDne: number
+  /** strop dne v úkolech — totéž číslo, jakým měří Plán; undefined = nehlídá se */
+  stropDne: number | undefined
 }
 
 const effectiveDate = (t: Task): string | undefined => {
