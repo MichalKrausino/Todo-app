@@ -1,36 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import {
-  kvantil,
-  MIN_DNU,
-  MIN_STROP_MIN,
-  minutyHotovePoDnech,
-  osobniPrutok,
-  REZERVA,
-  stropZPrutoku,
-} from './prutok'
-import { PLNY_DEN_MIN } from './pruhDne'
+import { kvantil, MIN_DNU, osobniPrutok, stropZPrutoku, ukolyHotovePoDnech } from './prutok'
 import type { Task } from '../db/types'
 
 const DNES = '2026-09-20'
 
 let seq = 0
-const hotovy = (den: string, minut?: number, patch: Partial<Task> = {}): Task =>
+const hotovy = (den: string, patch: Partial<Task> = {}): Task =>
   ({
     id: `h${++seq}`,
     title: 'hotovo',
     status: 'done',
     completedAt: `${den}T10:00:00.000Z`,
-    estimateMinutes: minut,
     ...patch,
   }) as Task
 
-/** N dní s hotovou prací, každý den `minut`. */
-const dny = (pocet: number, minut: number, od = 1): Task[] =>
+/** `pocet` dní zpátky od dneška, v každém `zaDen` hotových úkolů. */
+const dny = (pocet: number, zaDen: number, od = 1): Task[] =>
   Array.from({ length: pocet }, (_, i) => {
     const d = new Date(`${DNES}T12:00:00Z`)
     d.setUTCDate(d.getUTCDate() - (i + od))
-    return hotovy(d.toISOString().slice(0, 10), minut)
-  })
+    const den = d.toISOString().slice(0, 10)
+    return Array.from({ length: zaDen }, () => hotovy(den))
+  }).flat()
 
 describe('kvantil', () => {
   it('prázdné pole je nula, jeden prvek je on sám', () => {
@@ -39,34 +30,33 @@ describe('kvantil', () => {
   })
 
   it('medián a interpolace mezi prvky', () => {
-    expect(kvantil([10, 20, 30], 0.5)).toBe(20)
-    expect(kvantil([10, 20], 0.5)).toBe(15)
+    expect(kvantil([1, 2, 3], 0.5)).toBe(2)
+    expect(kvantil([1, 2], 0.5)).toBe(1.5)
   })
 
   it('krajní hodnoty se nepřetečou', () => {
-    expect(kvantil([10, 20, 30], 0)).toBe(10)
-    expect(kvantil([10, 20, 30], 1)).toBe(30)
-    expect(kvantil([10, 20, 30], 5)).toBe(30)
+    expect(kvantil([1, 2, 3], 0)).toBe(1)
+    expect(kvantil([1, 2, 3], 5)).toBe(3)
   })
 })
 
-describe('minuty hotové práce po dnech', () => {
-  it('sčítá podle dne dokončení a bez odhadu počítá výchozí délku', () => {
-    const m = minutyHotovePoDnech(
-      [hotovy('2026-09-18', 30), hotovy('2026-09-18', 90), hotovy('2026-09-19')],
+describe('počty hotové práce po dnech', () => {
+  it('sčítá kusy podle dne dokončení', () => {
+    const m = ukolyHotovePoDnech(
+      [hotovy('2026-09-18'), hotovy('2026-09-18'), hotovy('2026-09-19')],
       '2026-09-01',
       DNES,
     )
-    expect(m.get('2026-09-18')).toBe(120)
-    expect(m.get('2026-09-19')).toBe(60)
+    expect(m.get('2026-09-18')).toBe(2)
+    expect(m.get('2026-09-19')).toBe(1)
   })
 
   it('otevřené, smazané a mimo okno se nepočítají', () => {
-    const m = minutyHotovePoDnech(
+    const m = ukolyHotovePoDnech(
       [
-        hotovy('2026-09-18', 30, { status: 'active' }),
-        hotovy('2026-09-18', 30, { deletedAt: '2026-09-19T00:00:00.000Z' }),
-        hotovy('2026-08-01', 30),
+        hotovy('2026-09-18', { status: 'active' }),
+        hotovy('2026-09-18', { deletedAt: '2026-09-19T00:00:00.000Z' }),
+        hotovy('2026-08-01'),
       ],
       '2026-09-01',
       DNES,
@@ -78,63 +68,74 @@ describe('minuty hotové práce po dnech', () => {
   // kdy se appka neotevřela. Kdyby se nuly počítaly, stáhl by strop
   // k zemi každý volný týden.
   it('dny bez hotové práce se vůbec neobjeví', () => {
-    const m = minutyHotovePoDnech([hotovy('2026-09-18', 30)], '2026-09-01', DNES)
+    const m = ukolyHotovePoDnech([hotovy('2026-09-18')], '2026-09-01', DNES)
     expect([...m.keys()]).toEqual(['2026-09-18'])
+  })
+
+  // Odhady času se do průtoku nesmějí dostat ani omylem: jsou hádané
+  // (53 % úkolů je nemá vůbec) a přesně proto se tu počítají kusy.
+  it('odhad času výsledek nijak nemění', () => {
+    const bez = ukolyHotovePoDnech([hotovy('2026-09-18'), hotovy('2026-09-18')], '2026-09-01', DNES)
+    const s = ukolyHotovePoDnech(
+      [
+        hotovy('2026-09-18', { estimateMinutes: 15 }),
+        hotovy('2026-09-18', { estimateMinutes: 480 }),
+      ],
+      '2026-09-01',
+      DNES,
+    )
+    expect(s.get('2026-09-18')).toBe(bez.get('2026-09-18'))
   })
 })
 
 describe('osobní průtok', () => {
   it('s málo dny mlčí — anekdota není míra', () => {
-    expect(osobniPrutok(dny(MIN_DNU - 1, 100), DNES)).toBeUndefined()
+    expect(osobniPrutok(dny(MIN_DNU - 1, 2), DNES)).toBeUndefined()
   })
 
   it('od MIN_DNU už počítá', () => {
-    const p = osobniPrutok(dny(MIN_DNU, 100), DNES)
+    const p = osobniPrutok(dny(MIN_DNU, 2), DNES)
     expect(p?.dnu).toBe(MIN_DNU)
-    expect(p?.median).toBe(100)
-    expect(p?.nejlepsi).toBe(100)
+    expect(p?.median).toBe(2)
+    expect(p?.nejlepsi).toBe(2)
   })
 
   it('dobrý den je nad mediánem, když se dny liší', () => {
-    const ukoly = [...dny(5, 60), ...dny(5, 180, 6)]
-    const p = osobniPrutok(ukoly, DNES)!
+    const p = osobniPrutok([...dny(5, 1), ...dny(5, 4, 6)], DNES)!
     expect(p.median).toBeLessThan(p.dobryDen)
-    expect(p.nejlepsi).toBe(180)
+    expect(p.nejlepsi).toBe(4)
   })
 
   it('starší než okno se nepočítá', () => {
-    expect(osobniPrutok(dny(MIN_DNU, 100, 60), DNES)).toBeUndefined()
+    expect(osobniPrutok(dny(MIN_DNU, 2, 60), DNES)).toBeUndefined()
   })
 })
 
 describe('strop z průtoku', () => {
-  it('bez historie platí pracovní doba — appka si nevymýšlí', () => {
-    expect(stropZPrutoku(undefined)).toBe(PLNY_DEN_MIN)
+  // Tohle je ta nejdůležitější věta celého souboru.
+  it('bez historie žádný strop není — appka si nevymýšlí', () => {
+    expect(stropZPrutoku(undefined)).toBeUndefined()
   })
 
-  it('z dobrého dne s rezervou', () => {
-    const p = osobniPrutok(dny(10, 200), DNES)!
-    expect(stropZPrutoku(p)).toBe(Math.round(200 * REZERVA))
+  it('strop je dobrý den', () => {
+    const p = osobniPrutok(dny(10, 3), DNES)!
+    expect(stropZPrutoku(p)).toBe(3)
   })
 
-  it('nikdy nespadne pod spodní hranici — týden dovolené strop neutáhne', () => {
-    const p = osobniPrutok(dny(10, 10), DNES)!
-    expect(stropZPrutoku(p)).toBe(MIN_STROP_MIN)
+  it('nikdy nespadne na nulu — to by hlásilo každý úkol', () => {
+    const p = osobniPrutok(dny(10, 0), DNES)
+    expect(p).toBeUndefined() // dny bez práce se ani nepočítají
+    expect(stropZPrutoku({ dnu: 9, median: 0, dobryDen: 0, nejlepsi: 0 })).toBe(1)
   })
 
-  it('a nikdy nepřeleze pracovní dobu', () => {
-    const p = osobniPrutok(dny(10, 600), DNES)!
-    expect(stropZPrutoku(p)).toBe(PLNY_DEN_MIN)
-  })
-
-  // Skutečná data: 17 dnů, medián 120, nejlepší den 150. Strop z nich
-  // vyjde v řádu tří až čtyř hodin — tedy číslo, které se o čtvrtku se
-  // 495 minutami opravdu ozve, na rozdíl od nominálních osmi hodin.
-  it('na skutečných datech dá strop, který se umí ozvat', () => {
-    const p = osobniPrutok([...dny(9, 120), ...dny(8, 150, 10)], DNES)!
-    const strop = stropZPrutoku(p)
-    expect(strop).toBeGreaterThanOrEqual(MIN_STROP_MIN)
-    expect(strop).toBeLessThan(PLNY_DEN_MIN)
-    expect(495).toBeGreaterThan(strop)
+  // Skutečné rozdělení z provozu: 7 dnů po jednom úkolu, 8 dnů po dvou,
+  // 2 dny po třech. Medián 2, dobrý den 2, rekord 3 — a strop tedy 2,
+  // takže se appka ozve teprve od čtyř úkolů na den.
+  it('na skutečném rozdělení vyjde strop 2', () => {
+    const p = osobniPrutok([...dny(7, 1), ...dny(8, 2, 8), ...dny(2, 3, 16)], DNES)!
+    expect(p.dnu).toBe(17)
+    expect(p.median).toBe(2)
+    expect(p.nejlepsi).toBe(3)
+    expect(stropZPrutoku(p)).toBe(2)
   })
 })

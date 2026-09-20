@@ -4,7 +4,6 @@ import { fromISODate, todayISO } from '../lib/dates'
 import { computeWeekStats } from '../lib/weekReview'
 import { Sheet } from './Sheet'
 import { plural } from '../lib/labels'
-import { hodiny } from '../lib/kapacitaDne'
 import { AnimatedNumber } from './ui/AnimatedNumber'
 
 const stagger = (i: number) => ({ '--stagger': i }) as React.CSSProperties
@@ -57,15 +56,17 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        {/* Proč appka někdy namítne „přeplněno" na dni, do kterého by se
-            podle hodin ještě spousta věcí vešla. Bez téhle řádky je strop
-            číslo, které nikde nestojí — a takovému se nedá věřit. */}
-        {stats.prutok && (
+        {/* Proč appka někdy namítne „přeplněno" na dni, kam by se toho
+            podle pocitu ještě spousta vešla. Bez téhle řádky je strop
+            číslo, které nikde nestojí — a takovému se nedá věřit.
+            Mluví se v ÚKOLECH: odhad času je hádaný, počet je fakt. */}
+        {stats.prutok && stats.stropDne !== undefined && (
           <p className="rise text-[13px] text-ink-soft" style={stagger(2)}>
-            Za den ti projde obvykle {hodiny(stats.prutok.median)}, v dobrý den{' '}
-            {hodiny(stats.prutok.dobryDen)} (z {stats.prutok.dnu}{' '}
-            {plural(stats.prutok.dnu, 'dne', 'dnů', 'dnů')} práce). Plán proto hlídá{' '}
-            {hodiny(stats.stropDne)} na den.
+            Za den uděláš obvykle {stats.prutok.median}{' '}
+            {plural(stats.prutok.median, 'úkol', 'úkoly', 'úkolů')}, v nejlepší den{' '}
+            {stats.prutok.nejlepsi} (z {stats.prutok.dnu}{' '}
+            {plural(stats.prutok.dnu, 'dne', 'dnů', 'dnů')} práce). Plán se proto ozve, až
+            jich na jeden den naplánuješ víc než {stats.stropDne + 1}.
           </p>
         )}
 

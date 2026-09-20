@@ -14,7 +14,8 @@ import {
   reopenTask,
   sortTasks,
 } from '../db/repo'
-import { isOverloaded, plannedMinutes } from '../lib/capacity'
+import { plannedMinutes } from '../lib/capacity'
+import { jePreplneno } from '../lib/kapacitaDne'
 import { useOsobniStrop } from '../lib/prutok'
 import { klidovyRezim } from '../lib/motion'
 import { dilyDne } from '../lib/pruhDne'
@@ -224,10 +225,11 @@ export function TodayView({
     [unfinished, schuzkyMin, clientMap],
   )
   // Týž strop jako v Plánu: kdyby si Dnes počítalo vlastní, byl by plný
-  // den na jedné obrazovce jinde než na druhé. Volno z kalendáře strop
-  // jen ZUŽUJE — ve dvě odpoledne se do zbytku dne vejde míň, ne víc.
+  // den na jedné obrazovce jinde než na druhé. Měří se v ÚKOLECH —
+  // odhadované minuty jsou hádané (viz `prutok.ts`), počet je fakt.
+  // Dokud appka průtok nezná, nenamítá nic.
   const strop = useOsobniStrop()
-  const overloaded = isOverloaded(workMin, Math.min(freeMin ?? strop, strop))
+  const overloaded = jePreplneno(unfinished.length, strop)
   // Volná okna zbývající do konce pracovní doby (pro panel kalendáře).
   const gaps = freeGaps(busy, restStart).filter((g) => g.endMin - g.startMin >= MIN_GAP_MIN && g.endMin > nowMin)
 
@@ -384,7 +386,7 @@ export function TodayView({
              blok — je to tatáž řádka, která dostala svůj obrázek, a věta
              pod ním zůstala jako popisek, stejně jako u dne v Plánu. */
           <div className="mt-2">
-            <PruhDne dily={dilyDnes} klid={klid} className="h-1.5" strop={strop} />
+            <PruhDne dily={dilyDnes} klid={klid} className="h-1.5" />
             <p className={`mt-1.5 text-[13px] leading-snug ${overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'}`}>
               {overloaded && <>na den je toho moc · </>}
               práce ~{minutesToLabel(workMin)}
