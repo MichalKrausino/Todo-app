@@ -36,6 +36,7 @@ import {
 } from '../db/repo'
 import { DEFAULT_TASK_MINUTES, plannedMinutes } from '../lib/capacity'
 import { jePreplneno, popisPreplneneho } from '../lib/kapacitaDne'
+import { useOsobniStrop } from '../lib/prutok'
 import { minutyPoDnech, volnejsiDen } from '../lib/volnyDen'
 import { addDays, formatDayLabel, formatEventRange, formatFullDate, formatFullDateNa, fromISODate, mondayOf, toISODate, todayISO } from '../lib/dates'
 import { minutesToLabel } from '../lib/freeSlot'
@@ -82,6 +83,8 @@ export function UpcomingView({
 }) {
   const today = todayISO()
   const klid = klidovyRezim()
+  // Strop dne z vlastní historie — týž pro mřížku, pruh i toast.
+  const strop = useOsobniStrop()
   const [mesic, setMesic] = useState(() => kotvaMesice(today))
   const [vybrany, setVybrany] = useState(today)
   const [inbox, setInbox] = useState<null | { cil?: string }>(null)
@@ -205,11 +208,15 @@ export function UpcomingView({
     for (const [den, n] of naloz)
       m.set(den, {
         dily: n.dily,
-        popis: popisDne(n) + (jePreplneno(n.minuty) ? ' · přeplněno' : ''),
-        preplneno: jePreplneno(n.minuty),
+        popis: popisDne(n) + (jePreplneno(n.minuty, strop) ? ' · přeplněno' : ''),
+        preplneno: jePreplneno(n.minuty, strop),
       })
     return m
-  }, [naloz])
+    // `strop` MUSÍ být v závislostech: přijde z živého dotazu, takže se
+    // po prvním vykreslení změní z pracovní doby na osobní. Bez něj by
+    // mřížka zůstala u verdiktu, který padl dřív, než appka toho člověka
+    // znala — a den by se tvářil jako v pořádku navždy.
+  }, [naloz, strop])
 
   // Neděle a pondělí — stejné okno, v jakém chodí nedělní push notifikace.
   const reviewDay = [0, 1].includes(fromISODate(today).getDay())
@@ -274,7 +281,7 @@ export function UpcomingView({
   const stropDne = useCallback(
     (iso: string, t: Task): { text: string; akce: ToastAkce } | undefined => {
       const minuty = (naloz.get(iso)?.minuty ?? 0) + (t.estimateMinutes ?? DEFAULT_TASK_MINUTES)
-      if (!jePreplneno(minuty)) return undefined
+      if (!jePreplneno(minuty, strop)) return undefined
       const od = toISODate(addDays(fromISODate(iso), 1))
       const doDne = toISODate(addDays(fromISODate(iso), OKNO_JINAM))
       const jinam = volnejsiDen(minutyPoDnech(open, events, od, doDne, today), od, OKNO_JINAM)
@@ -294,13 +301,13 @@ export function UpcomingView({
     },
     // `nazevDne` i `naloz` se mění s rendererem; `open`/`events` jsou
     // z živých dotazů, takže drží referenci, dokud se dotaz nespustí znovu.
-    [naloz, open, events, today], // eslint-disable-line react-hooks/exhaustive-deps
+    [naloz, open, events, today, strop], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   function hlidejStrop(iso: string, t: Task): boolean {
-    const strop = stropDne(iso, t)
-    if (!strop) return false
-    ukazToast(strop.text, [strop.akce])
+    const namitka = stropDne(iso, t)
+    if (!namitka) return false
+    ukazToast(namitka.text, [namitka.akce])
     return true
   }
 
@@ -344,7 +351,7 @@ export function UpcomingView({
   // `> PLNY_DEN_MIN`, měla appka na jedné obrazovce tři různé představy
   // o plném dni: den s osmi hodinami a čtvrt tu svítil červeně, pruh nad
   // ním byl plný tak akorát a toast při zadávání mlčel.
-  const preteklo = jePreplneno(denNaloz?.minuty ?? 0)
+  const preteklo = jePreplneno(denNaloz?.minuty ?? 0, strop)
   const dayTasks = sortTasks(podleDne.get(vybrany) ?? [])
   const dayEvents = [...(eventsPerDay.get(vybrany) ?? [])].sort(
     (a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start),
@@ -442,7 +449,7 @@ export function UpcomingView({
           </span>
         </div>
         {/* Pruh přes celou šířku: v mřížce je ten samý obrázek v malém. */}
-        <PruhDne dily={denNaloz?.dily ?? []} klid={klid} />
+        <PruhDne dily={denNaloz?.dily ?? []} klid={klid} strop={strop} />
 
         <div className="seznam-na-papire">
           {dayEvents.length > 0 && (

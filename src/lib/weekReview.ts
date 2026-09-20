@@ -1,10 +1,16 @@
 // Týdenní zpětná vazba (Fáze 7) — čisté funkce nad daty.
 // Shrnutí týdne: co se dokončilo a komu, nakolik vyšel plán, co se odkládá,
-// u koho bylo ticho, a jak vypadá příštích 7 dní. Porovnání odhadu času
-// a skutečnosti přibude s Fází 5 (estimateMinutes).
+// u koho bylo ticho, a jak vypadá příštích 7 dní.
+//
+// Je tu i PRŮTOK, tedy kolik práce tímhle člověkem za den doopravdy
+// projde (`prutok.ts`). Patří sem, ne na Dnes: je to číslo k ohlédnutí,
+// ne k dennímu popohánění — a hlavně je to jediné místo, kde se dá
+// vysvětlit, proč appka někdy namítne „přeplněno" na dni, do kterého by
+// se podle hodin ještě spousta věcí vešla.
 
 import type { Client, Project, Task } from '../db/types'
 import { addDays, fromISODate, mondayOf, toISODate } from './dates'
+import { osobniPrutok, stropZPrutoku, type Prutok } from './prutok'
 
 export interface WeekStats {
   weekStart: string // pondělí
@@ -27,6 +33,10 @@ export interface WeekStats {
   quietClients: Client[]
   /** počet otevřených úkolů na příštích 7 dní, den po dni */
   nextDays: Array<{ date: string; count: number }>
+  /** kolik práce projde za den (z posledních 30 dní); undefined = málo dat */
+  prutok: Prutok | undefined
+  /** strop dne, který z průtoku plyne — totéž číslo, jakým měří Plán */
+  stropDne: number
 }
 
 const effectiveDate = (t: Task): string | undefined => {
@@ -102,6 +112,11 @@ export function computeWeekStats(
       !completedClientIds.has(c.id),
   )
 
+  // Průtok se počítá z celé dostupné historie, ne jen z tohohle týdne:
+  // strop má odpovídat tomu, jak člověk pracuje, a jeden týden je na to
+  // málo — zvlášť ten, ve kterém byl nemocný.
+  const prutok = osobniPrutok(live, today)
+
   const open = live.filter((t) => t.status === 'inbox' || t.status === 'active')
   const nextDays: Array<{ date: string; count: number }> = []
   for (let i = 1; i <= 7; i++) {
@@ -119,5 +134,7 @@ export function computeWeekStats(
     mostPostponed,
     quietClients,
     nextDays,
+    prutok,
+    stropDne: stropZPrutoku(prutok),
   }
 }
