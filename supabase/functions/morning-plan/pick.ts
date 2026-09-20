@@ -66,6 +66,22 @@ function takeClient(c: Scored, used: Map<string, number>): void {
   used.set(k, (used.get(k) ?? 0) + 1)
 }
 
+/**
+ * Po kolika dnech ticha u klienta začne návrh připomínat, že se tam nic
+ * neděje. TÁŽ čtrnáctka jako `HLIDANI_VYCHOZI_DNI` v src/lib/signals.ts —
+ * appka a server musí říkat totéž. Kdyby tu zůstalo jen vyplněné pole,
+ * ukazovala by appka u klienta „ticho 45 dní" a ranní návrh by o něm
+ * mlčel; jedna appka by pak měla na téhož klienta dva názory.
+ *
+ * Výchozí práh platí jen pro KLIENTA. Oblast („Osobní", „Interní") je
+ * přihrádka na vlastní práci, ne vztah, který může utichnout.
+ */
+export const HLIDANI_VYCHOZI_DNI = 14
+
+export const prahHlidani = (c: Rec): number | undefined =>
+  (c.checkIntervalDays as number | undefined) ??
+  (c.kind === 'client' ? HLIDANI_VYCHOZI_DNI : undefined)
+
 export function scoreAndReason(
   t: Rec,
   clientsById: Map<string, Rec>,
@@ -126,7 +142,7 @@ export function scoreAndReason(
   }
 
   if (client) {
-    const interval = client.checkIntervalDays as number | undefined
+    const interval = prahHlidani(client)
     const last = (client.lastActivityAt as string | undefined)?.slice(0, 10)
     if (interval && last) {
       const idle = daysBetween(last, today)

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   type Rec,
+  addDaysISO,
+  HLIDANI_VYCHOZI_DNI,
   type Rozhodnuti,
   type Scored,
   DUVOD_NAVRATU,
@@ -342,5 +344,69 @@ describe('paměť návrhu — kandidáti', () => {
 
   it('hotové a zahozené úkoly se nenabízejí', () => {
     expect(ohodnot([task({ status: 'done', dueDate: TODAY }), task({ status: 'dropped', dueDate: TODAY })], NO_CLIENTS, TODAY)).toEqual([])
+  })
+})
+
+// Hlídání ticha u klienta má výchozí práh (HLIDANI_VYCHOZI_DNI) — appka
+// i server musí říkat totéž. Kdyby ho měla jen appka, ukazoval by řádek
+// klienta „ticho 45 dní" a ranní návrh by o tom klientovi mlčel.
+describe('ticho u klienta', () => {
+  const klient = (c: Partial<Rec> = {}): Map<string, Rec> =>
+    new Map([['k1', { id: 'k1', name: 'Alza', kind: 'client', ...c }]])
+  const ukol = () => task({ clientId: 'k1' })
+  const tichoOd = (dni: number) => addDaysISO(TODAY, -dni)
+
+  it('klient bez nastaveného intervalu se po výchozím prahu ozve', () => {
+    const r = scoreAndReason(
+      ukol(),
+      klient({ lastActivityAt: `${tichoOd(HLIDANI_VYCHOZI_DNI + 1)}T08:00:00.000Z` }),
+      TODAY,
+    )
+    expect(r.reason).toBe(`u klienta Alza se ${HLIDANI_VYCHOZI_DNI + 1} dní nic nedělo`)
+  })
+
+  it('pod prahem mlčí', () => {
+    const r = scoreAndReason(
+      ukol(),
+      klient({ lastActivityAt: `${tichoOd(HLIDANI_VYCHOZI_DNI)}T08:00:00.000Z` }),
+      TODAY,
+    )
+    expect(r.reason).not.toMatch(/nic nedělo/)
+  })
+
+  it('oblast se nehlídá — „Osobní" není vztah, který může utichnout', () => {
+    const r = scoreAndReason(
+      ukol(),
+      klient({ kind: 'personal', name: 'Osobní', lastActivityAt: `${tichoOd(45)}T08:00:00.000Z` }),
+      TODAY,
+    )
+    expect(r.reason).not.toMatch(/nic nedělo/)
+  })
+
+  it('vlastní interval se ctí i u oblasti — kdo si ho nastavil, rozhodl se', () => {
+    const r = scoreAndReason(
+      ukol(),
+      klient({
+        kind: 'internal',
+        name: 'Interní',
+        checkIntervalDays: 3,
+        lastActivityAt: `${tichoOd(5)}T08:00:00.000Z`,
+      }),
+      TODAY,
+    )
+    expect(r.reason).toBe('u klienta Interní se 5 dní nic nedělo')
+  })
+
+  it('nula je vědomé vypnuto, ne „hlídej po výchozím prahu"', () => {
+    const r = scoreAndReason(
+      ukol(),
+      klient({ checkIntervalDays: 0, lastActivityAt: `${tichoOd(45)}T08:00:00.000Z` }),
+      TODAY,
+    )
+    expect(r.reason).not.toMatch(/nic nedělo/)
+  })
+
+  it('a bez razítka aktivity se nehlídá nic', () => {
+    expect(scoreAndReason(ukol(), klient(), TODAY).reason).not.toMatch(/nic nedělo/)
   })
 })
