@@ -5,7 +5,6 @@
 import { db } from './db'
 import type { Project, Task, TodoistComment } from './types'
 import { deterministicUuid } from '../lib/deterministicId'
-import { estimateTaskMinutes } from '../lib/estimate'
 import {
   differs,
   isMine,
@@ -232,9 +231,6 @@ export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): P
         status: fields.dueDate || fields.scheduledFor ? 'active' : 'inbox',
         order: 0,
         ...fields,
-        // Když Todoist délku úkolu nezná, platí náš tichý odhad —
-        // kalendářní blok musí mít z čeho vyjít.
-        estimateMinutes: fields.estimateMinutes ?? estimateTaskMinutes(fields.title),
       }
       await db.tasks.add(task)
       continue

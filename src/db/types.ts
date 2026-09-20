@@ -80,7 +80,12 @@ export interface Task extends BaseRecord {
   scheduledFor?: string // na kdy jsem si to naplánoval (YYYY-MM-DD)
   calendarEventId?: string // blok v Google kalendáři (Fáze 3)
   status: TaskStatus
-  estimateMinutes?: number // tichý odhad od AI — nikdy nezobrazovat jako pole (Fáze 5)
+  // Délka úkolu v minutách, a to JEN když ji někde zadal člověk: z Todoistu
+  // (`duration`). Appka si ji nehádá — heuristika, která ji razítkovala
+  // z klíčových slov v názvu, byla zrušena (53 % úkolů netrefila vůbec
+  // a zbytku dávala dvě hodnoty). Používá se na jedinou věc: délku bloku
+  // v kalendáři, a když chybí, je to hodina. Nikde se nezobrazuje.
+  estimateMinutes?: number
   actualMinutes?: number
   recurrenceRule?: string // iCal RRULE (Fáze 4)
   sourceTemplateItemId?: string

@@ -7,7 +7,6 @@ import type { Client, ClientKind, Priority, Project, Task, TaskStatus } from './
 import { deterministicUuid } from '../lib/deterministicId'
 import { addDays, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { HISTORIE_DNI } from '../../supabase/functions/morning-plan/pick'
-import { estimateTaskMinutes } from '../lib/estimate'
 import { nextOccurrence } from '../lib/rrule'
 
 const now = () => new Date().toISOString()
@@ -202,8 +201,6 @@ export async function addTask(input: {
     priority: input.priority ?? 'normal',
     order: 0,
     status,
-    // tichý odhad času (Fáze 5) — jen pro délku bloku v kalendáři
-    estimateMinutes: estimateTaskMinutes(input.title),
     ...input,
   }
   await db.tasks.add(task)
@@ -379,7 +376,6 @@ export async function addMeetingFollowUp(event: {
     order: 0,
     status: 'active',
     scheduledFor: day,
-    estimateMinutes: 30,
   }
   await db.tasks.add(task)
   emitRepoWrite()

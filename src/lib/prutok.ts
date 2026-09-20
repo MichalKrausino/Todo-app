@@ -4,8 +4,9 @@
 //
 // První verze měřila průtok v minutách a strop dne s ní. Jenže minuta
 // v téhle appce není měřená, je HÁDANÁ: `estimateMinutes` razítkuje
-// heuristika o osmi klíčových slovech (`estimate.ts`) a co se netrefí,
-// nedostane odhad vůbec.
+// heuristika o osmi klíčových slovech a co se netrefila, nedostalo odhad
+// vůbec. (Ta heuristika je od té doby smazaná — minuty, které nikdo
+// nenaměřil, už appka nevyrábí.)
 //
 // Změřeno na 45 úkolech skutečného provozu:
 //

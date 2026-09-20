@@ -1262,6 +1262,33 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   }, cil)
   T_(barvy.plny !== '' && barvy.plny === barvy.token,
      'a číslo plného dne je v tónu note-ink (' + barvy.plny + ' vs token ' + barvy.token + ')')
+
+  // (5) mřížka a pruh pod ní kreslí proti TÉMUŽ stropu.
+  // Délka pruhu je práce dne proti osobnímu stropu. Kdyby si buňka brala
+  // vlastní základ, měla by jedna obrazovka dvě měřítka: den by v mřížce
+  // vypadal jinak plný než hned pod ní. Okem se to nepozná — pruh v buňce
+  // je 28 px — proto se měří POMĚR zaplnění, ne vzhled. Dva úkoly na den
+  // (strop 2) dají plný pruh; s náhradním základem by to byla půlka.
+  await nasyp(cil, 2, true)
+  await doPlanu()
+  await page.locator(`button[data-day="${cil}"]`).click(); await page.waitForTimeout(500)
+  const pomery = await page.evaluate((cil) => {
+    const pomer = (el) => {
+      if (!el) return null
+      const sirka = el.getBoundingClientRect().width
+      if (sirka <= 0) return null
+      const dily = [...el.children].reduce((s, d) => s + d.getBoundingClientRect().width, 0)
+      return dily / sirka
+    }
+    const vsechny = [...document.querySelectorAll('[data-pruh]')]
+    return {
+      bunka: pomer(document.querySelector(`button[data-day="${cil}"] [data-pruh]`)),
+      agenda: pomer(vsechny.find((el) => !el.closest('button[data-day]'))),
+    }
+  }, cil)
+  T_(pomery.bunka !== null && pomery.agenda !== null && Math.abs(pomery.bunka - pomery.agenda) < 0.06,
+     'pruh v mřížce a pruh pod ní měří týmž stropem (' +
+     (pomery.bunka ?? 0).toFixed(2) + ' vs ' + (pomery.agenda ?? 0).toFixed(2) + ')')
   await ctx.close()
 }
 

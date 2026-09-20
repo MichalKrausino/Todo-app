@@ -9,12 +9,12 @@
 // ZÁTĚŽ SE MĚŘÍ V ÚKOLECH, SCHŮZKY JSOU AŽ DRUHÉ KRITÉRIUM
 //
 // Dřív se sčítaly minuty: odhad úkolů plus délka schůzek. Jenže odhad
-// času je HÁDANÝ (`estimate.ts` ho razítkuje z osmi klíčových slov,
-// 53 % úkolů ho nemá vůbec a tiše se za ně počítá 60 min) — a v tom
-// součtu měl ten hádaný díl hlavní slovo: jediný úkol bez odhadu vážil
-// přesně tolik co hodinová schůzka, dva takové víc než kterákoli
-// schůzka v kalendáři. Ranking „volnějších dnů" tedy stál na čísle,
-// které se s realitou nikdy neporovná.
+// času byl HÁDANÝ — razítkovala ho heuristika o osmi klíčových slovech,
+// 53 % úkolů ho nemělo vůbec a tiše se za ně počítalo 60 min (ta
+// heuristika je od té doby smazaná). V tom součtu měl navíc hádaný díl
+// hlavní slovo: jediný úkol bez odhadu vážil přesně tolik co hodinová
+// schůzka, dva takové víc než kterákoli schůzka v kalendáři. Ranking
+// „volnějších dnů" tedy stál na čísle, které se s realitou neporovná.
 //
 // A hlavně: strop dne se od té doby počítá v ÚKOLECH (`prutok.ts`,
 // `kapacitaDne.ts`). Kdyby se cíl odkladu vybíral v minutách, mohla by

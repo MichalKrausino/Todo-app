@@ -173,9 +173,14 @@ describe('importTodoist', () => {
     expect(task?.estimateMinutes).toBe(45)
   })
 
-  it('nový úkol dostane tichý odhad času, i když ho Todoist nemá', async () => {
+  // Délku si appka NEHÁDÁ. Dřív tu heuristika razítkovala minuty podle
+  // klíčových slov v názvu; netrefila se u 53 % úkolů a zbytku dávala dvě
+  // hodnoty, takže z toho vznikalo přesně vypadající číslo, které nikdo
+  // nespočítal. Když ji Todoist nemá, nemá ji nikdo a kalendářní blok
+  // dostane hodinu.
+  it('bez délky z Todoistu zůstane úkol bez délky — appka si ji nevymýšlí', async () => {
     await importTodoist(snap({ tasks: [td()] }), push)
-    expect((await db.tasks.get(await localId('7001')))?.estimateMinutes).toBeGreaterThan(0)
+    expect((await db.tasks.get(await localId('7001')))?.estimateMinutes).toBeUndefined()
   })
 
   it('opakovaný úkol se po odškrtnutí nezavírá podruhé, jen se posune', async () => {

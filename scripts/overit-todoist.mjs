@@ -347,7 +347,7 @@ ok('deadline → termín', report?.dueDate === '2026-09-04', report?.dueDate)
 ok('due → naplánováno na', report?.scheduledFor === '2026-09-02', report?.scheduledFor)
 ok('priorita p2 → vysoká', report?.priority === 'high', report?.priority)
 ok('popis → poznámka', report?.notes === 'Za duben, včetně PNO.')
-ok('délka 90 min → tichý odhad času', report?.estimateMinutes === 90, String(report?.estimateMinutes))
+ok('délka 90 min z Todoistu → délka úkolu', report?.estimateMinutes === 90, String(report?.estimateMinutes))
 ok('podúkoly → checklist včetně hotového', report?.subtasks?.length === 2,
    report?.subtasks?.map((s) => `${s.title}${s.done ? ' ✓' : ''}`).join(', '))
 

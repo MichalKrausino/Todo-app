@@ -14,7 +14,6 @@ import {
   reopenTask,
   sortTasks,
 } from '../db/repo'
-import { plannedMinutes } from '../lib/capacity'
 import { jePreplneno } from '../lib/kapacitaDne'
 import { useOsobniStrop } from '../lib/prutok'
 import { klidovyRezim } from '../lib/motion'
@@ -213,16 +212,11 @@ export function TodayView({
   const restStart = Math.min(Math.max(nowMin, WORK_START), WORK_END)
   const freeMin = events.length > 0 ? freeMinutes(busy, restStart) : null
   const klid = klidovyRezim()
-  const workMin = useMemo(() => plannedMinutes(unfinished), [unfinished])
   // Díly pruhu dne — táž čistá funkce, jakou počítá Plán, aby se ta dvě
   // místa nerozešla v tom, co se do dne počítá.
-  const schuzkyMin = useMemo(
-    () => busy.reduce((soucet, b) => soucet + Math.max(0, b.endMin - b.startMin), 0),
-    [busy],
-  )
   const dilyDnes = useMemo(
-    () => dilyDne(unfinished, schuzkyMin, (id) => clientMap.get(id)?.color),
-    [unfinished, schuzkyMin, clientMap],
+    () => dilyDne(unfinished, (id) => clientMap.get(id)?.color),
+    [unfinished, clientMap],
   )
   // Týž strop jako v Plánu: kdyby si Dnes počítalo vlastní, byl by plný
   // den na jedné obrazovce jinde než na druhé. Měří se v ÚKOLECH —
@@ -230,6 +224,18 @@ export function TodayView({
   // Dokud appka průtok nezná, nenamítá nic.
   const strop = useOsobniStrop()
   const overloaded = jePreplneno(unfinished.length, strop)
+  // Popisek pod pruhem. Dřív tu stálo „práce ~11,5 h" — součet odhadů,
+  // které nikdo nespočítal, a na Dnes navíc vedle titulku, kde už stojí
+  // pravdivé „2 z 7". Zbyly dvě věty, obě podložené: kolik toho obvykle
+  // zvládneš (z vlastní historie) a kolik času zbývá mezi schůzkami
+  // (z kalendáře). Když není co říct, řádka se nekreslí — pruh sám
+  // ukáže, komu dnešek patří.
+  const popisekDne = [
+    overloaded && strop !== undefined
+      ? `na den je toho moc · obvykle zvládneš ${strop} ${plural(strop, 'úkol', 'úkoly', 'úkolů')}`
+      : '',
+    freeMin !== null ? `zbývá ~${minutesToLabel(freeMin)}` : '',
+  ].filter(Boolean)
   // Volná okna zbývající do konce pracovní doby (pro panel kalendáře).
   const gaps = freeGaps(busy, restStart).filter((g) => g.endMin - g.startMin >= MIN_GAP_MIN && g.endMin > nowMin)
 
@@ -386,12 +392,12 @@ export function TodayView({
              blok — je to tatáž řádka, která dostala svůj obrázek, a věta
              pod ním zůstala jako popisek, stejně jako u dne v Plánu. */
           <div className="mt-2">
-            <PruhDne dily={dilyDnes} klid={klid} className="h-1.5" />
-            <p className={`mt-1.5 text-[13px] leading-snug ${overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'}`}>
-              {overloaded && <>na den je toho moc · </>}
-              práce ~{minutesToLabel(workMin)}
-              {freeMin !== null && <> · zbývá ~{minutesToLabel(freeMin)}</>}
-            </p>
+            <PruhDne dily={dilyDnes} klid={klid} strop={strop} className="h-1.5" />
+            {popisekDne.length > 0 && (
+              <p className={`mt-1.5 text-[13px] leading-snug ${overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'}`}>
+                {popisekDne.join(' · ')}
+              </p>
+            )}
           </div>
         )}
       </header>
