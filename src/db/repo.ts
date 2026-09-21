@@ -8,6 +8,7 @@ import { deterministicUuid } from '../lib/deterministicId'
 import { addDays, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { HISTORIE_DNI } from '../../supabase/functions/morning-plan/pick'
 import { nextOccurrence } from '../lib/rrule'
+import { krokyProDalsiVyskyt } from '../lib/podukoly'
 
 const now = () => new Date().toISOString()
 
@@ -329,7 +330,9 @@ async function respawnRecurring(task: Task | undefined, t: string): Promise<void
     assignedTo: task.assignedTo ?? task.ownerId,
     calendarEventId: undefined,
     postponeCount: undefined, // nový výskyt začíná s čistým štítem
-    subtasks: task.subtasks?.map((s) => ({ ...s, done: false })), // checklist znovu od nuly
+    // checklist znovu od nuly a BEZ termínů kroků — ty platily pro ten
+    // jeden výskyt (viz `krokyProDalsiVyskyt`).
+    subtasks: krokyProDalsiVyskyt(task.subtasks),
     pinnedFor: undefined, // špendlík patřil dnešku, ne dalšímu výskytu
   }
   await db.tasks.add(successor)

@@ -1361,6 +1361,121 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 17. termín u podúkolu ---
+// Velký úkol má kroky a ty mají svoje dny („podklady do středy"). Dokud
+// šel ten den zapsat leda do názvu kroku, appka o něm nevěděla nic.
+//
+// Tohle hlídá tři věci, které pravítkem nezměříš: (1) termín u kroku jde
+// vůbec nastavit a přežije zavření panelu i restart (leží v úkolu, ne ve
+// stavu komponenty); (2) je VIDĚT ZE SEZNAMU — jinak je to slib, který
+// appka nikde nehlídá, tedy přesně ten druh, který tahle appka nedává;
+// (3) propadlý krok je červený, a to v tónu `danger`, ne „nějak jinak"
+// než zbytek řádku.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+
+  // Úkol s jedním krokem, jehož termín propadl, a druhým bez termínu.
+  // Sype se přímo do IndexedDB: jde o to, co appka s daty udělá, ne
+  // o proklikání zadávání (to hlídá oddíl 2).
+  const vcera = await page.evaluate(() => {
+    const d = new Date(); d.setDate(d.getDate() - 1)
+    return d.toISOString().slice(0, 10)
+  })
+  const nasyp = (dueDate) => page.evaluate(async ({ dueDate }) => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    await new Promise((res) => {
+      const tx = db.transaction('tasks', 'readwrite')
+      const st = tx.objectStore('tasks')
+      st.clear()
+      const t = new Date().toISOString()
+      st.put({
+        id: 'u1', createdAt: t, updatedAt: t, title: 'Spustit kampaň',
+        priority: 'normal', status: 'active', order: 0, dueDate: new Date().toISOString().slice(0, 10),
+        subtasks: [
+          { id: 'k1', title: 'Podklady', done: false, ...(dueDate ? { dueDate } : {}) },
+          { id: 'k2', title: 'Texty', done: false },
+        ],
+      })
+      tx.oncomplete = res
+    })
+  }, { dueDate })
+  // Termín se čte podle skryté věty „termín podúkolu", ne podle tvaru
+  // data: `formatDayLabel` píše u blízkých dnů slova („Včera", „Zítra"),
+  // takže kontrola na „24. 9." by hlásila planý poplach přesně tehdy,
+  // kdy na termínu nejvíc záleží.
+  const znacka = () => page.evaluate(() => {
+    const el = [...document.querySelectorAll('main [title="Podúkoly"]')][0]
+    if (!el) return null
+    const den = [...el.querySelectorAll('span')].find((s) => (s.textContent ?? '').includes('termín podúkolu'))
+    return {
+      text: el.innerText.replace(/\s+/g, ' ').trim(),
+      den: den ? den.textContent.replace('— termín podúkolu', '').replace(/[·\s]+/g, ' ').trim() : '',
+      barva: den ? getComputedStyle(den).color : '',
+    }
+  })
+
+  // (1) bez termínu kroku řádek o žádném dni nemluví
+  await nasyp(null)
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  const bezTerminu = await znacka()
+  T_(bezTerminu !== null && /0\/2/.test(bezTerminu.text), 'řádek úkolu ukazuje počet kroků (' + (bezTerminu?.text ?? 'nic') + ')')
+  T_(bezTerminu !== null && bezTerminu.den === '', 'a bez termínu u kroku o žádném dni nemluví')
+
+  // (2) propadlý krok je na řádku vidět a je červený
+  await nasyp(vcera)
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  const sTerminem = await znacka()
+  T_(sTerminem !== null && sTerminem.den !== '', 'termín kroku je vidět ze seznamu (' + (sTerminem?.text ?? 'nic') + ')')
+  // Barva se čte proti TOKENU, ne proti jinému kusu řádku: kdyby se tón
+  // nekreslil vůbec, vyšel by termín jako `ink-soft` a počet kroků taky,
+  // tedy dvě stejné barvy — a kontrola „liší se od okolí" by mlčela.
+  const tonDanger = await page.evaluate(() => {
+    const sonda = document.createElement('span')
+    sonda.style.color = 'var(--color-danger)'
+    document.body.append(sonda)
+    const barva = getComputedStyle(sonda).color
+    sonda.remove()
+    const el = [...document.querySelectorAll('main [title="Podúkoly"] span')].find((s) => (s.textContent ?? '').includes('termín podúkolu'))
+    return { token: barva, krok: el ? getComputedStyle(el).color : '' }
+  })
+  T_(tonDanger.krok !== '' && tonDanger.krok === tonDanger.token,
+     'a propadlý krok je v tónu danger (' + tonDanger.krok + ' vs token ' + tonDanger.token + ')')
+
+  // (3) termín jde u kroku nastavit z detailu a přežije restart
+  await nasyp(null)
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  await page.getByText('Spustit kampaň').first().click(); await page.waitForTimeout(700)
+  const chip = page.getByRole('button', { name: 'Termín podúkolu Podklady' })
+  T_(await chip.count() > 0, 'každý krok nabízí termín, i když ho nemá')
+  if (await chip.count()) { await chip.click(); await page.waitForTimeout(400) }
+  // Pozor na „Dnes": v panelu jsou dvě taková tlačítka — slot Termín
+  // celého úkolu a rychlý den v kalendáříku kroku — a kliknutí na to
+  // první by nastavilo termín ÚKOLU, tedy prošlo by to i s rozbitým
+  // termínem kroku. Klikne se proto do mřížky dne, ta je otevřená jedna.
+  const dnesISO = new Date().toISOString().slice(0, 10)
+  const bunka = page.locator(`.sheet-panel button[data-day="${dnesISO}"]`)
+  T_(await bunka.count() === 1, 'ťuknutí na termín kroku otevře kalendářík (' + await bunka.count() + ')')
+  if (await bunka.count()) { await bunka.first().click(); await page.waitForTimeout(600) }
+  const ulozeno = await page.evaluate(async () => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    const t = await new Promise((res) => { const r = db.transaction('tasks').objectStore('tasks').get('u1'); r.onsuccess = () => res(r.result) })
+    return t?.subtasks?.find((s) => s.id === 'k1')?.dueDate ?? null
+  })
+  T_(ulozeno === new Date().toISOString().slice(0, 10),
+     'nastavený termín kroku se uloží k úkolu, ne do stavu panelu (' + ulozeno + ')')
+
+  // …a přežije restart appky. Kdyby ležel jen v komponentě, po reloadu
+  // by byl pryč a člověk by přišel o den, o kterém si myslí, že ho zadal.
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  const poRestartu = await znacka()
+  T_(poRestartu !== null && poRestartu.den !== '', 'a přežije restart appky (' + (poRestartu?.text ?? 'nic') + ')')
+  await ctx.close()
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)

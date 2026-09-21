@@ -103,6 +103,21 @@ describe('subtasksFrom', () => {
     expect(subs).toEqual([{ id: 'td-9', title: 'Data', done: true }])
     expect(subtasksFrom([])).toBeUndefined()
   })
+
+  // Krok umí mít termín i v Todoistu — a když ho tam má, je to měřený
+  // údaj, ne dohad, takže ho appka přebírá. Pořadí je totéž jako
+  // u termínu celého úkolu: napřed `deadline`, jinak `due`.
+  it('bere termín kroku z Todoistu, deadline před due', () => {
+    expect(subtasksFrom([td({ id: '9', due: { date: '2026-09-24' } })])?.[0].dueDate).toBe('2026-09-24')
+    expect(
+      subtasksFrom([td({ id: '9', due: { date: '2026-09-24' }, deadline: { date: '2026-09-22' } })])?.[0]
+        .dueDate,
+    ).toBe('2026-09-22')
+  })
+
+  it('bez data v Todoistu nemá krok termín — nic se nehádá', () => {
+    expect(subtasksFrom([td({ id: '9' })])?.[0].dueDate).toBeUndefined()
+  })
 })
 
 describe('podúkoly a Todoist', () => {

@@ -56,6 +56,14 @@ export interface Subtask {
   id: string
   title: string
   done: boolean
+  /**
+   * Termín kroku (`YYYY-MM-DD`, lokální den jako u úkolu — nikdy
+   * `toISOString()`). Krok je pořád jen krok: nemá klienta, prioritu ani
+   * naplánování a do Plánu se nedostane. Datum je vidět na kroku a na
+   * řádku úkolu (`src/lib/podukoly.ts`); u kroku z Todoistu ho vlastní
+   * Todoist, stejně jako termín celého úkolu.
+   */
+  dueDate?: string
 }
 
 // Komentář u todoistího úkolu — otisk, ne synchronizovaný záznam.

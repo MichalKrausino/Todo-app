@@ -5,6 +5,7 @@
 import { db } from './db'
 import type { Project, Task, TodoistComment } from './types'
 import { deterministicUuid } from '../lib/deterministicId'
+import { krokyProDalsiVyskyt } from '../lib/podukoly'
 import {
   differs,
   isMine,
@@ -253,7 +254,7 @@ export async function importTodoist(snap: TodoistSnapshot, push: TodoistPush): P
           scheduledFor: undefined,
           pinnedFor: undefined,
           postponeCount: undefined,
-          subtasks: fields.subtasks?.map((sub) => ({ ...sub, done: false })),
+          subtasks: krokyProDalsiVyskyt(fields.subtasks),
           updatedAt: t,
         })
         continue

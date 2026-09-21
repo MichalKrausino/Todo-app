@@ -30,6 +30,7 @@ import { AutoTextarea, VyberDne, velkePismeno } from './VyberDne'
 import { Button } from './ui/Button'
 import { SlotChip, pill } from './SlotChip'
 import { najdiOdkazy } from '../lib/links'
+import { jeKrokPropadly } from '../lib/podukoly'
 import { planPoZmeneTerminu } from '../lib/terminPlan'
 import { nabidniVraceni, ukazToast } from '../lib/toast'
 import { TaskSharing } from './TaskSharing'
@@ -115,6 +116,10 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   // Dexie update mění jen zaslaná pole.
   const [subtasks, setSubtasks] = useState<Subtask[]>(task.subtasks ?? [])
   const [newSub, setNewSub] = useState('')
+  // Který krok má zrovna otevřený kalendářík. Je to táž řeč jako u slotů
+  // nahoře — vyplněný ukazuje hodnotu, otevřený má pod sebou panel —
+  // jen zmenšená do řádku checklistu; naráz je otevřený nejvýš jeden.
+  const [krokSTerminem, setKrokSTerminem] = useState<string | null>(null)
   // Špendlík „Top 3 dne" se ukládá hned (jako checklist) — je to
   // rozhodnutí o dnešku, ne editace, kterou by šlo zahodit přes Zrušit.
   const [pinnedFor, setPinnedFor] = useState(task.pinnedFor)
@@ -684,52 +689,114 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
             {subtasks.length > 0 && ` · ${subtasks.filter((s) => s.done).length}/${subtasks.length}`}
           </h3>
           <div className="divide-y divide-line overflow-hidden rounded-2xl bg-well">
-            {subtasks.map((s) => (
-              <div key={s.id} className="flex items-center gap-2.5 px-3 py-2">
-                <button
-                  type="button"
-                  aria-label={s.done ? `Vrátit podúkol ${s.title}` : `Dokončit podúkol ${s.title}`}
-                  onClick={() => {
-                    persistSubtasks(subtasks.map((x) => (x.id === s.id ? { ...x, done: !x.done } : x)))
-                    // krok z Todoistu se odškrtne i tam
-                    void setTodoistSubtaskDone(s.id, !s.done)
-                  }}
-                  className="-m-1.5 shrink-0 p-1.5 transition-transform duration-150 active:scale-90"
-                >
-                  <span
-                    key={String(s.done)}
-                    className={`pop flex h-[18px] w-[18px] items-center justify-center rounded-full border-[1.5px] transition-colors duration-200 ${
-                      s.done ? 'border-accent bg-accent text-card' : 'border-edge text-transparent'
-                    }`}
-                  >
-                    <svg viewBox="0 0 20 20" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4.5 10.5l3.8 3.8 7.2-8.6" />
-                    </svg>
-                  </span>
-                </button>
-                <span className={`min-w-0 flex-1 truncate text-[15px] ${s.done ? 'text-ink-faint line-through' : 'text-ink'}`}>
-                  {s.title}
-                </span>
-                {/* Krok z Todoistu odsud mazat nejde — smazal by se
-                    klientovi v jeho projektu a stejně by se vrátil. */}
-                {s.id.startsWith(SUB_PREFIX) ? (
-                  <span className="shrink-0 text-[11px] text-ink-faint" title="Krok z Todoistu">
-                    Todoist
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    aria-label={`Smazat podúkol ${s.title}`}
-                    onClick={() => persistSubtasks(subtasks.filter((x) => x.id !== s.id))}
-                    className="-m-2 shrink-0 p-2 text-ink-faint transition-transform duration-150 active:scale-90"
-                  >
-                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                      <path d="M6 6l12 12M18 6L6 18" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            ))}
+            {subtasks.map((s) => {
+              const zTodoistu = s.id.startsWith(SUB_PREFIX)
+              const propadly = jeKrokPropadly(s, todayISO())
+              const otevreny = krokSTerminem === s.id
+              return (
+                <div key={s.id}>
+                  <div className="flex items-center gap-2.5 px-3 py-2">
+                    <button
+                      type="button"
+                      aria-label={s.done ? `Vrátit podúkol ${s.title}` : `Dokončit podúkol ${s.title}`}
+                      onClick={() => {
+                        persistSubtasks(subtasks.map((x) => (x.id === s.id ? { ...x, done: !x.done } : x)))
+                        // krok z Todoistu se odškrtne i tam
+                        void setTodoistSubtaskDone(s.id, !s.done)
+                      }}
+                      className="-m-1.5 shrink-0 p-1.5 transition-transform duration-150 active:scale-90"
+                    >
+                      <span
+                        key={String(s.done)}
+                        className={`pop flex h-[18px] w-[18px] items-center justify-center rounded-full border-[1.5px] transition-colors duration-200 ${
+                          s.done ? 'border-accent bg-accent text-card' : 'border-edge text-transparent'
+                        }`}
+                      >
+                        <svg viewBox="0 0 20 20" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M4.5 10.5l3.8 3.8 7.2-8.6" />
+                        </svg>
+                      </span>
+                    </button>
+                    <span className={`min-w-0 flex-1 truncate text-[15px] ${s.done ? 'text-ink-faint line-through' : 'text-ink'}`}>
+                      {s.title}
+                    </span>
+                    {/* Termín kroku. Prázdný jen nabízí (tichý kalendářík),
+                        vyplněný ukazuje den — a propadlý je červený stejně
+                        jako propadlý termín úkolu na řádku v seznamu.
+                        U kroku z Todoistu ho vlastní Todoist, tak jako
+                        termín celého úkolu: ukáže se, ale nemění se tady. */}
+                    <button
+                      type="button"
+                      aria-label={
+                        s.dueDate
+                          ? `Termín podúkolu ${s.title}: ${formatDayLabel(s.dueDate)}`
+                          : `Termín podúkolu ${s.title}`
+                      }
+                      aria-expanded={otevreny}
+                      onClick={() => {
+                        if (zTodoistu) {
+                          ukazToast('Termín kroku z Todoistu se mění v Todoistu')
+                          return
+                        }
+                        setKrokSTerminem(otevreny ? null : s.id)
+                      }}
+                      className={`-my-1 shrink-0 rounded-full px-2 py-1 text-[13px] transition-colors duration-150 ${
+                        otevreny
+                          ? 'bg-accent text-card'
+                          : s.done
+                            ? 'text-ink-faint'
+                            : propadly
+                              ? 'font-medium text-danger'
+                              : s.dueDate
+                                ? 'text-ink-soft'
+                                : 'text-ink-faint'
+                      }`}
+                    >
+                      {s.dueDate ? (
+                        formatDayLabel(s.dueDate)
+                      ) : (
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3.5" y="5" width="17" height="15.5" rx="3" />
+                          <path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" />
+                        </svg>
+                      )}
+                    </button>
+                    {/* Krok z Todoistu odsud mazat nejde — smazal by se
+                        klientovi v jeho projektu a stejně by se vrátil. */}
+                    {zTodoistu ? (
+                      <span className="shrink-0 text-[11px] text-ink-faint" title="Krok z Todoistu">
+                        Todoist
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={`Smazat podúkol ${s.title}`}
+                        onClick={() => persistSubtasks(subtasks.filter((x) => x.id !== s.id))}
+                        className="-m-2 shrink-0 p-2 text-ink-faint transition-transform duration-150 active:scale-90"
+                      >
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                          <path d="M6 6l12 12M18 6L6 18" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  {otevreny && (
+                    <div className="px-3 pb-2.5">
+                      <VyberDne
+                        value={s.dueDate ?? ''}
+                        bezPopisek="Bez termínu"
+                        onChange={(iso) => {
+                          persistSubtasks(
+                            subtasks.map((x) => (x.id === s.id ? { ...x, dueDate: iso || undefined } : x)),
+                          )
+                          setKrokSTerminem(null)
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
             <div className="flex items-center gap-2.5 px-3 py-1">
               <span className="h-[18px] w-[18px] shrink-0 rounded-full border-[1.5px] border-dashed border-edge" />
               <input
