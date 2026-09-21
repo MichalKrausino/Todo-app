@@ -33,6 +33,7 @@ export function MesicniMrizka({
   vybrany,
   znacky,
   klid,
+  strop,
   onVyber,
 }: {
   /** „2026-09" */
@@ -42,6 +43,13 @@ export function MesicniMrizka({
   /** co na kterém dni stojí; dny bez záznamu jsou volné */
   znacky: Map<string, DenZnacka>
   klid: boolean
+  /**
+   * Osobní strop dne v úkolech. Proti němu se kreslí délka pruhu —
+   * a musí to být TÝŽ strop, proti jakému se kreslí pruh vybraného dne
+   * pod mřížkou. Kdyby si každý bral svůj, měla by jedna obrazovka dvě
+   * měřítka a den by v mřížce vypadal jinak plný než hned pod ní.
+   */
+  strop?: number
   onVyber: (iso: string) => void
 }) {
   const odsazeni = odsazeniMesice(kotva)
@@ -64,11 +72,11 @@ export function MesicniMrizka({
         const jeDnes = iso === dnes
         const minulost = iso < dnes
         const vikend = [0, 6].includes(fromISODate(iso).getDay())
-        // Přeplněný den nese svou zprávu ČÍSLEM, ne pruhem. Pruh je dlouhý
-        // podle odhadovaného času, a ten je hádaný (viz `PruhDne.tsx`);
-        // verdikt „je toho moc" se rozhoduje z POČTU úkolů, tedy z toho,
-        // co se opravdu stalo. Mřížka je přitom jediné místo, kde se den
-        // vybírá, takže to tam musí být vidět. Výběr a dnešek zůstávají
+        // Přeplněný den nese svou zprávu ČÍSLEM, ne pruhem. Pruh v buňce
+        // je 28 px a přes svůj základ se natáhnout nemůže, takže den se
+        // čtyřmi a den s deseti úkoly kreslí totéž — plno. Mřížka je
+        // přitom jediné místo, kde se den vybírá, takže to tam musí být
+        // vidět. Výběr a dnešek zůstávají
         // nad tím: kde zrovna stojím, je vždycky důležitější než jak je
         // tam nabito.
         const cislo = vybrano
@@ -101,7 +109,7 @@ export function MesicniMrizka({
                   stála každé jinde podle toho, kdo má práci. */}
               <span className="block h-1 w-7">
                 {znacka && (
-                  <PruhDne dily={znacka.dily} klid={klid} className="h-1" />
+                  <PruhDne dily={znacka.dily} klid={klid} strop={strop} className="h-1" />
                 )}
               </span>
             </button>

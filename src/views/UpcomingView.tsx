@@ -34,7 +34,6 @@ import {
   sortTasks,
   updateTask,
 } from '../db/repo'
-import { plannedMinutes } from '../lib/capacity'
 import { jePreplneno, popisPreplneneho } from '../lib/kapacitaDne'
 import { useOsobniStrop } from '../lib/prutok'
 import { nalozPoDnech, volnejsiDen } from '../lib/volnyDen'
@@ -43,7 +42,7 @@ import { minutesToLabel } from '../lib/freeSlot'
 import { plural } from '../lib/labels'
 import { dnyMesice, kotvaMesice, posunMesic } from '../lib/mesic'
 import { klidovyRezim } from '../lib/motion'
-import { dilyDne, minutyDilu, type Dil } from '../lib/pruhDne'
+import { dilyDne, type Dil } from '../lib/pruhDne'
 import { parseQuickAdd } from '../lib/quickAdd'
 import { ukazToast, type ToastAkce } from '../lib/toast'
 import { useNavrhPamet } from '../lib/navrhPamet'
@@ -66,11 +65,12 @@ const monthFmt = new Intl.DateTimeFormat('cs-CZ', { month: 'long' })
 // propadlých a v ranním návrhu: odložit o měsíc není odložení.
 const OKNO_JINAM = 7
 
-/** Nálož jednoho dne: minuty podle klienta (bez barvy = schůzka / bez klienta). */
+/** Nálož jednoho dne: počty úkolů po klientech (bez barvy = bez klienta). */
 interface DenNaloz {
   ukoly: number
   schuzky: number
-  minuty: number
+  /** délka schůzek z kalendáře — jediné měřené minuty, které tu jsou */
+  schuzkyMinuty: number
   dily: Dil[]
 }
 
@@ -147,7 +147,9 @@ export function UpcomingView({
     }
     const bezTerminu = sortTasks(open.filter((t) => !effectiveDate(t)))
 
-    // Pruh dne: čas úkolů po klientech + délka schůzek (bez barvy).
+    // Pruh dne: počet úkolů po klientech. Schůzky v něm nejsou — pruh
+    // měří MOJI práci v téže jednotce jako strop; jejich délka je vedle
+    // něj jako měřené číslo z kalendáře.
     const naloz = new Map<string, DenNaloz>()
     for (const d of dnyVMesici) {
       if (d < today) continue
@@ -159,12 +161,11 @@ export function UpcomingView({
           soucet + (e.allDay ? 0 : Math.max(0, Math.round((Date.parse(e.end) - Date.parse(e.start)) / 60000))),
         0,
       )
-      const dily = dilyDne(ukoly, schuzkyMinuty, (id) => clientMap.get(id)?.color)
       naloz.set(d, {
         ukoly: ukoly.length,
         schuzky: schuzky.length,
-        minuty: minutyDilu(dily),
-        dily,
+        schuzkyMinuty,
+        dily: dilyDne(ukoly, (id) => clientMap.get(id)?.color),
       })
     }
 
@@ -173,11 +174,11 @@ export function UpcomingView({
     const tyden = Array.from({ length: 7 }, (_, i) => toISODate(addDays(fromISODate(pondeli), i))).filter((d) => d >= today)
     const tydenUkoly = tyden.flatMap((d) => podleDne.get(d) ?? [])
     const tydenSchuzky = tyden.reduce((n, d) => n + (eventsPerDay.get(d)?.length ?? 0), 0)
-    const tydenMin = plannedMinutes(tydenUkoly)
+    // Žádné „~8 h": hodiny by se sčítaly z odhadů, které nikdo nespočítal.
+    // Počet úkolů a počet schůzek jsou obojí fakt.
     const souhrn = [
       'tento týden',
       tydenUkoly.length > 0 ? `${tydenUkoly.length} ${plural(tydenUkoly.length, 'úkol', 'úkoly', 'úkolů')}` : 'bez úkolů',
-      tydenMin > 0 ? `~${minutesToLabel(tydenMin)}` : '',
       tydenSchuzky > 0 ? `${tydenSchuzky} ${plural(tydenSchuzky, 'schůzka', 'schůzky', 'schůzek')}` : '',
     ].filter(Boolean)
 
@@ -189,7 +190,10 @@ export function UpcomingView({
     return [
       n.ukoly > 0 ? `${n.ukoly} ${plural(n.ukoly, 'úkol', 'úkoly', 'úkolů')}` : '',
       n.schuzky > 0 ? `${n.schuzky} ${plural(n.schuzky, 'schůzka', 'schůzky', 'schůzek')}` : '',
-      n.minuty > 0 ? `~${minutesToLabel(n.minuty)}` : '',
+      // Hodiny jen u schůzek: ty jsou z kalendáře, tedy měřené. U úkolů
+      // by to byl součet odhadů, které nikdo nespočítal — proto tam nejsou
+      // ani s vlnovkou. Vlnovka z hádaného čísla nedělá poctivé.
+      n.schuzkyMinuty > 0 ? minutesToLabel(n.schuzkyMinuty) : '',
     ]
       .filter(Boolean)
       .join(' · ')
@@ -318,18 +322,16 @@ export function UpcomingView({
   }
 
   // Souhrn měsíce počítá CELÝ měsíc (od dneška), ne jen dny se značkou.
-  // Hodiny jsou čas úkolů jako v hlavičce („tento týden · ~4 h"), schůzky
-  // v nich nejsou: kalendář je stažený jen po konec okna.
+  // Počet úkolů, ne hodiny: hodiny by byly součet odhadů, které nikdo
+  // nespočítal, a přes celý měsíc by se ta nepřesnost jen nasčítala.
   const souhrnMesice = (kotva: string) => {
     let ukoly = 0
-    let minuty = 0
     for (const [den, ts] of podleDne) {
       if (!den.startsWith(kotva)) continue
       ukoly += ts.length
-      minuty += plannedMinutes(ts)
     }
     if (ukoly === 0) return 'volno'
-    return `${ukoly} ${plural(ukoly, 'úkol', 'úkoly', 'úkolů')}${minuty > 0 ? ` · ~${minutesToLabel(minuty)}` : ''}`
+    return `${ukoly} ${plural(ukoly, 'úkol', 'úkoly', 'úkolů')}`
   }
 
   // Listování měsíci bere výběr s sebou: kdyby zůstal, ukazuje agenda den,
@@ -432,6 +434,7 @@ export function UpcomingView({
           vybrany={vybrany}
           znacky={znacky}
           klid={klid}
+          strop={strop}
           onVyber={setVybrany}
         />
       </section>
@@ -453,7 +456,7 @@ export function UpcomingView({
           </span>
         </div>
         {/* Pruh přes celou šířku: v mřížce je ten samý obrázek v malém. */}
-        <PruhDne dily={denNaloz?.dily ?? []} klid={klid} />
+        <PruhDne dily={denNaloz?.dily ?? []} klid={klid} strop={strop} />
 
         <div className="seznam-na-papire">
           {dayEvents.length > 0 && (

@@ -15,7 +15,6 @@ import { emitRepoWrite } from './events'
 import type { Project, Task, Template, TemplateItem } from './types'
 import { deterministicUuid } from '../lib/deterministicId'
 import { addDays, fromISODate, toISODate, todayISO } from '../lib/dates'
-import { estimateTaskMinutes } from '../lib/estimate'
 import { RULE_EPOCH, occurrencesBetween } from '../lib/rrule'
 import { updateClient } from './repo'
 
@@ -194,7 +193,6 @@ async function reconcileOnce(): Promise<void> {
           status: 'active',
           sourceTemplateItemId: w.item.id,
           order: 0,
-          estimateMinutes: estimateTaskMinutes(w.item.title),
         }
         await db.tasks.add(task)
         changed = true

@@ -104,7 +104,16 @@ export const SUB_PREFIX = 'td-'
 
 export function subtasksFrom(children: TodoistTask[]): Subtask[] | undefined {
   if (children.length === 0) return undefined
-  return children.map((c) => ({ id: `${SUB_PREFIX}${c.id}`, title: c.content, done: Boolean(c.checked) }))
+  return children.map((c) => ({
+    id: `${SUB_PREFIX}${c.id}`,
+    title: c.content,
+    done: Boolean(c.checked),
+    // Termín kroku bere touž cestou jako termín úkolu (`datesFrom`):
+    // napřed `deadline`, jinak `due`. Krok má jen jedno datum, takže se
+    // „kdy se tím budu zabývat" a „dokdy to musí být" slučuje — a když
+    // Todoist nemá ani jedno, nemá ho ani krok. Nic se nehádá.
+    dueDate: datesFrom(c).dueDate,
+  }))
 }
 
 // Id úkolu v Todoistu, který za položkou checklistu stojí (nebo nic).

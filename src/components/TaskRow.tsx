@@ -2,6 +2,7 @@ import { memo, useRef, useState } from 'react'
 import type { Client, Priority, Project, Task } from '../db/types'
 import { updateTask } from '../db/repo'
 import { deleteBlockForTask } from '../sync/calendar'
+import { dalsiTerminKroku, maPropadlyKrok } from '../lib/podukoly'
 import { addDays, formatDayLabel, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { najdiOdkazy } from '../lib/links'
 
@@ -179,6 +180,10 @@ export const TaskRow = memo(function TaskRow({
   const odkaz = najdiOdkazy(task.title, task.notes)[0]
   const subs = task.subtasks ?? []
   const subsDone = subs.filter((s) => s.done).length
+  // Termín kroku — čistá logika sdílená s detailem (`src/lib/podukoly.ts`),
+  // ať se řádek a panel nerozejdou v tom, co je propadlé.
+  const terminKroku = visualDone ? undefined : dalsiTerminKroku(subs)
+  const propadlyKrok = !visualDone && maPropadlyKrok(subs, todayISO())
   const fullPull = dragging && dx < -SWIPE_FULL // Zítra expanduje přes celou šířku
 
   return (
@@ -338,6 +343,19 @@ export const TaskRow = memo(function TaskRow({
                     <path d="M8.5 12.3l2.5 2.5 4.5-5.2" />
                   </svg>
                   {subsDone}/{subs.length}
+                  {/* Nejbližší termín nehotového kroku. Bez něj by byl
+                      termín u podúkolu slib, který appka nikde nehlídá —
+                      viditelný jedině po otevření úkolu. Propadlý krok je
+                      červený stejně jako propadlý termín úkolu; číslo
+                      kroků zůstává v původním tónu, aby se nebarvil celý
+                      řádek kvůli jednomu kroku. */}
+                  {terminKroku && (
+                    <span className={propadlyKrok ? 'font-medium text-danger' : 'text-ink-soft'}>
+                      {' · '}
+                      {formatDayLabel(terminKroku)}
+                      <span className="sr-only"> — termín podúkolu</span>
+                    </span>
+                  )}
                 </span>
               )}
               {(task.recurrenceRule || task.sourceTemplateItemId) && (
