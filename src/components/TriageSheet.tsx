@@ -23,6 +23,7 @@
 import { useState } from 'react'
 import type { Client, Task } from '../db/types'
 import { updateTask } from '../db/repo'
+import { jeLezak, popisOdkladu } from '../lib/odkladani'
 import { addDays, formatDayLabel, formatDaysAgo, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { useNaloz, volnejsiDen } from '../lib/volnyDen'
 import { plural } from '../lib/labels'
@@ -141,6 +142,16 @@ export function TriageSheet({
                 <p className="mt-1.5 text-[13px] text-ink-faint">
                   {`Propadlo ${formatDaysAgo(propadloDne(task))}`}
                   {task.dueDate && task.dueDate < dnes && ` · pevný termín byl ${formatDayLabel(task.dueDate)}`}
+                  {/* Kolikrát se tenhle úkol už posouval. Appka to věděla
+                      odjakživa, ale říkala to jen v signálech a v nedělním
+                      ohlédnutí — tedy nikdy ve chvíli, kdy člověk mačká
+                      „Volnější den" potřetí. Změřeno na vlastních datech:
+                      z úkolů odložených dvakrát a víc se zatím nedodělal
+                      ani jeden. Nic to nezakazuje a odkladová tlačítka
+                      zůstávají první; jen je u nich vidět, co se děje. */}
+                  {jeLezak(task) && (
+                    <span className="font-medium text-note-ink"> · {popisOdkladu(task)}</span>
+                  )}
                 </p>
               </div>
 

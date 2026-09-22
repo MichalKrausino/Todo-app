@@ -1476,6 +1476,80 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 18. odkládání je vidět tam, kde se odkládá ---
+// Appka počítá `postponeCount` odjakživa, ale mluvila o něm jen
+// v signálech a v nedělním ohlédnutí — tedy nikdy ve chvíli, kdy člověk
+// mačká „Volnější den" potřetí.
+//
+// Změřeno na 46 úkolech provozu: z úkolů odložených dvakrát a víc se
+// zatím nedodělal ANI JEDEN (u neodložených 81 %, u jednou odložených
+// 50 %). Odklad tedy není neutrální „udělám to jindy" a triáž to má
+// říct — ne zakázat, jen ukázat.
+//
+// Pravidlo hlídají unit testy; tohle hlídá, co z něj člověk uvidí:
+// že to v kartě triáže opravdu stojí, že to mlčí u úkolu odloženého
+// jednou, a že je to v tónu `note-ink`, ne šedé jako zbytek popisku.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+
+  await page.evaluate(async () => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    const den = (o) => { const d = new Date(); d.setDate(d.getDate() + o); return d.toISOString().slice(0, 10) }
+    await new Promise((res) => {
+      const tx = db.transaction('tasks', 'readwrite')
+      const st = tx.objectStore('tasks')
+      st.clear()
+      const t = new Date().toISOString()
+      // Fronta triáže jde od nejstaršího propadlého, takže je pořadí dané
+      // daty: napřed ležák, po něm úkol odložený jednou.
+      st.put({ id: 'lezak', createdAt: t, updatedAt: t, title: 'Jak měřit konverze?',
+        priority: 'normal', status: 'active', order: 0, dueDate: den(-9), postponeCount: 3 })
+      st.put({ id: 'cerstvy', createdAt: t, updatedAt: t, title: 'Poslat fakturu',
+        priority: 'normal', status: 'active', order: 1, dueDate: den(-2), postponeCount: 1 })
+      tx.oncomplete = res
+    })
+  })
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  await page.getByRole('button', { name: /Projít/ }).click(); await page.waitForTimeout(800)
+
+  const karta = () => page.evaluate(() => {
+    const p = document.querySelector('.sheet-panel')
+    if (!p) return null
+    // `p.display`, ne `.display`: nadpis panelu („Po termínu") má touž
+    // třídu a je v dokumentu první — kontrola by pak četla jeho.
+    const nazev = p.querySelector('p.display')?.textContent?.trim() ?? ''
+    const popisek = [...p.querySelectorAll('p')].find((e) => /Propadlo/.test(e.textContent ?? ''))
+    const znacka = popisek ? [...popisek.querySelectorAll('span')].find((s) => /odloženo/.test(s.textContent ?? '')) : null
+    const sonda = document.createElement('span')
+    sonda.style.color = 'var(--color-note-ink)'
+    document.body.append(sonda)
+    const token = getComputedStyle(sonda).color
+    sonda.remove()
+    return {
+      nazev,
+      popis: popisek ? popisek.textContent.replace(/\s+/g, ' ').trim() : '',
+      barva: znacka ? getComputedStyle(znacka).color : '',
+      token,
+    }
+  })
+
+  const prvni = await karta()
+  T_(prvni !== null && /Jak měřit konverze/.test(prvni.nazev), 'triáž začíná nejdéle propadlým úkolem (' + (prvni?.nazev ?? 'nic') + ')')
+  T_(prvni !== null && /odloženo 3×/.test(prvni.popis), 'u ležáku je v kartě vidět, kolikrát se už posouval (' + (prvni?.popis ?? 'nic') + ')')
+  T_(prvni !== null && prvni.barva !== '' && prvni.barva === prvni.token,
+     'a je to v tónu note-ink, ne šedě jako zbytek popisku (' + (prvni?.barva ?? '') + ' vs token ' + (prvni?.token ?? '') + ')')
+
+  // Odpověď posune frontu na druhý úkol — ten odložený jen jednou mlčí.
+  await page.locator('.sheet-panel').getByRole('button', { name: /^Zítra/ }).click(); await page.waitForTimeout(600)
+  const druhy = await karta()
+  T_(druhy !== null && /Poslat fakturu/.test(druhy.nazev), 'fronta jde na další úkol (' + (druhy?.nazev ?? 'nic') + ')')
+  T_(druhy !== null && !/odloženo/.test(druhy.popis), 'jednou odložený úkol o odkládání mlčí — signál má zůstat vzácný (' + (druhy?.popis ?? 'nic') + ')')
+  await ctx.close()
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)

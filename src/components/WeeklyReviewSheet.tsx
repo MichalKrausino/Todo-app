@@ -115,6 +115,10 @@ export function WeeklyReviewSheet({ onClose }: { onClose: () => void }) {
               ))}
             </ul>
             <p className="mt-1.5 px-1 text-xs text-ink-faint">
+              {/* Nejdřív vlastní bilance, pak teprve rada — bez čísla je
+                  to poučka, s číslem je to jeho vlastní zkušenost. Věta
+                  se píše jen z dost velkého vzorku (viz `odkladani.ts`). */}
+              {stats.odkladani && <>{stats.odkladani} </>}
               Úkol odkládaný pořád dokola bývá buď moc velký, nebo nedůležitý. Rozbij ho, nebo škrtni.
             </p>
           </section>

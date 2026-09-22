@@ -11,6 +11,7 @@
 import type { Client, Project, Task } from '../db/types'
 import { addDays, fromISODate, mondayOf, toISODate } from './dates'
 import { osobniPrutok, stropZPrutoku, type Prutok } from './prutok'
+import { jeLezak, vetaOOdkladani } from './odkladani'
 
 export interface WeekStats {
   weekStart: string // pondělí
@@ -27,8 +28,14 @@ export interface WeekStats {
   plannedCount: number
   /** z nich skutečně dokončené */
   plannedDoneCount: number
-  /** otevřené úkoly s nejvyšším počtem odkladů (aspoň 2), max 3 */
+  /** otevřené úkoly s nejvyšším počtem odkladů (od `PRAH_ODKLADU`), max 3 */
   mostPostponed: Task[]
+  /**
+   * Bilance odkládání z CELÉ historie („dodělal se jeden ze čtyř"), nebo
+   * `undefined` při malém vzorku. Patří sem, ne na Dnes: je to číslo
+   * k zamyšlení, ne k popohánění — stejně jako osobní průtok.
+   */
+  odkladani: string | undefined
   /** aktivní klienti (kind=client), u kterých se v týdnu nic nedokončilo */
   quietClients: Client[]
   /** počet otevřených úkolů na příštích 7 dní, den po dni */
@@ -98,7 +105,7 @@ export function computeWeekStats(
   const plannedDone = planned.filter((t) => t.status === 'done')
 
   const mostPostponed = live
-    .filter((t) => (t.status === 'inbox' || t.status === 'active') && (t.postponeCount ?? 0) >= 2)
+    .filter((t) => (t.status === 'inbox' || t.status === 'active') && jeLezak(t))
     .sort((a, b) => (b.postponeCount ?? 0) - (a.postponeCount ?? 0))
     .slice(0, 3)
 
@@ -132,6 +139,7 @@ export function computeWeekStats(
     plannedCount: planned.length,
     plannedDoneCount: plannedDone.length,
     mostPostponed,
+    odkladani: vetaOOdkladani(live),
     quietClients,
     nextDays,
     prutok,
