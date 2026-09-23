@@ -5,6 +5,7 @@
 
 import type { Client, Project, Task } from '../db/types'
 import { addDays, daysSince, fromISODate, toISODate } from './dates'
+import { jeSlib } from './odkladani'
 
 // Prahy záměrně konzervativní — signál má být vzácný a zasloužený.
 export const INBOX_AGE_DAYS = 7 // po kolika dnech je nezařazený úkol „ležák"
@@ -27,7 +28,7 @@ export interface Signals {
   stalledProjects: Array<{ project: Project; client: Client }>
   /** úkoly ležící v inboxu déle než INBOX_AGE_DAYS */
   agingInbox: Task[]
-  /** úkoly odložené aspoň POSTPONE_THRESHOLD× */
+  /** úkoly S TERMÍNEM odložené aspoň POSTPONE_THRESHOLD× */
   postponed: Task[]
 }
 
@@ -123,8 +124,15 @@ export function computeSignals(
     )
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 
+  // Jen SLIBY, tedy úkoly s termínem. Úkol bez termínu, který se posouvá
+  // pořád dokola, je zpravidla vědomě odložená práce („vím, že to budu
+  // muset udělat, ale ne teď") a ta se připomíná právě tím posouváním —
+  // nadávat za ni je hluk. Změřeno: oba úkoly, které dnes tenhle práh
+  // přetahují, jsou bez termínu, takže signál svítil VÝHRADNĚ na ně.
+  // Cesta ven pro ně je „Bez data" v triáži, ne řádka v signálech.
+  // Celé zdůvodnění i měření je v `odkladani.ts`.
   const postponed = open
-    .filter((t) => (t.postponeCount ?? 0) >= POSTPONE_THRESHOLD)
+    .filter((t) => jeSlib(t) && (t.postponeCount ?? 0) >= POSTPONE_THRESHOLD)
     .sort((a, b) => (b.postponeCount ?? 0) - (a.postponeCount ?? 0))
 
   return { neglected, unplanned, stalledProjects, agingInbox, postponed }

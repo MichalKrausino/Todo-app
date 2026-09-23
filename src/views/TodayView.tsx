@@ -689,7 +689,7 @@ export function TodayView({
         />
       )}
       {signalyOpen && <SignalySheet radky={signaly} onClose={() => setSignalyOpen(false)} />}
-      {triageOpen && <TriageSheet ukoly={visOverdue} clients={clientMap} onClose={() => setTriageOpen(false)} />}
+      {triageOpen && <TriageSheet ukoly={visOverdue} clients={clientMap} nadpis={popis?.slovo} onClose={() => setTriageOpen(false)} />}
       {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
       {shutdownOpen && (
         <ShutdownSheet tasks={unfinished} onOpenTask={onOpenTask} onCloseDay={closeDay} onClose={() => setShutdownOpen(false)} />

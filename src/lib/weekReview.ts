@@ -11,7 +11,7 @@
 import type { Client, Project, Task } from '../db/types'
 import { addDays, fromISODate, mondayOf, toISODate } from './dates'
 import { osobniPrutok, stropZPrutoku, type Prutok } from './prutok'
-import { jeLezak, vetaOOdkladani } from './odkladani'
+import { jeOdkladanySlib, vetaOOdkladani } from './odkladani'
 
 export interface WeekStats {
   weekStart: string // pondělí
@@ -105,7 +105,7 @@ export function computeWeekStats(
   const plannedDone = planned.filter((t) => t.status === 'done')
 
   const mostPostponed = live
-    .filter((t) => (t.status === 'inbox' || t.status === 'active') && jeLezak(t))
+    .filter((t) => (t.status === 'inbox' || t.status === 'active') && jeOdkladanySlib(t))
     .sort((a, b) => (b.postponeCount ?? 0) - (a.postponeCount ?? 0))
     .slice(0, 3)
 
