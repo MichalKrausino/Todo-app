@@ -295,7 +295,7 @@ export function VseView({
         )}
       </section>
 
-      {triageOpen && <TriageSheet ukoly={propadle} clients={clientMap} onClose={() => setTriageOpen(false)} />}
+      {triageOpen && <TriageSheet ukoly={propadle} clients={clientMap} nadpis={popis?.slovo} onClose={() => setTriageOpen(false)} />}
     </div>
   )
 }

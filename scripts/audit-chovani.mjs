@@ -1106,6 +1106,15 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   T_(jenPlan !== null && /nestihnuto/i.test(jenPlan.text), 'bez propadlého termínu se řádka jmenuje „nestihnuto" (' + (jenPlan?.text ?? 'chybí') + ')')
   T_(jenPlan !== null && !/po termínu/i.test(jenPlan.text), 'a netvrdí „po termínu", když žádný termín nepropadl')
 
+  // …a to jméno musí vydržet i o ťuknutí dál. Panel triáže se jmenoval
+  // „Po termínu" natvrdo, takže řádka poctivě hlásila „nestihnuto · 2"
+  // a hned nad týmiž dvěma úkoly stálo „Po termínu" — appka si v jednom
+  // gestu protiřečila.
+  await page.getByRole('button', { name: /Projít/ }).click(); await page.waitForTimeout(700)
+  const nadpisPanelu = await page.evaluate(() => document.querySelector('.sheet-panel h2')?.textContent?.trim() ?? '')
+  T_(/nestihnuto/i.test(nadpisPanelu), 'a panel triáže se jmenuje stejně jako řádka, ze které se do něj ťuklo (' + nadpisPanelu + ')')
+  await page.keyboard.press('Escape'); await page.waitForTimeout(500)
+
   // (2) termín, který teprve přijde, z minulého naplánování průšvih nedělá
   await nasyp([{ title: 'Termín až zítra', sched: -1, due: 1 }])
   await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(1000)
@@ -1473,6 +1482,115 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
   const poRestartu = await znacka()
   T_(poRestartu !== null && poRestartu.den !== '', 'a přežije restart appky (' + (poRestartu?.text ?? 'nic') + ')')
+  await ctx.close()
+}
+
+// --- 18. o odkládání se mluví jen tam, kde byl slib ---
+// Appka počítá `postponeCount` odjakživa, ale mluvila o něm jen
+// v signálech a v nedělním ohlédnutí — tedy nikdy ve chvíli, kdy člověk
+// mačká „Volnější den" potřetí. První pokus to napravil značkou
+// „odloženo 5×" u každého odkládaného úkolu, jenže odklad není jedna věc:
+// úkol BEZ termínu se často posouvá schválně („vím, že to budu muset
+// udělat, ale ne teď") a to posouvání je zároveň ta připomínka. Změřeno
+// na vlastních datech: čtyři z pěti úkolů odložených dvakrát a víc žádný
+// termín nemají, takže by značka mířila hlavně na ně.
+//
+// Pravidlo je proto totéž, které appka používá nad seznamem propadlých
+// („po termínu" vs „nestihnuto"): mluví se jen o SLIBECH. Odkládaný
+// termín značku dostane, odkládaný úkol bez termínu dostane nabídku
+// „Bez data" — datum pryč, úkol ne.
+//
+// Pravidlo hlídají unit testy; tohle hlídá, co z něj člověk uvidí:
+// značku u slibu (a v tónu `note-ink`, ne šedě), ticho u parkovaného
+// úkolu, nabídku „Bez data" právě u něj — a že ta nabídka opravdu sundá
+// obě data, takže úkol přestane být propadlý.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+
+  await page.evaluate(async () => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    const den = (o) => { const d = new Date(); d.setDate(d.getDate() + o); return d.toISOString().slice(0, 10) }
+    await new Promise((res) => {
+      const tx = db.transaction('tasks', 'readwrite')
+      const st = tx.objectStore('tasks')
+      st.clear()
+      const t = new Date().toISOString()
+      // Fronta triáže jde od nejdéle propadlého, takže je pořadí dané
+      // daty: slib (−9), parkovaný (−5), jednou odložený (−2).
+      st.put({ id: 'slib', createdAt: t, updatedAt: t, title: 'Odevzdat report klientovi',
+        priority: 'normal', status: 'active', order: 0, dueDate: den(-9), postponeCount: 3 })
+      // Parkovaný: žádný termín, jen den, který si člověk vybral sám.
+      st.put({ id: 'park', createdAt: t, updatedAt: t, title: 'Jak měřit konverze?',
+        priority: 'normal', status: 'active', order: 1, scheduledFor: den(-5), postponeCount: 3 })
+      st.put({ id: 'cerstvy', createdAt: t, updatedAt: t, title: 'Poslat fakturu',
+        priority: 'normal', status: 'active', order: 2, dueDate: den(-2), postponeCount: 1 })
+      tx.oncomplete = res
+    })
+  })
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  await page.getByRole('button', { name: /Projít/ }).click(); await page.waitForTimeout(800)
+
+  const karta = () => page.evaluate(() => {
+    const p = document.querySelector('.sheet-panel')
+    if (!p) return null
+    // `p.display`, ne `.display`: nadpis panelu („Po termínu") má touž
+    // třídu a je v dokumentu první — kontrola by pak četla jeho.
+    const nazev = p.querySelector('p.display')?.textContent?.trim() ?? ''
+    const popisek = [...p.querySelectorAll('p')].find((e) => /Propadlo/.test(e.textContent ?? ''))
+    const znacka = popisek ? [...popisek.querySelectorAll('span')].find((s) => /odloženo/.test(s.textContent ?? '')) : null
+    const sonda = document.createElement('span')
+    sonda.style.color = 'var(--color-note-ink)'
+    document.body.append(sonda)
+    const token = getComputedStyle(sonda).color
+    sonda.remove()
+    return {
+      nazev,
+      popis: popisek ? popisek.textContent.replace(/\s+/g, ' ').trim() : '',
+      barva: znacka ? getComputedStyle(znacka).color : '',
+      token,
+      bezData: [...p.querySelectorAll('button')].some((e) => /^Bez data/.test((e.textContent ?? '').trim())),
+    }
+  })
+
+  const prvni = await karta()
+  T_(prvni !== null && /Odevzdat report/.test(prvni.nazev), 'triáž začíná nejdéle propadlým úkolem (' + (prvni?.nazev ?? 'nic') + ')')
+  T_(prvni !== null && /odloženo 3×/.test(prvni.popis), 'u odkládaného SLIBU je v kartě vidět, kolikrát se už posouval (' + (prvni?.popis ?? 'nic') + ')')
+  T_(prvni !== null && prvni.barva !== '' && prvni.barva === prvni.token,
+     'a je to v tónu note-ink, ne šedě jako zbytek popisku (' + (prvni?.barva ?? '') + ' vs token ' + (prvni?.token ?? '') + ')')
+  T_(prvni !== null && prvni.bezData === false, 'slib nabídku „Bez data" nedostane — ten se má splnit, ne odložit bez data')
+
+  // Odpověď posune frontu na parkovaný úkol: žádný termín, jen den, který
+  // si člověk vybral sám a pak ho třikrát posunul.
+  await page.locator('.sheet-panel').getByRole('button', { name: /^Zítra/ }).click(); await page.waitForTimeout(600)
+  const druhy = await karta()
+  T_(druhy !== null && /Jak měřit konverze/.test(druhy.nazev), 'fronta jde na další úkol (' + (druhy?.nazev ?? 'nic') + ')')
+  T_(druhy !== null && !/odloženo/.test(druhy.popis), 'úkol bez termínu se za odkládání nekárá — je to vědomé parkování (' + (druhy?.popis ?? 'nic') + ')')
+  T_(druhy !== null && druhy.bezData === true, 'a místo značky dostane nabídku „Bez data"')
+
+  // A ta nabídka musí doopravdy sundat obě data — jinak je to jen další
+  // tlačítko, po kterém úkol zítra zase svítí jako propadlý.
+  await page.locator('.sheet-panel').getByRole('button', { name: /^Bez data/ }).click(); await page.waitForTimeout(700)
+  const poSundani = await page.evaluate(async () => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    return await new Promise((res) => {
+      const r = db.transaction('tasks').objectStore('tasks').get('park')
+      r.onsuccess = () => res({ due: r.result?.dueDate ?? null, sched: r.result?.scheduledFor ?? null, stav: r.result?.status ?? null })
+    })
+  })
+  T_(poSundani.due === null && poSundani.sched === null,
+     '„Bez data" sundá termín i naplánování, takže úkol přestane být propadlý (' + JSON.stringify(poSundani) + ')')
+  // Status se schválně nemění na `inbox` — odtamtud by ho po pár dnech
+  // vyhrabal signál „ležáky v inboxu", tedy další nadávání za totéž.
+  T_(poSundani.stav === 'active', 'úkol přitom zůstane rozdělaný, ne v inboxu (' + poSundani.stav + ')')
+
+  const treti = await karta()
+  T_(treti !== null && /Poslat fakturu/.test(treti.nazev), 'fronta jde dál (' + (treti?.nazev ?? 'nic') + ')')
+  T_(treti !== null && !/odloženo/.test(treti.popis) && treti.bezData === false,
+     'jednou odložený úkol mlčí i nenabízí — signál má zůstat vzácný (' + (treti?.popis ?? 'nic') + ')')
   await ctx.close()
 }
 

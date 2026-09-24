@@ -6,7 +6,8 @@
 // propadlých je ta nejhorší věc, kterou appka umí ukázat ráno.
 //
 // Tady je z toho rozhodování po jednom: velký název, kolik toho propadlo,
-// a čtyři odpovědi. Sto úkolů se projde za dvě minuty.
+// a čtyři odpovědi (u zaparkovaného úkolu pátá, viz „Bez data" níž).
+// Sto úkolů se projde za dvě minuty.
 //
 // ODPOVĚDI JSOU DNY, NE SLOVA. Dřív tu stálo „Příští týden (pondělí)" —
 // jedno tlačítko, jedno datum, takže sto propadlých úkolů skončilo na
@@ -23,12 +24,13 @@
 import { useState } from 'react'
 import type { Client, Task } from '../db/types'
 import { updateTask } from '../db/repo'
+import { jeOdkladanySlib, jeParkovany, popisOdkladu } from '../lib/odkladani'
 import { addDays, formatDayLabel, formatDaysAgo, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { useNaloz, volnejsiDen } from '../lib/volnyDen'
 import { plural } from '../lib/labels'
 import { Sheet } from './Sheet'
 
-type Odpoved = 'dnes' | 'zitra' | 'volny' | 'neplati' | 'preskoceno'
+type Odpoved = 'dnes' | 'zitra' | 'volny' | 'neplati' | 'bezdata' | 'preskoceno'
 
 interface Krok {
   task: Task
@@ -54,10 +56,19 @@ const propadloDne = (t: Task): string =>
 export function TriageSheet({
   ukoly,
   clients,
+  nadpis = 'po termínu',
   onClose,
 }: {
   ukoly: Task[]
   clients: Map<string, Client>
+  /**
+   * Jak se ta hromádka jmenuje — týmž slovem, jakým ji pojmenovala řádka,
+   * ze které se sem ťuklo (`popisPropadlych`). Panel se jmenoval „Po
+   * termínu" vždycky, takže řádka správně hlásila „nestihnuto · 1" a
+   * o ťuknutí později stálo nad týmž úkolem „Po termínu". Velké písmeno
+   * dělá `first-letter`, texty v kódu zůstávají psané malými.
+   */
+  nadpis?: string
   onClose: () => void
 }) {
   // Od nejstaršího: co leží nejdéle, potřebuje rozhodnout nejvíc.
@@ -89,6 +100,11 @@ export function TriageSheet({
     // `dropped` místo smazání: úkol zmizí ze všech otevřených seznamů,
     // ale zůstane v datech — zahozená práce je taky informace.
     if (odpoved === 'neplati') void updateTask(task.id, { status: 'dropped' })
+    // Sundat datum, ne úkol. Status se ÚMYSLNĚ nemění na `inbox`:
+    // odtamtud by ho po pár dnech vyhrabal signál „ležáky v inboxu"
+    // (`agingInbox` v `signals.ts` filtruje právě na `inbox`), tedy
+    // další nadávání za něco, co člověk udělal schválně.
+    if (odpoved === 'bezdata') void updateTask(task.id, { dueDate: undefined, scheduledFor: undefined })
     setHotovo((h) => [...h, { task, odpoved, pred }])
   }
 
@@ -106,7 +122,7 @@ export function TriageSheet({
       {(close) => (
         <>
           <header className="flex items-baseline justify-between gap-3 pt-1">
-            <h2 className="display text-2xl font-bold">Po termínu</h2>
+            <h2 className="display text-2xl font-bold first-letter:uppercase">{nadpis}</h2>
             <span className="shrink-0 text-sm text-ink-soft">
               {Math.min(na + 1, fronta.length)} / {fronta.length}
             </span>
@@ -141,6 +157,15 @@ export function TriageSheet({
                 <p className="mt-1.5 text-[13px] text-ink-faint">
                   {`Propadlo ${formatDaysAgo(propadloDne(task))}`}
                   {task.dueDate && task.dueDate < dnes && ` · pevný termín byl ${formatDayLabel(task.dueDate)}`}
+                  {/* Kolikrát se tenhle úkol už posouval — ale JEN u slibu,
+                      tedy u úkolu, který má termín. Odkládaný úkol bez
+                      termínu je zpravidla vědomě odložená práce („vím, že
+                      to budu muset udělat, ale ne teď"), a to není chyba,
+                      za kterou se nadává; ten dostane nabídku „Bez data"
+                      níž. Zdůvodnění i měření jsou v `odkladani.ts`. */}
+                  {jeOdkladanySlib(task) && (
+                    <span className="font-medium text-note-ink"> · {popisOdkladu(task)}</span>
+                  )}
                 </p>
               </div>
 
@@ -170,6 +195,25 @@ export function TriageSheet({
                     <span className="block text-[13px] text-ink-soft">{popisDne(volny)}</span>
                   </button>
                 </div>
+                {/* Úkol bez termínu, který se posouvá pořád dokola, není
+                    zapomenutý — je zaparkovaný. Žebřík dnů mu ale nemá co
+                    nabídnout: každý další den z něj zas udělá propadlý
+                    úkol a červené číslo nad seznamem, které nic neznamená.
+                    Tohle je ta chybějící cesta ven: datum pryč, úkol ne.
+                    Připomínat se nepřestane (Bez termínu v Plánu, ranní
+                    návrh, Vše) — jen přestane lhát o tom, že něco propadlo.
+                    Nabízí se jen tam, kde se ten vzorec opravdu ukázal
+                    (`jeParkovany`), jinak by to byla pátá odpověď pro
+                    každého a žebřík by se rozpadl. */}
+                {jeParkovany(task) && (
+                  <button
+                    onClick={() => odpovez('bezdata')}
+                    className="w-full rounded-xl bg-card py-2.5 shadow-card transition-transform duration-150 active:scale-[0.98]"
+                  >
+                    <span className="block text-[15px] font-medium text-ink">Bez data</span>
+                    <span className="block text-[13px] text-ink-soft">zůstane v „Bez termínu"</span>
+                  </button>
+                )}
                 <button
                   onClick={() => odpovez('neplati')}
                   className="w-full rounded-xl py-3 text-[15px] font-medium text-danger transition-transform duration-150 active:scale-[0.98]"
@@ -215,6 +259,7 @@ export function TriageSheet({
                       ['dnes', 'dnes'],
                       ['zitra', 'zítra'],
                       ['volny', 'volnější den'],
+                      ['bezdata', 'bez data'],
                       ['neplati', 'už neplatí'],
                       ['preskoceno', 'přeskočeno'],
                     ] as [Odpoved, string][]
