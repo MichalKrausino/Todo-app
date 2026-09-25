@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zásady ochrany soukromí — Todo</title>
+    <meta name="description" content="Jaká data appka Todo zpracovává, kde leží a jak je smazat." />
+    <link rel="icon" href="favicon.svg" />
+    <style>
+      /* Táž paleta jako appka (`src/index.css`), jen napsaná ručně: tahle
+         stránka stojí mimo build, aby ji šlo otevřít i bez appky — a hlavně
+         aby na ni dosáhl Google, když kontroluje OAuth aplikaci.
+         Režim se tu řídí `prefers-color-scheme`, ne `data-theme`: přepínač
+         appky je uložený v jejím localStorage a tahle stránka o něm neví. */
+      :root {
+        --paper: #f4f4f1;
+        --card: #fff;
+        --ink: #17171a;
+        --ink-soft: #55555e;
+        --line: #e4e4de;
+        --accent-deep: #2b52b8;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #0e0e11;
+          --card: #17171b;
+          --ink: #f2f2f0;
+          --ink-soft: #a0a0aa;
+          --line: #2a2a30;
+          --accent-deep: #8fa9f5;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 40px 16px 64px;
+        background: var(--paper);
+        color: var(--ink);
+        font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      main { max-width: 640px; margin: 0 auto; }
+      h1 { font-size: 32px; line-height: 1.2; letter-spacing: -0.02em; margin: 0 0 8px; }
+      h2 { font-size: 20px; letter-spacing: -0.01em; margin: 40px 0 12px; }
+      p, li { color: var(--ink); }
+      .tise { color: var(--ink-soft); font-size: 15px; }
+      ul { padding-left: 20px; }
+      li { margin-bottom: 8px; }
+      a { color: var(--accent-deep); }
+      /* Adresa oprávnění je jedno dlouhé slovo bez mezer — na 390px
+         přetekla kartu a konec („/calendar") ležel za hranou displeje. */
+      code { font-size: 15px; overflow-wrap: anywhere; }
+      .karta {
+        background: var(--card);
+        border-radius: 16px;
+        padding: 4px 20px 20px;
+        margin: 24px 0;
+      }
+      footer { margin-top: 48px; border-top: 1px solid var(--line); padding-top: 16px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Zásady ochrany soukromí</h1>
+      <p class="tise">Appka <strong>Todo</strong> — osobní správa úkolů a kalendáře.<br />Platné od 25. 9. 2026.</p>
+
+      <p>
+        Todo je osobní appka, kterou provozuje jednotlivec pro sebe a hrstku
+        spolupracovníků. Není to služba na prodej a nikdo na ní nevydělává na
+        datech. Tenhle text říká přesně, co se s daty děje — bez odstavců,
+        které nic neznamenají.
+      </p>
+
+      <h2>Jaká data appka zpracovává</h2>
+      <ul>
+        <li><strong>To, co si do ní napíšeš</strong> — úkoly, poznámky, termíny, klienti a projekty.</li>
+        <li><strong>E-mail a heslo</strong>, když se přihlásíš, aby šla data synchronizovat mezi telefonem a počítačem. Heslo se ukládá jen jako otisk (spravuje to Supabase Auth), nikdo ho nevidí.</li>
+        <li><strong>Údaje z Google účtu</strong>, jen když si Google sám propojíš — viz níž.</li>
+        <li><strong>Todoist API token</strong>, jen když si napojíš Todoist. Leží na serveru, ne v prohlížeči.</li>
+        <li><strong>Odběr notifikací</strong> toho zařízení, na kterém si je zapneš, aby ti mohl přijít ranní návrh dne.</li>
+      </ul>
+
+      <h2>Kde data leží</h2>
+      <p>
+        Především <strong>v tvém zařízení</strong> — appka je offline-first, takže
+        pracuje z lokální databáze a na síť nečeká. Když jsi přihlášený, kopie se
+        synchronizuje na server <strong>Supabase v Paříži (EU)</strong>, aby se data
+        potkala mezi telefonem a počítačem. Jinam nejdou.
+      </p>
+
+      <h2>Údaje z Google</h2>
+      <div class="karta">
+        <p>
+          Propojení s Googlem je <strong>dobrovolné</strong> a slouží jedinému účelu:
+          kalendáři. Appka si při něm vyžádá oprávnění
+          <code>https://www.googleapis.com/auth/calendar</code> a používá ho takhle:
+        </p>
+        <ul>
+          <li><strong>Čte</strong> události z tvých kalendářů, aby ti ukázala dnešní schůzky a spočítala, kolik ti mezi nimi zbývá volného času.</li>
+          <li><strong>Zapisuje výhradně do vlastního kalendáře „Todo"</strong>, který si sama založí — když přijmeš ranní návrh, zabere si na úkol blok. Do žádného jiného kalendáře nesahá.</li>
+          <li>Obnovovací token leží <strong>jen na serveru</strong>, nikdy v prohlížeči.</li>
+        </ul>
+        <p>
+          Data z Google se <strong>nikomu nepředávají</strong>, nepoužívají se k reklamě
+          ani k trénování modelů a nečte je člověk. Nakládání s nimi se řídí
+          <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>
+          včetně požadavků na omezené použití (Limited Use).
+        </p>
+        <p class="tise">
+          Přístup můžeš kdykoli odebrat na
+          <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.
+          Appka pak přestane vidět kalendář, ale tvoje úkoly zůstanou.
+        </p>
+      </div>
+
+      <h2>Co appka nedělá</h2>
+      <ul>
+        <li>Žádná analytika, žádné měřicí skripty, žádné cookies třetích stran.</li>
+        <li>Žádná reklama a žádné profilování.</li>
+        <li>Data se neprodávají ani nepředávají nikomu dalšímu.</li>
+      </ul>
+
+      <h2>Sdílení mezi lidmi</h2>
+      <p>
+        Klienta můžeš nasdílet jinému uživateli téhle appky zadáním jeho e-mailu.
+        Tím uvidí úkoly a projekty <em>toho jednoho klienta</em> — nic jiného.
+        Jednotlivý úkol jde ze sdílení vyjmout. Sdílení můžeš kdykoli zrušit
+        a data pak z jeho zařízení zmizí.
+      </p>
+
+      <h2>Jak dlouho se data drží a jak je smazat</h2>
+      <p>
+        Data se drží, dokud je nesmažeš. Smazaný záznam se nejdřív označí, aby
+        zmizel na všech zařízeních, a jde ho vrátit zpět. Když chceš smazat
+        celý účet i se vším, co k němu patří, napiš na kontakt níž — smaže se
+        do 30 dnů.
+      </p>
+
+      <h2>Kontakt</h2>
+      <p>
+        <a href="mailto:michal2004cz@gmail.com">michal2004cz@gmail.com</a>
+      </p>
+
+      <footer class="tise">
+        <p>
+          Zdrojový kód appky je veřejný:
+          <a href="https://github.com/MichalKrausino/Todo-app" target="_blank" rel="noopener">github.com/MichalKrausino/Todo-app</a>.
+          Co je tady napsané, se dá ověřit v něm.
+        </p>
+        <p><a href="./">← zpět do appky</a></p>
+      </footer>
+    </main>
+  </body>
+</html>

@@ -13,7 +13,15 @@ clientsClaim()
 
 cleanupOutdatedCaches()
 precacheAndRoute(self.__WB_MANIFEST)
-registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html')))
+// Samostatné stránky mimo appku (zásady soukromí) si musí zůstat samy
+// sebou. Bez `denylist` je navigační pravidlo obslouží appkou — kdo má
+// Todo na ploše, dostal by na odkaz „zásady soukromí" obrazovku Dnes,
+// a to je přesně ten odkaz, který Google u OAuth aplikace kontroluje.
+registerRoute(
+  new NavigationRoute(createHandlerBoundToURL('index.html'), {
+    denylist: [/soukromi\.html$/],
+  }),
+)
 
 self.addEventListener('push', (event) => {
   if (!event.data) return
