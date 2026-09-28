@@ -567,14 +567,11 @@ export function QuickAdd({
           onTap={() => openPicker('project')}
           icon={<path d="M4 7.5a2 2 0 012-2h4l2 2.5h6a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2z" />}
         />
-        <SlotChip
-          slot="priority"
-          label="Priorita"
-          value={effPriority !== 'normal' ? PRIORITY_LABELS[effPriority] : undefined}
-          open={picker === 'priority'}
-          onTap={() => openPicker('priority')}
-          icon={<path d="M12 5v9M12 17.5v1" />}
-        />
+        {/* Sdílet stojí hned za Projektem, ne na konci: řádka se nezalamuje
+            a na telefonu končí u Priority na hraně displeje — pátý slot by
+            ležel za ní a nikdo by ho nenašel. Patří navíc k Klientovi
+            a Projektu: „kde to žije a kdo to vidí". Priorita jde napsat
+            i do textu („!!"). */}
         {nabidnoutSdileni && (
           <SlotChip
             slot="share"
@@ -595,6 +592,14 @@ export function QuickAdd({
             icon={<><circle cx="9" cy="9" r="3" /><circle cx="16.5" cy="10.5" r="2.5" /><path d="M3.5 19c.6-2.9 2.8-4.5 5.5-4.5s4.9 1.6 5.5 4.5M14.5 15.2c.6-.2 1.3-.3 2-.3 2.2 0 3.9 1.3 4.4 3.6" /></>}
           />
         )}
+        <SlotChip
+          slot="priority"
+          label="Priorita"
+          value={effPriority !== 'normal' ? PRIORITY_LABELS[effPriority] : undefined}
+          open={picker === 'priority'}
+          onTap={() => openPicker('priority')}
+          icon={<path d="M12 5v9M12 17.5v1" />}
+        />
         {/* co vyčetl parser a nemá vlastní slot — jen na ukázání */}
         {parsed?.recurrenceRule && (
           <span key={`r:${parsed.recurrenceRule}`} className={`${slotBase} pop-soft bg-accent-wash text-accent-deep`}>
