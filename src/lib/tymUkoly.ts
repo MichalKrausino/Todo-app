@@ -169,3 +169,32 @@ export function zavislaPrirazeni(
     })
     .map((u) => u.id)
 }
+
+/**
+ * Dosáhne ten člověk na úkol, který mu zrovna dávám?
+ *
+ * Od sdílení po projektech je „sdílený klient" slabší záruka, než býval:
+ * kolega vidí jen projekty, které má zaškrtnuté, a nově založený projekt
+ * je nesdílený. Přiřadit práci do nezaškrtnutého projektu by byl úkol,
+ * o kterém neví nikdo — z mého dneška vypadne (je přiřazený jinam) a do
+ * jeho se nedostane (nevidí na něj).
+ *
+ * Appka to proto při předání ŘEKNE a nabídne projekt nasdílet. Nasdílet
+ * ho potichu sama nesmí: výchozí stav „nesdíleno" je vědomá volba a tiché
+ * obcházení by z ní udělalo ozdobu.
+ *
+ * Chyba padá na stranu TICHA: když se neví (starý server bez výběru
+ * projektů, nenačtené sdílení), vrací se `true`. Planý poplach u každého
+ * předání je horší než chybějící u jednoho — a ten případ ošetří sám
+ * kolega tím, že úkol neuvidí a řekne si.
+ */
+export function dosahneNaUkol(
+  projectId: string | undefined,
+  share: { isOwner?: boolean; projectIds?: readonly string[] } | undefined,
+): boolean {
+  if (!share) return true // nevím, s kým mám tu čest
+  if (share.isOwner) return true // majitel klienta vidí všechno
+  if (!share.projectIds) return true // server výběr projektů neumí
+  if (!projectId) return true // úkol bez projektu jde s klientem samotným
+  return share.projectIds.includes(projectId)
+}

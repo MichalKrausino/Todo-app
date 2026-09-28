@@ -315,9 +315,15 @@ async function sweepDue(): Promise<boolean> {
 async function fetchMyShares(): Promise<MyShare[] | null> {
   const { data, error } = await sb!.rpc('my_shares')
   if (error) return null
-  return ((data ?? []) as Array<{ client_id: string; is_owner: boolean }>).map((r) => ({
+  return (
+    (data ?? []) as Array<{ client_id: string; is_owner: boolean; project_ids?: string[] | null }>
+  ).map((r) => ({
     clientId: r.client_id,
     isOwner: r.is_owner,
+    // `project_ids` chybí, dokud se nespustí `supabase/projekty-sdileni.sql`.
+    // Starý server se tím nerozbije: vyjde prázdný výběr, tedy týž otisk
+    // jako dřív — appka jede po staru, místo aby hlásila chybu sdílení.
+    projectIds: r.project_ids ?? [],
   }))
 }
 

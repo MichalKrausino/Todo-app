@@ -28,6 +28,17 @@ export interface ClientShare {
   // Pozvánka čeká na první přihlášení. Zvoucí to musí vidět, jinak by
   // nepoznal „už je uvnitř" od „leží mu to v e-mailu".
   pending: boolean
+  /**
+   * Projekty klienta, které tenhle člen vidí.
+   *
+   * `undefined` znamená „SERVER TO NEUMÍ" — běží ještě bez
+   * `supabase/projekty-sdileni.sql`. Prázdné pole znamená „umí, ale nic
+   * není zaškrtnuté". Rozlišit se to musí: kdyby obojí bylo `[]`, nabídlo
+   * by rozhraní přepínače, které se nemají kam uložit, a sdílení by
+   * vypadalo rozbitě. Je to totéž pravidlo jako u zjišťování rozsahu —
+   * selhaný dotaz znamená „nevím", ne „nic".
+   */
+  projectIds?: string[]
 }
 
 const OFFLINE = 'Sdílení potřebuje připojení k serveru.'
@@ -94,11 +105,46 @@ export async function listClientShares(clientId: string): Promise<ClientShare[]>
   const { data, error } = await sb.rpc('list_client_shares', { p_client_id: clientId })
   if (error || !data) return []
   return (
-    data as Array<{ email: string; is_owner: boolean; user_id: string; pending?: boolean }>
+    data as Array<{
+      email: string
+      is_owner: boolean
+      user_id: string
+      pending?: boolean
+      project_ids?: string[] | null
+    }>
   ).map((r) => ({
     email: r.email,
     isOwner: r.is_owner,
     userId: r.user_id,
     pending: r.pending === true,
+    // Chybějící sloupec = starý server (viz `projectIds` výš). `null` z pole
+    // uuid[] se na prázdný výběr srovnává, to je platná odpověď.
+    projectIds: 'project_ids' in r ? (r.project_ids ?? []) : undefined,
   }))
+}
+
+/**
+ * Nastavit, které projekty klienta tenhle člověk vidí. Smí jen majitel —
+ * hlídá to server, tady je to jen tenká vrstva nad RPC.
+ *
+ * Výchozí stav je „nic": nový projekt u sdíleného klienta kolega nevidí,
+ * dokud se nezaškrtne. Je to přísnější půlka volby a má svou cenu —
+ * práce zadaná kolegovi v nezaškrtnutém projektu by se k němu nedostala,
+ * takže to appka při přiřazení říká nahlas (`TaskSharing`).
+ */
+export async function setSharedProjects(
+  clientId: string,
+  email: string,
+  projectIds: string[],
+): Promise<string | null> {
+  const sb = getSupabase()
+  if (!sb) return OFFLINE
+  const { data, error } = await sb.rpc('set_shared_projects', {
+    p_client_id: clientId,
+    p_email: email,
+    p_project_ids: projectIds,
+  })
+  if (error) return error.message
+  if (data === 'not_found') return 'Tenhle člověk už u klienta není.'
+  return SHARE_RESULTS_CZ[data as string] ?? null
 }

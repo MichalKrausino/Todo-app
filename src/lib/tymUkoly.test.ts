@@ -6,6 +6,7 @@ import {
   mojeUkoly,
   skupinyLidi,
   zavislaPrirazeni,
+  dosahneNaUkol,
 } from './tymUkoly'
 
 const JA = 'u-ja'
@@ -152,5 +153,34 @@ describe('zavislá přiřazení', () => {
 
   it('nepřiřazený úkol se nepočítá', () => {
     expect(zavislaPrirazeni([t('a', 'k1')], mapa, JA)).toEqual([])
+  })
+})
+
+describe('dosáhne na úkol', () => {
+  const clen = (projectIds: string[]) => ({ isOwner: false, projectIds })
+
+  it('zaškrtnutý projekt projde', () => {
+    expect(dosahneNaUkol('p1', clen(['p1', 'p2']))).toBe(true)
+  })
+
+  // Jádro pojistky: tohle je ten úkol, o kterém by nevěděl nikdo.
+  it('nezaškrtnutý projekt neprojde — a appka to musí říct', () => {
+    expect(dosahneNaUkol('p3', clen(['p1', 'p2']))).toBe(false)
+    expect(dosahneNaUkol('p1', clen([]))).toBe(false)
+  })
+
+  it('úkol bez projektu jde s klientem samotným', () => {
+    expect(dosahneNaUkol(undefined, clen([]))).toBe(true)
+  })
+
+  it('majitel klienta vidí i nezaškrtnuté', () => {
+    expect(dosahneNaUkol('p3', { isOwner: true, projectIds: [] })).toBe(true)
+  })
+
+  // Chyba padá na stranu ticha: planý poplach u každého předání je horší
+  // než chybějící u jednoho, který kolega stejně odhalí tím, že úkol nevidí.
+  it('když se neví, mlčí se', () => {
+    expect(dosahneNaUkol('p3', undefined)).toBe(true)
+    expect(dosahneNaUkol('p3', { isOwner: false })).toBe(true)
   })
 })

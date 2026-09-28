@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { clientsToForget, parseFingerprint, sharesFingerprint, type MyShare } from './shareState'
 
-const owner = (clientId: string): MyShare => ({ clientId, isOwner: true })
-const member = (clientId: string): MyShare => ({ clientId, isOwner: false })
+const owner = (clientId: string, projectIds: string[] = []): MyShare => ({
+  clientId,
+  isOwner: true,
+  projectIds,
+})
+const member = (clientId: string, projectIds: string[] = []): MyShare => ({
+  clientId,
+  isOwner: false,
+  projectIds,
+})
 
 describe('sharesFingerprint', () => {
   it('nezáleží na pořadí — server ho může vrátit jinak', () => {
@@ -22,11 +30,30 @@ describe('sharesFingerprint', () => {
   it('beze sdílení je prázdný', () => {
     expect(sharesFingerprint([])).toBe('')
   })
+
+  // Tohle je celý důvod, proč výběr projektů v otisku vůbec je: odškrtnutím
+  // se kolegovi zúží rozsah, ale řádkům se `updated_at` nehne. Kdyby se
+  // otisk nezměnil, kurzorový pull se o tom nedozví a úklid se nespustí —
+  // odebraný projekt by mu zůstal ležet v zařízení.
+  it('rozliší změnu výběru projektů u téhož sdílení', () => {
+    expect(sharesFingerprint([member('a', ['p1'])])).not.toBe(
+      sharesFingerprint([member('a', ['p1', 'p2'])]),
+    )
+    expect(sharesFingerprint([member('a', ['p1'])])).not.toBe(sharesFingerprint([member('a')]))
+  })
+
+  // Server vrací pole v libovolném pořadí. Bez setřídění by se otisk
+  // „měnil" i beze změny a plný pull by jel při každé synchronizaci.
+  it('na pořadí projektů nezáleží', () => {
+    expect(sharesFingerprint([member('a', ['p2', 'p1'])])).toBe(
+      sharesFingerprint([member('a', ['p1', 'p2'])]),
+    )
+  })
 })
 
 describe('parseFingerprint', () => {
   it('projde tam a zpátky', () => {
-    const shares = [owner('a'), member('b')]
+    const shares = [owner('a'), member('b', ['p1', 'p2'])]
     expect(parseFingerprint(sharesFingerprint(shares))).toEqual(
       [...shares].sort((x, y) => x.clientId.localeCompare(y.clientId)),
     )
@@ -36,9 +63,21 @@ describe('parseFingerprint', () => {
     expect(parseFingerprint('')).toEqual([])
   })
 
-  it('id s dvojtečkou se nerozpadne', () => {
-    // Uuid dvojtečku nemá, ale rozdělovat od konce je zadarmo a nemůže selhat.
-    expect(parseFingerprint('a:b:m')).toEqual([{ clientId: 'a:b', isOwner: false }])
+  // Otisk uložený před zavedením projektů má jen dva díly. Musí se dál
+  // přečíst — jinak by upgrade spadl na nečitelném stavu místo aby se
+  // rozsah jednou přepočítal.
+  it('starý dvoudílný otisk se přečte jako sdílení bez projektů', () => {
+    expect(parseFingerprint('a:m,b:o')).toEqual([
+      { clientId: 'a', isOwner: false, projectIds: [] },
+      { clientId: 'b', isOwner: true, projectIds: [] },
+    ])
+  })
+
+  // …a proti starému otisku se pak nutně liší, takže se kurzory vynulují
+  // a rozsah stáhne znovu. Přesně to se po změně pravidel stát má.
+  it('starý otisk se od nového liší, i když se sdílení nezměnilo', () => {
+    expect(parseFingerprint('a:m')[0].projectIds).toEqual([])
+    expect(sharesFingerprint([member('a', ['p1'])])).not.toBe('a:m')
   })
 })
 

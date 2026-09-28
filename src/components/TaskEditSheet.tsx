@@ -34,7 +34,8 @@ import { jeKrokPropadly } from '../lib/podukoly'
 import { planPoZmeneTerminu } from '../lib/terminPlan'
 import { nabidniVraceni, ukazToast } from '../lib/toast'
 import { TaskSharing } from './TaskSharing'
-import { jeMuj, kdoMa, kratkaJmena } from '../lib/tymUkoly'
+import { setSharedProjects } from '../sync/shares'
+import { dosahneNaUkol, jeMuj, kdoMa, kratkaJmena } from '../lib/tymUkoly'
 import { useJa, useKolegove } from '../lib/useTym'
 import { deleteBlockForTask } from '../sync/calendar'
 import {
@@ -94,6 +95,29 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
     setAssignedTo(dalsi)
     if (dalsi) setHiddenFrom((h) => h.filter((u) => u !== dalsi))
     void assignTask(task.id, dalsi)
+    if (dalsi) varujNedosah(dalsi)
+  }
+
+  // Od sdílení po projektech nestačí, že je klient sdílený: kolega vidí
+  // jen zaškrtnuté projekty. Přiřadit mu úkol v nezaškrtnutém by byl úkol,
+  // o kterém neví nikdo — z mého dneška vypadne (má ho někdo jiný) a do
+  // jeho se nedostane. Appka to proto řekne a nabídne projekt nasdílet.
+  //
+  // Nasdílet ho sama nesmí: výchozí stav „nesdíleno" je vědomá volba
+  // a tiché obcházení by z ní udělalo ozdobu. Proto nabídka, ne zásah.
+  const varujNedosah = (userId: string) => {
+    const share = sdileniLide.find((l) => l.userId === userId)
+    if (!clientId || !projectId || dosahneNaUkol(projectId, share) || !share) return
+    const jmeno = kolegove.find((k) => k.userId === userId)?.jmeno ?? share.email
+    const nazevProjektu = projects.find((p) => p.id === projectId)?.name ?? 'projekt'
+    ukazToast(`${jmeno} na „${nazevProjektu}" nevidí — úkol se k němu nedostane.`, [
+      {
+        popisek: 'Nasdílet',
+        kdyz: () => {
+          void setSharedProjects(clientId, share.email, [...(share.projectIds ?? []), projectId])
+        },
+      },
+    ])
   }
   const [ptamSeNaTodoist, setPtamSeNaTodoist] = useState(false)
   const [projectId, setProjectId] = useState(task.projectId ?? '')
