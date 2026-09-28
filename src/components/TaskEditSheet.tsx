@@ -66,7 +66,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   const [title, setTitle] = useState(task.title)
   const [notes, setNotes] = useState(task.notes ?? '')
   const [clientId, setClientId] = useState(task.clientId ?? '')
-  const [hiddenFrom, setHiddenFrom] = useState<string[]>(task.hiddenFrom ?? [])
+  const [sharedWith, setSharedWith] = useState<string[]>(task.sharedWith ?? [])
   // Přiřazení se ukládá hned, ne až tlačítkem: „kdo to má udělat" je
   // rozhodnutí o práci někoho jiného, ne rozepsaný text. Kdyby čekalo na
   // Uložit, zavřel by panel s pocitem, že úkol předal — a nepředal.
@@ -92,7 +92,9 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
   const predej = (userId: string) => {
     const dalsi = userId === task.ownerId ? undefined : userId
     setAssignedTo(dalsi)
-    if (dalsi) setHiddenFrom((h) => h.filter((u) => u !== dalsi))
+    // Přidělit = ukázat: `assignTask` úkol tomu člověku zároveň nasdílí,
+    // tak ať to přepínač „Kdo úkol vidí" hned ukazuje taky.
+    if (dalsi) setSharedWith((h) => (h.includes(dalsi) ? h : [...h, dalsi]))
     void assignTask(task.id, dalsi)
   }
   const [ptamSeNaTodoist, setPtamSeNaTodoist] = useState(false)
@@ -834,8 +836,9 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
         <TaskSharing
           taskId={task.id}
           clientId={clientId || undefined}
-          hiddenFrom={hiddenFrom}
-          onChange={setHiddenFrom}
+          ownerId={task.ownerId}
+          sharedWith={sharedWith}
+          onChange={setSharedWith}
         />
 
         {fromTodoist && (

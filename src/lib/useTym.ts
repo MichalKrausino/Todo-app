@@ -8,7 +8,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
-import { listClientShares, sharedClientIds, type ClientShare } from '../sync/shares'
+import {
+  listClientShares,
+  serverUmiSdileniUkolu,
+  sharedClientIds,
+  type ClientShare,
+} from '../sync/shares'
 import { kratkaJmena } from './tymUkoly'
 
 /**
@@ -86,4 +91,26 @@ export function useKolegove(clientId: string | undefined): {
   }, [clientId, sdileny])
 
   return { lide, nacetlo }
+}
+
+/**
+ * Umí server sdílení po úkolech? Viz `serverUmiSdileniUkolu` — `false`
+ * znamená starý server, který sdílí celého klienta, a rozhraní to musí
+ * říct, místo aby ukazovalo „Jen já" nad úkolem, který kolega vidí.
+ * Ptá se jen u sdíleného klienta: kdo nic nesdílí, nestojí to ani dotaz.
+ */
+export function useUmiSdileniUkolu(clientId: string | undefined): boolean | undefined {
+  const sdileny = useSdilenyKlient(clientId)
+  const [umi, setUmi] = useState<boolean | undefined>(undefined)
+  useEffect(() => {
+    if (!sdileny) return
+    let zije = true
+    void serverUmiSdileniUkolu().then((v) => {
+      if (zije) setUmi(v)
+    })
+    return () => {
+      zije = false
+    }
+  }, [sdileny])
+  return sdileny ? umi : undefined
 }

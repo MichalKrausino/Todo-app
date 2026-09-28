@@ -9,6 +9,7 @@ import { addDays, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { HISTORIE_DNI } from '../../supabase/functions/morning-plan/pick'
 import { nextOccurrence } from '../lib/rrule'
 import { krokyProDalsiVyskyt } from '../lib/podukoly'
+import { sdileniDalsihoVyskytu, sPridanym } from '../lib/sdileniUkolu'
 
 const now = () => new Date().toISOString()
 
@@ -195,6 +196,8 @@ export async function addTask(input: {
   notes?: string
   recurrenceRule?: string
   isClientCheck?: boolean
+  /** Komu úkol rovnou nasdílet (slot „Sdílet" v zadávání). Výchozí je nikomu. */
+  sharedWith?: string[]
 }): Promise<Task> {
   const status: TaskStatus = input.dueDate || input.scheduledFor ? 'active' : 'inbox'
   const task: Task = {
@@ -246,19 +249,22 @@ export const mojeId = (): Promise<string | undefined> =>
 /**
  * Předat úkol kolegovi (nebo si ho vzít zpátky).
  *
- * Zároveň se ten člověk škrtne z `hiddenFrom`. Přiřadit práci někomu, kdo
- * na ni nevidí, je tichá past: úkol by mu nespadl do dneška, nespadl by do
- * mého (je přiřazený jinam) a čekal by v seznamu na někoho, kdo o něm neví.
+ * Zároveň se mu úkol NASDÍLÍ. Přiřadit práci někomu, kdo na ni nevidí, je
+ * tichá past: úkol by mu nespadl do dneška (nevidí ho), nespadl by do mého
+ * (je přiřazený jinam) a čekal by v seznamu na někoho, kdo o něm neví.
  * „Má to udělat" znamená „vidí to" — a dělá se to mlčky, protože jiná
- * odpověď než ano tu nedává smysl.
+ * odpověď než ano tu nedává smysl. Výchozí „Jen já" to neobchází: předat
+ * práci je jednoznačný úmysl, ne omyl.
+ *
+ * Vzít si úkol zpátky sdílení NERUŠÍ — kolega o úkolu ví a pořád na něm
+ * může mít zájem; odebrat ho je samostatné rozhodnutí v detailu.
  */
 export async function assignTask(id: string, userId: string | undefined): Promise<void> {
   const task = await db.tasks.get(id)
   if (!task) return
-  const hidden = userId ? (task.hiddenFrom ?? []).filter((u) => u !== userId) : task.hiddenFrom
   await updateTask(id, {
     assignedTo: userId,
-    hiddenFrom: hidden && hidden.length > 0 ? hidden : undefined,
+    ...(userId ? { sharedWith: sPridanym(task.sharedWith, userId) } : {}),
   })
 }
 
@@ -328,6 +334,10 @@ async function respawnRecurring(task: Task | undefined, t: string): Promise<void
     // „ten měsíční report dělá Jana" platí i pro příští měsíc.
     ownerId: undefined,
     assignedTo: task.assignedTo ?? task.ownerId,
+    // Nový výskyt založí zařízení toho, kdo odškrtl, a řádek bude jeho —
+    // autor předchozího i přidělený ho musí vidět dál, jinak by se
+    // opakovaný sdílený úkol ztrácel při každém odškrtnutí.
+    sharedWith: sdileniDalsihoVyskytu(task),
     calendarEventId: undefined,
     postponeCount: undefined, // nový výskyt začíná s čistým štítem
     // checklist znovu od nuly a BEZ termínů kroků — ty platily pro ten
@@ -529,4 +539,36 @@ export function sortTasks(tasks: Task[]): Task[] {
       (a.dueTime ?? '99:99').localeCompare(b.dueTime ?? '99:99') ||
       a.createdAt.localeCompare(b.createdAt),
   )
+}
+
+// ---------- Viděné nasdílené úkoly ----------
+//
+// Co mi někdo nasdílel a já už viděl (chip „Nové pro tebe" na Dnes).
+// Osobní stav, a proto JEN LOKÁLNĚ: kdyby šel do sdíleného řádku úkolu,
+// přepisoval by ho last-write-wins s úpravami autora a kolega by navíc
+// viděl, co jsem si prohlédl. Cena je, že se „viděno" nepřenese mezi mými
+// zařízeními — na Macu se tentýž úkol ukáže jako nový ještě jednou.
+//
+// Leží v `syncState` (lokální tabulka, na server nejde) a schválně bez
+// `emitRepoWrite`: synchronizace s tím nemá co dělat.
+const VIDENE = 'videneSdilene'
+
+export async function videneSdilene(): Promise<Set<string>> {
+  const row = await db.syncState.get(VIDENE)
+  try {
+    return new Set(row?.cursor ? (JSON.parse(row.cursor) as string[]) : [])
+  } catch {
+    return new Set()
+  }
+}
+
+export async function oznacVidene(ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return
+  const videne = await videneSdilene()
+  for (const id of ids) videne.add(id)
+  // Strop proti nekonečnému růstu: stará id hotových úkolů tu nemají co
+  // dělat. Drží se posledních 500 — víc nasdílených úkolů najednou
+  // otevřených nikdo mít nebude.
+  const seznam = [...videne].slice(-500)
+  await db.syncState.put({ id: VIDENE, cursor: JSON.stringify(seznam) })
 }

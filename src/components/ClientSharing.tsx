@@ -1,8 +1,11 @@
 // Sdílení klienta s dalším uživatelem (Fáze 9).
 //
-// Sdílí se klient jako celek — jeho projekty i úkoly. Kdo je uvnitř, vidí
-// je ve svojí appce jako svoje: může přidávat úkoly i odškrtávat, a změna
-// se vrátí zpátky běžnou synchronizací.
+// Sdílí se klient jako MÍSTO spolupráce: kolega uvidí klienta a všechny
+// jeho projekty, ale z úkolů jen ty, které mu někdo nasdílí — a totéž
+// platí obráceně, jeho úkoly vidíš jen nasdílené. Úkol je soukromý svému
+// autorovi (`src/lib/sdileniUkolu.ts`), sdílí se slotem „Sdílet" při
+// zadávání a v detailu. Nasdílený úkol může kolega odškrtnout i upravit
+// a změna se vrátí zpátky běžnou synchronizací.
 //
 // Sekce se ukáže i odhlášenému — jen místo formuláře řekne, že to chce
 // přihlášení. Schovaná byla horší: kdo účet nemá, nedozvěděl se, že appka
@@ -78,16 +81,17 @@ export function ClientSharing({ clientId }: { clientId: string }) {
       <section className="divide-y divide-line overflow-hidden rounded-2xl bg-card shadow-card">
         {!signedIn && (
           <p className="px-4 py-2.5 text-sm text-ink-soft">
-            Klienta jde sdílet s kolegou — uvidíte na tytéž úkoly a odškrtnutí
-            se ukáže oběma. Chce to přihlášení (obláček vpravo nahoře).
+            Klienta jde sdílet s kolegou — pak si mezi sebou posíláte úkoly
+            a odškrtnutí se ukáže oběma. Chce to přihlášení (obláček vpravo
+            nahoře).
           </p>
         )}
 
         {signedIn && shares.length === 0 && (
           <p className="px-4 py-2.5 text-sm text-ink-faint">
-            Klient je jen tvůj. Přidej e-mail a uvidíte na jeho úkoly oba —
-            kromě těch, které v jejich detailu vyjmeš. Účet mít nemusí:
-            pozvánka počká na jeho první přihlášení.
+            Klient je jen tvůj. Přidej e-mail a kolega uvidí klienta i jeho
+            projekty — z úkolů jen ty, které mu nasdílíš, a ty zase jeho.
+            Účet mít nemusí: pozvánka počká na jeho první přihlášení.
           </p>
         )}
 
@@ -107,7 +111,7 @@ export function ClientSharing({ clientId }: { clientId: string }) {
                   ? 'Pozvánka čeká na první přihlášení'
                   : m.email === status.email
                     ? 'To jsi ty'
-                    : 'Vidí a upravuje úkoly klienta'}
+                    : 'Vidí projekty a úkoly, které mu nasdílíš'}
               </div>
             </div>
             <button

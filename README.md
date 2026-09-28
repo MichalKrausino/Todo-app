@@ -11,15 +11,20 @@ Pravidla pro vývoj: [`CLAUDE.md`](CLAUDE.md).
 
 ## Čeká na tebe
 
-- [ ] **Publikovat OAuth aplikaci v Google Cloud.** Kalendář přestal fungovat,
-  protože Google zneplatnil uložený refresh token (`invalid_grant`). Typická
-  příčina: OAuth consent screen je v režimu **Testing**, kde tokeny žijí sedm
-  dní. [Google Cloud Console → OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent)
-  → **Publish app**. Bez toho se to bude opakovat každý týden.
+- [ ] **Spustit `supabase/sdileni-ukolu.sql`** v SQL editoru (celé najednou,
+  je idempotentní). Do té doby server sdílí celého klienta a appka to u úkolu
+  řekne. Ověřeno chováním proti živé databázi v transakci s rollbackem.
 - [ ] **Propojit Google znovu** v appce (obláček vpravo nahoře → „Propojit
-  Google znovu"). Nový refresh token se uloží sám.
+  Google znovu"). Uložený refresh token je z 20. 9., tedy z doby, kdy byla
+  OAuth aplikace v režimu Testing a tokeny platily sedm dní — publikace ho
+  zpětně neoživí. Změřeno v logech: edge funkce `calendar` token přečte
+  a vrátí 401 (větev „potřebuje znovu přihlásit").
 - [ ] Smazat dočasnou edge funkci `calendar-diag` v Supabase → Edge Functions
   (je vyprázdněná, vrací jen 410, ale nemá tam co dělat).
+
+Hotové: OAuth aplikace je publikovaná (kolega se přes Google přihlásil
+25. 9. a má uložený vlastní token), zásady soukromí běží na
+`/Todo-app/soukromi.html`.
 
 ## Spuštění
 
