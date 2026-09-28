@@ -8,6 +8,9 @@ import { PRIORITY_LABELS, plural } from '../lib/labels'
 import { foldToken, mentionToken, parseQuickAdd } from '../lib/quickAdd'
 import { humanizeRule } from '../lib/rrule'
 import { ukazToast, type ToastAkce } from '../lib/toast'
+import { komuLzeSdilet } from '../lib/sdileniUkolu'
+import { kratkaJmena } from '../lib/tymUkoly'
+import { useJa, useKolegove, useUmiSdileniUkolu } from '../lib/useTym'
 import { FETCH_WINDOW_DAYS } from '../sync/calendar'
 import { MonthPicker } from './MonthPicker'
 import { SlotChip, pill, slotBase } from './SlotChip'
@@ -27,7 +30,7 @@ interface Overrides {
   priority?: Priority | null
 }
 
-type PickerKind = 'date' | 'client' | 'project' | 'priority' | null
+type PickerKind = 'date' | 'client' | 'project' | 'priority' | 'share' | null
 
 // Rychlé dny nad kalendářem — jedna definice, ať tlačítka nesou stav
 // (vybraný den se vyplní) a nedublují se s chipem nad polem.
@@ -54,6 +57,11 @@ export function QuickAdd({
   const [text, setText] = useState('')
   const [overrides, setOverrides] = useState<Overrides>({})
   const [picker, setPicker] = useState<PickerKind>(null)
+  // Komu úkol rovnou nasdílet. VÝCHOZÍ JE NIKOMU a NEPAMATUJE SE: vrací se
+  // po každém odeslání i při změně klienta. Série úkolů pro kolegu tím
+  // stojí jedno ťuknutí navíc, ale nikdy se omylem nenasdílí nic
+  // soukromého — zkrátit se to dá kdykoli, vzít zpátky, co kolega viděl, ne.
+  const [sdiletS, setSdiletS] = useState<string[]>([])
   // Počítadlo přidaných úkolů — mění key tlačítka, takže po každém
   // přidání proběhne potvrzovací pop (hmatová odezva bez haptiky).
   const [addedCount, setAddedCount] = useState(0)
@@ -110,6 +118,20 @@ export function QuickAdd({
   const effClient = effClientId ? clients.find((c) => c.id === effClientId) : undefined
   const effProject = effProjectId ? projects.find((p) => p.id === effProjectId) : undefined
   const projectPool = effClientId ? projects.filter((p) => p.clientId === effClientId) : projects
+
+  // Sdílet jde jen u klienta, se kterým spolupracuju, a jen lidem u něj
+  // (oběma směry — majiteli i členům). Na starém serveru, který sdílí
+  // celého klienta, se slot vůbec nenabídne: nebylo by co vybírat a slot
+  // by jen předstíral, že „nevybráno" znamená „nevidí".
+  const ja = useJa()
+  const { lide: lideUKlienta } = useKolegove(effClientId)
+  const umiSdilet = useUmiSdileniUkolu(effClientId)
+  const komuSdilet = useMemo(() => komuLzeSdilet(lideUKlienta, ja), [lideUKlienta, ja])
+  const jmenaLidi = useMemo(() => kratkaJmena(lideUKlienta.map((l) => l.email)), [lideUKlienta])
+  const nabidnoutSdileni = !!effClientId && komuSdilet.length > 0 && umiSdilet !== false
+  useEffect(() => {
+    setSdiletS([])
+  }, [effClientId])
 
   // Na Dnes dostane úkol bez data plán na dnešek — vidět předem jako chip.
   // Vědomé „bez termínu" z výběru (null) default vypíná.
@@ -236,9 +258,11 @@ export function QuickAdd({
       priority: effPriority,
       recurrenceRule: parsed.recurrenceRule,
       notes: parsed.notes,
+      sharedWith: nabidnoutSdileni && sdiletS.length ? sdiletS : undefined,
     })
     setText('')
     setOverrides({})
+    setSdiletS([])
     setPicker(null)
     setAddedCount((n) => n + 1)
     const den = task.scheduledFor ?? task.dueDate
@@ -489,6 +513,27 @@ export function QuickAdd({
           ))}
         </div>
       )}
+      {picker === 'share' && (
+        <div className="flex flex-wrap gap-1.5">
+          {komuSdilet.map((l) => {
+            const vybrano = sdiletS.includes(l.userId)
+            return (
+              <button
+                key={l.userId}
+                type="button"
+                onPointerDown={keepFocus}
+                aria-pressed={vybrano}
+                onClick={() =>
+                  setSdiletS((s) => (vybrano ? s.filter((u) => u !== l.userId) : [...s, l.userId]))
+                }
+                className={`${pill} ${vybrano ? 'bg-accent text-card' : 'bg-card text-ink'}`}
+              >
+                {jmenaLidi.get(l.email) ?? l.email}
+              </button>
+            )
+          })}
+        </div>
+      )}
           </div>
         </div>
       )}
@@ -530,6 +575,26 @@ export function QuickAdd({
           onTap={() => openPicker('priority')}
           icon={<path d="M12 5v9M12 17.5v1" />}
         />
+        {nabidnoutSdileni && (
+          <SlotChip
+            slot="share"
+            label="Sdílet"
+            value={
+              sdiletS.length
+                ? sdiletS
+                    .map((u) => {
+                      const e = komuSdilet.find((l) => l.userId === u)?.email
+                      return (e && jmenaLidi.get(e)) ?? e ?? ''
+                    })
+                    .filter(Boolean)
+                    .join(', ')
+                : undefined
+            }
+            open={picker === 'share'}
+            onTap={() => openPicker('share')}
+            icon={<><circle cx="9" cy="9" r="3" /><circle cx="16.5" cy="10.5" r="2.5" /><path d="M3.5 19c.6-2.9 2.8-4.5 5.5-4.5s4.9 1.6 5.5 4.5M14.5 15.2c.6-.2 1.3-.3 2-.3 2.2 0 3.9 1.3 4.4 3.6" /></>}
+          />
+        )}
         {/* co vyčetl parser a nemá vlastní slot — jen na ukázání */}
         {parsed?.recurrenceRule && (
           <span key={`r:${parsed.recurrenceRule}`} className={`${slotBase} pop-soft bg-accent-wash text-accent-deep`}>

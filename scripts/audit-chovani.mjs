@@ -1594,6 +1594,87 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 19. co mi někdo nasdílel, uvidím hned ---
+// Úkol je soukromý svému autorovi a sdílí se po jednom, oběma směry
+// (`Task.sharedWith`). Na Dnes se ale v seznamu objeví jen práce, která je
+// PŘIDĚLENÁ mně — Dnes odpovídá na „co mám dělat já", a cizí úkoly by mi
+// naplnily den i kroužek postupu. Nasdílený a nepřidělený úkol by pak šlo
+// najít jedině ve Vše, tedy vůbec ne, když člověk neví, že tam má hledat.
+// Most mezi tím je chip „Nové pro tebe · N".
+//
+// Audit se tváří jako přihlášený kolega: `useJa` čte id z lokální tabulky
+// `syncState` (řádek `meta`), takže stačí ho tam zasadit. Chip na síti
+// nezávisí, takže se dá změřit celý — co ukáže, kdy zmizí a že si to
+// zapamatuje přes restart.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+
+  await page.evaluate(async () => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    await new Promise((res) => {
+      const tx = db.transaction(['tasks', 'syncState'], 'readwrite')
+      const st = tx.objectStore('tasks')
+      st.clear()
+      tx.objectStore('syncState').put({ id: 'meta', userId: 'u-ben' })
+      const t = new Date().toISOString()
+      // Michal mi nasdílel úkol — ten má být „nový pro mě".
+      st.put({ id: 'od-michala', createdAt: t, updatedAt: t, title: 'Připravit podklady pro Panelora',
+        priority: 'normal', status: 'active', order: 0, ownerId: 'u-michal', sharedWith: ['u-ben'] })
+      // Můj vlastní úkol, který sdílím já — nový pro mě není.
+      st.put({ id: 'muj-sdileny', createdAt: t, updatedAt: t, title: 'Můj úkol pro Michala',
+        priority: 'normal', status: 'active', order: 1, ownerId: 'u-ben', sharedWith: ['u-michal'] })
+      // Cizí úkol, který mně nasdílený NENÍ (třeba zbyl v zařízení, než ho
+      // uklidí sweep) — do chipu nepatří.
+      st.put({ id: 'cizi-jine', createdAt: t, updatedAt: t, title: 'Cizí úkol pro Janu',
+        priority: 'normal', status: 'active', order: 2, ownerId: 'u-michal', sharedWith: ['u-jana'] })
+      tx.oncomplete = res
+    })
+  })
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+
+  const chip = () => page.evaluate(() => {
+    const b = [...document.querySelectorAll('main button')].find((e) => /Nové pro tebe/.test(e.textContent ?? ''))
+    return b ? b.textContent.replace(/\s+/g, ' ').trim() : null
+  })
+  const vSeznamu = (nazev) => page.evaluate((n) =>
+    [...document.querySelectorAll('main li')].some((li) => (li.textContent ?? '').includes(n)), nazev)
+
+  const napoprve = await chip()
+  T_(napoprve !== null, 'nasdílený úkol se na Dnes ohlásí chipem „Nové pro tebe" (' + (napoprve ?? 'chybí') + ')')
+  T_(napoprve !== null && /·\s*1\b/.test(napoprve),
+     'počítá jen úkoly nasdílené MNĚ — vlastní sdílený ani cizí pro někoho jiného ne (' + (napoprve ?? 'chybí') + ')')
+  // Dnes je moje práce: nasdílený a nepřidělený úkol v seznamu nemá co dělat.
+  T_(!(await vSeznamu('Připravit podklady pro Panelora')),
+     'nasdílený, ale nepřidělený úkol nestojí v seznamu na Dnes — Dnes je moje práce')
+
+  // Když chip chybí, nesmí audit spadnout na čekání na tlačítko — to by
+  // zamlčelo zbytek. Kontroly za ním se pak prostě nahlásí jako neprošlé.
+  if (napoprve !== null) {
+    await page.getByRole('button', { name: /Nové pro tebe/ }).click(); await page.waitForTimeout(700)
+  }
+  const panel = napoprve !== null
+    ? await page.evaluate(() => document.querySelector('.sheet-panel')?.textContent ?? '')
+    : ''
+  T_(/Připravit podklady pro Panelora/.test(panel), 'panel ukáže, co mi přišlo')
+  T_(panel !== '' && !/Cizí úkol pro Janu/.test(panel) && !/Můj úkol pro Michala/.test(panel), 'a nic jiného')
+  await page.keyboard.press('Escape'); await page.waitForTimeout(600)
+
+  const poOtevreni = await chip()
+  T_(napoprve !== null && poOtevreni === null, 'otevřením se to označí jako viděné a chip zmizí (' + (poOtevreni ?? 'zmizel') + ')')
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  const poRestartu = await chip()
+  T_(napoprve !== null && poRestartu === null, 'a „viděno" přežije restart appky (' + (poRestartu ?? 'zmizel') + ')')
+
+  // Vše odpovídá na „co všechno se kolem mě děje" — tam nasdílený úkol
+  // stojí hned, bez ohledu na chip.
+  await page.getByRole('button',{name:'Dnes',exact:true}).dblclick(); await page.waitForTimeout(900)
+  T_(await vSeznamu('Připravit podklady pro Panelora'), 've Vše nasdílený úkol stojí hned')
+  await ctx.close()
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)

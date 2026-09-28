@@ -22,7 +22,7 @@ export async function sharedClientIds(): Promise<Set<string>> {
 export interface ClientShare {
   email: string
   isOwner: boolean
-  // Id se hodí k `Task.hiddenFrom` — do sdílených dat se píše id, ne e-mail.
+  // Id se hodí k `Task.sharedWith` — do sdílených dat se píše id, ne e-mail.
   // U nevyzvednuté pozvánky je prázdné: ten člověk ještě id nemá.
   userId: string
   // Pozvánka čeká na první přihlášení. Zvoucí to musí vidět, jinak by
@@ -101,4 +101,29 @@ export async function listClientShares(clientId: string): Promise<ClientShare[]>
     userId: r.user_id,
     pending: r.pending === true,
   }))
+}
+
+/**
+ * Umí server sdílení po úkolech (`supabase/sdileni-ukolu.sql`)?
+ *
+ * `true` = ano, `false` = starý server (funkce chybí), `undefined` = nevím
+ * (offline, nepřihlášen). Rozlišit se to musí: starý server sdílí CELÉHO
+ * klienta, takže by přepínač „Jen já" lhal o tom, kdo úkol vidí. „Nevím"
+ * se neprohlašuje za „ne" — selhaný dotaz znamená nevím, ne nic.
+ *
+ * Kladná odpověď se pamatuje: SQL se jednou spustí a zpátky už nejde.
+ */
+let umiSdileniUkolu: boolean | undefined
+export async function serverUmiSdileniUkolu(): Promise<boolean | undefined> {
+  if (umiSdileniUkolu) return true
+  const sb = getSupabase()
+  if (!sb) return undefined
+  const { data, error } = await sb.rpc('sdileni_po_ukolech')
+  if (!error) {
+    umiSdileniUkolu = data === true
+    return umiSdileniUkolu
+  }
+  // PGRST202 = funkce na serveru není. Cokoli jiného (síť, výpadek) je „nevím".
+  if (error.code === 'PGRST202') return false
+  return undefined
 }

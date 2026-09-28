@@ -102,11 +102,15 @@ export interface Task extends BaseRecord {
   // „Top 3 dne" — YYYY-MM-DD, na který den je úkol připíchnutý. Váže se
   // ke dni (ne bool), takže špendlík zítra sám vyprchá a neuklízí se ručně.
   pinnedFor?: string
-  // Komu se úkol NEukazuje, i když klienta sdílíme (Fáze 9). Ukládají se
-  // id uživatelů, ne e-maily — e-mail by v tomhle poli přečetl každý, kdo
-  // na řádek dosáhne. Rozhoduje o tom RLS na serveru, ne appka: filtr jen
-  // v UI by data pořád posílal do cizího zařízení.
-  hiddenFrom?: string[]
+  // S kým je úkol sdílený (id lidí). Úkol je SOUKROMÝ svému autorovi
+  // a sdílí se po jednom, OBĚMA SMĚRY — majitel klienta kolegovi i kolega
+  // majiteli (`src/lib/sdileniUkolu.ts`). Dřív to bylo obráceně
+  // (`hiddenFrom`, „komu se NEukazuje"), jenže „všechno kromě toho, na co
+  // nezapomenu" je slib, který se jednou poruší a vzít zpátky nejde.
+  // Rozhoduje RLS na serveru (`supabase/sdileni-ukolu.sql`), ne appka:
+  // filtr jen v UI by data pořád posílal do cizího zařízení. Ukládají se
+  // id, ne e-maily — e-mail by přečetl každý, kdo na řádek dosáhne.
+  sharedWith?: string[]
   // Kdo to má udělat (Fáze 10). Prázdné = ten, kdo úkol založil (`ownerId`),
   // takže u nesdíleného klienta i u staré databáze vychází „můj" samo od
   // sebe a nic se nemusí přenastavovat. Ukládá se id, ne e-mail — ten by

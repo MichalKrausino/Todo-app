@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { mojeUkoly } from '../lib/tymUkoly'
-import { useJa } from '../lib/useTym'
+import { useJa, useLide } from '../lib/useTym'
 import type { Client, Task } from '../db/types'
 import {
   allClients,
@@ -13,7 +13,10 @@ import {
   openTasks,
   reopenTask,
   sortTasks,
+  videneSdilene,
 } from '../db/repo'
+import { noveProMe } from '../lib/sdileniUkolu'
+import { NoveSdileneSheet } from '../components/NoveSdileneSheet'
 import { jePreplneno } from '../lib/kapacitaDne'
 import { useOsobniStrop } from '../lib/prutok'
 import { klidovyRezim } from '../lib/motion'
@@ -95,6 +98,7 @@ export function TodayView({
   const [shutdownOpen, setShutdownOpen] = useState(false)
   const [triageOpen, setTriageOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [noveOpen, setNoveOpen] = useState(false)
   // Jednorázový tip na swipe gesta — jinak je nikdo neobjeví. Zmizí
   // navždy po zavření nebo po prvním použití gesta.
   const [gestureTip, setGestureTip] = useState(() => localStorage.getItem('todo.gestureTipSeen') !== '1')
@@ -162,6 +166,12 @@ export function TodayView({
   const ja = useJa()
   const open = useMemo(() => mojeUkoly(openRaw ?? [], ja), [openRaw, ja])
   const done = useMemo(() => mojeUkoly(doneRaw ?? [], ja), [doneRaw, ja])
+  // Co mi někdo nasdílel a já to ještě neviděl. Bere se z `openRaw`, ne
+  // z `open`: nasdílený úkol není můj (autor je kolega), takže by ho filtr
+  // „moje" vyřadil — a právě proto potřebuje vlastní cestu na obrazovku.
+  const videne = useLiveQuery(videneSdilene, []) ?? new Set<string>()
+  const nove = useMemo(() => noveProMe(openRaw ?? [], ja, videne), [openRaw, ja, videne])
+  const jmenaLidi = useLide()
   const clients = useLiveQuery(allClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []
   const dayPlan = useLiveQuery(() => getDayPlan(today), [today])
@@ -406,8 +416,21 @@ export function TodayView({
           práce, každé je na jedno ťuknutí v panelu. Pořadí podle toho, co
           se dnes mění: návrh (ráno), schůzka (během dne), uzávěrka
           (večer), signály a inbox (kdykoli). */}
-      {(navrhy.length > 0 || events.length > 0 || (isEvening && unfinished.length > 0) || signaly.length > 0 || inbox.length > 0) && (
+      {(nove.length > 0 || navrhy.length > 0 || events.length > 0 || (isEvening && unfinished.length > 0) || signaly.length > 0 || inbox.length > 0) && (
         <div className="radka-mizi rise -mx-4 flex gap-2 overflow-x-auto px-4 pb-1" style={{ scrollbarWidth: 'none', ...stagger(1) }}>
+          {/* První v řadě: „někdo ti dal práci" je ze všech kontextů ten, na
+              který se čeká. Nasdílený a nepřidělený úkol by jinak šlo najít
+              jedině ve Vše — tedy vůbec ne, když člověk neví, že tam je. */}
+          {nove.length > 0 && (
+            <Chip tone="accent" onClick={() => setNoveOpen(true)}>
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="9" r="3" />
+                <circle cx="16.5" cy="10.5" r="2.5" />
+                <path d="M3.5 19c.6-2.9 2.8-4.5 5.5-4.5s4.9 1.6 5.5 4.5M14.5 15.2c.6-.2 1.3-.3 2-.3 2.2 0 3.9 1.3 4.4 3.6" />
+              </svg>
+              Nové pro tebe · {nove.length}
+            </Chip>
+          )}
           {navrhy.length > 0 && (
             <Chip tone="accent" className="relative overflow-hidden" onClick={() => setNavrhOpen(true)}>
               {/* BorderBeam (magicui): světlo obíhá jediný chip, který napsal server */}
@@ -689,6 +712,15 @@ export function TodayView({
         />
       )}
       {signalyOpen && <SignalySheet radky={signaly} onClose={() => setSignalyOpen(false)} />}
+      {noveOpen && (
+        <NoveSdileneSheet
+          ukoly={nove}
+          clients={clientMap}
+          jmena={jmenaLidi}
+          onOpenTask={onOpenTask}
+          onClose={() => setNoveOpen(false)}
+        />
+      )}
       {triageOpen && <TriageSheet ukoly={visOverdue} clients={clientMap} nadpis={popis?.slovo} onClose={() => setTriageOpen(false)} />}
       {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
       {shutdownOpen && (
