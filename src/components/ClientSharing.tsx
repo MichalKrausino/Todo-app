@@ -1,10 +1,10 @@
 // Sdílení klienta s dalším uživatelem (Fáze 9).
 //
-// Sdílí se klient jako MÍSTO spolupráce: kolega uvidí klienta a všechny
-// jeho projekty, ale z úkolů jen ty, které mu někdo nasdílí — a totéž
-// platí obráceně, jeho úkoly vidíš jen nasdílené. Úkol je soukromý svému
-// autorovi (`src/lib/sdileniUkolu.ts`), sdílí se slotem „Sdílet" při
-// zadávání a v detailu. Nasdílený úkol může kolega odškrtnout i upravit
+// Sdílí se klient jako MÍSTO spolupráce: kolega uvidí klienta, ale
+// z projektů a úkolů jen ty, které mu někdo nasdílí — a totéž platí
+// obráceně. Projekt i úkol jsou soukromé svému autorovi
+// (`src/lib/sdileniUkolu.ts`); projekt se sdílí v jeho panelu, úkol slotem
+// „Sdílet" při zadávání a v detailu. Nasdílený úkol může kolega odškrtnout i upravit
 // a změna se vrátí zpátky běžnou synchronizací.
 //
 // Sekce se ukáže i odhlášenému — jen místo formuláře řekne, že to chce
@@ -89,8 +89,8 @@ export function ClientSharing({ clientId }: { clientId: string }) {
 
         {signedIn && shares.length === 0 && (
           <p className="px-4 py-2.5 text-sm text-ink-faint">
-            Klient je jen tvůj. Přidej e-mail a kolega uvidí klienta i jeho
-            projekty — z úkolů jen ty, které mu nasdílíš, a ty zase jeho.
+            Klient je jen tvůj. Přidej e-mail a kolega uvidí klienta — z projektů
+            a úkolů jen ty, které mu nasdílíš, a ty zase jeho.
             Účet mít nemusí: pozvánka počká na jeho první přihlášení.
           </p>
         )}

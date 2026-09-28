@@ -11,9 +11,12 @@ Pravidla pro vývoj: [`CLAUDE.md`](CLAUDE.md).
 
 ## Čeká na tebe
 
-- [ ] **Spustit `supabase/sdileni-ukolu.sql`** v SQL editoru (celé najednou,
-  je idempotentní). Do té doby server sdílí celého klienta a appka to u úkolu
-  řekne. Ověřeno chováním proti živé databázi v transakci s rollbackem.
+- [ ] **Spustit `supabase/sdileni-projektu.sql`** hned po nasazení appky
+  (celé najednou, je idempotentní). Do té doby kolega vidí všechny projekty
+  sdíleného klienta a appka to u projektu řekne. Po spuštění zmizí kolegovi
+  všechny tvoje projekty, dokud mu je v panelu projektu nenasdílíš.
+  Ověřeno chováním proti živé databázi v transakci s rollbackem.
+  (`supabase/sdileni-ukolu.sql` už běží — spuštěno 28. 9.)
 - [ ] **Propojit Google znovu** v appce (obláček vpravo nahoře → „Propojit
   Google znovu"). Uložený refresh token je z 20. 9., tedy z doby, kdy byla
   OAuth aplikace v režimu Testing a tokeny platily sedm dní — publikace ho

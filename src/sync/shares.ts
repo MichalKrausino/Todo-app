@@ -104,7 +104,8 @@ export async function listClientShares(clientId: string): Promise<ClientShare[]>
 }
 
 /**
- * Umí server sdílení po úkolech (`supabase/sdileni-ukolu.sql`)?
+ * Umí server sdílení po úkolech (`supabase/sdileni-ukolu.sql`), případně
+ * po projektech (`supabase/sdileni-projektu.sql`)?
  *
  * `true` = ano, `false` = starý server (funkce chybí), `undefined` = nevím
  * (offline, nepřihlášen). Rozlišit se to musí: starý server sdílí CELÉHO
@@ -113,17 +114,20 @@ export async function listClientShares(clientId: string): Promise<ClientShare[]>
  *
  * Kladná odpověď se pamatuje: SQL se jednou spustí a zpátky už nejde.
  */
-let umiSdileniUkolu: boolean | undefined
-export async function serverUmiSdileniUkolu(): Promise<boolean | undefined> {
-  if (umiSdileniUkolu) return true
+export type Sonda = 'sdileni_po_ukolech' | 'sdileni_po_projektech'
+const umi = new Set<Sonda>()
+export async function serverUmi(sonda: Sonda): Promise<boolean | undefined> {
+  if (umi.has(sonda)) return true
   const sb = getSupabase()
   if (!sb) return undefined
-  const { data, error } = await sb.rpc('sdileni_po_ukolech')
+  const { data, error } = await sb.rpc(sonda)
   if (!error) {
-    umiSdileniUkolu = data === true
-    return umiSdileniUkolu
+    if (data === true) umi.add(sonda)
+    return data === true
   }
   // PGRST202 = funkce na serveru není. Cokoli jiného (síť, výpadek) je „nevím".
   if (error.code === 'PGRST202') return false
   return undefined
 }
+
+export const serverUmiSdileniUkolu = () => serverUmi('sdileni_po_ukolech')
