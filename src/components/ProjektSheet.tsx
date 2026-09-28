@@ -14,6 +14,7 @@ import { formatDayLabel, todayISO } from '../lib/dates'
 import { nabidniVraceni } from '../lib/toast'
 import { RozpadKroku } from './RozpadKroku'
 import { Sheet } from './Sheet'
+import { ProjectSharing } from './TaskSharing'
 import { Button } from './ui/Button'
 
 const pole =
@@ -118,6 +119,10 @@ export function ProjektSheet({
           </div>
 
           <RozpadKroku project={project} onHotovo={close} />
+
+          {/* Ukládá se hned při přepnutí, stejně jako u úkolu: „kdo to vidí"
+              je rozhodnutí o datech a nemá čekat na Uložit. */}
+          <ProjectSharing project={project} />
 
           {celkem > 0 && (
             <div className="h-1 w-full overflow-hidden rounded-full bg-card">

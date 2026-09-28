@@ -10,7 +10,8 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/db'
 import {
   listClientShares,
-  serverUmiSdileniUkolu,
+  serverUmi,
+  type Sonda,
   sharedClientIds,
   type ClientShare,
 } from '../sync/shares'
@@ -94,23 +95,26 @@ export function useKolegove(clientId: string | undefined): {
 }
 
 /**
- * Umí server sdílení po úkolech? Viz `serverUmiSdileniUkolu` — `false`
+ * Umí server sdílení po úkolech / po projektech? Viz `serverUmi` — `false`
  * znamená starý server, který sdílí celého klienta, a rozhraní to musí
  * říct, místo aby ukazovalo „Jen já" nad úkolem, který kolega vidí.
  * Ptá se jen u sdíleného klienta: kdo nic nesdílí, nestojí to ani dotaz.
  */
-export function useUmiSdileniUkolu(clientId: string | undefined): boolean | undefined {
+function useUmi(clientId: string | undefined, sonda: Sonda): boolean | undefined {
   const sdileny = useSdilenyKlient(clientId)
   const [umi, setUmi] = useState<boolean | undefined>(undefined)
   useEffect(() => {
     if (!sdileny) return
     let zije = true
-    void serverUmiSdileniUkolu().then((v) => {
+    void serverUmi(sonda).then((v) => {
       if (zije) setUmi(v)
     })
     return () => {
       zije = false
     }
-  }, [sdileny])
+  }, [sdileny, sonda])
   return sdileny ? umi : undefined
 }
+
+export const useUmiSdileniUkolu = (clientId: string | undefined) => useUmi(clientId, 'sdileni_po_ukolech')
+export const useUmiSdileniProjektu = (clientId: string | undefined) => useUmi(clientId, 'sdileni_po_projektech')

@@ -5,6 +5,7 @@ import {
   sdileniDalsihoVyskytu,
   sOdebranym,
   sPridanym,
+  vidiProjekt,
 } from './sdileniUkolu'
 
 const JA = 'u-michal'
@@ -101,5 +102,35 @@ describe('nové pro mě', () => {
 
   it('nepřihlášený nemá nic nového', () => {
     expect(noveProMe([ukol({ ownerId: BEN, sharedWith: [JA] })], undefined, new Set())).toHaveLength(0)
+  })
+})
+
+// Projekt se sdílí zvlášť od úkolu. Nasdílený úkol z projektu, který
+// kolega nevidí, uvidí bez projektu — a appka to řekne předem.
+describe('vidiProjekt', () => {
+  it('autor vidí svůj projekt vždycky', () => {
+    expect(vidiProjekt({ ownerId: BEN }, BEN, JA)).toBe(true)
+  })
+
+  it('kolega vidí jen projekt, který mu autor ukázal', () => {
+    expect(vidiProjekt({ ownerId: JA }, BEN, JA)).toBe(false)
+    expect(vidiProjekt({ ownerId: JA, sharedWith: [BEN] }, BEN, JA)).toBe(true)
+    expect(vidiProjekt({ ownerId: JA, sharedWith: [JANA] }, BEN, JA)).toBe(false)
+  })
+
+  // Projekt bez razítka ještě neodešel na server: je můj a nikdo jiný ho
+  // nemá. Kdyby se bral jako „ničí", tvrdila by appka o mně, že vlastní
+  // projekt nevidím.
+  it('projekt bez razítka je můj', () => {
+    expect(vidiProjekt({}, JA, JA)).toBe(true)
+    expect(vidiProjekt({}, BEN, JA)).toBe(false)
+  })
+
+  // Kolegův projekt, který mi nasdílel, vidí on (autor) i já — ale Jana ne.
+  it('cizí projekt: autor ano, další kolega jen když je v seznamu', () => {
+    const p = { ownerId: BEN, sharedWith: [JA] }
+    expect(vidiProjekt(p, BEN, JA)).toBe(true)
+    expect(vidiProjekt(p, JA, JA)).toBe(true)
+    expect(vidiProjekt(p, JANA, JA)).toBe(false)
   })
 })

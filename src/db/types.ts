@@ -48,6 +48,10 @@ export interface Project extends BaseRecord {
   dueDate?: string // YYYY-MM-DD (lokální den)
   todoistSectionId?: string // projekt vznikl ze sekce v Todoistu (Fáze 8)
   order: number
+  // Komu autor projekt ukázal (id lidí u sdíleného klienta). Projekt je
+  // soukromý stejně jako úkol: kolega ho vidí, jen když je tady — a úkoly
+  // v něm pořád jen ty, které mu někdo nasdílel (supabase/sdileni-projektu.sql).
+  sharedWith?: string[]
 }
 
 // Podúkol — drobný krok uvnitř úkolu (checklist). Žije vnořený v Tasku,

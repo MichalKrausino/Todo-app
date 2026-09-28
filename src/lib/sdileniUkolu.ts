@@ -96,3 +96,22 @@ export function noveProMe<
       !videne.has(u.id),
   )
 }
+
+/**
+ * Vidí člověk projekt? Autor vždycky, ostatní jen když jim ho autor ukázal
+ * (`supabase/sdileni-projektu.sql`). Projekt bez razítka autora ještě
+ * neodešel na server, takže je můj — a nikdo jiný ho zatím nemá.
+ *
+ * Slouží k jedné větě u sdílení úkolu: nasdílený úkol z projektu, který
+ * kolega nevidí, uvidí BEZ projektu (Michalova volba — jméno nesdíleného
+ * projektu se ke kolegovi nedostane). Řekne se to předem, jinak by se
+ * kolega divil, proč úkol visí u klienta volně.
+ */
+export function vidiProjekt(
+  p: { ownerId?: string; sharedWith?: string[] },
+  kdo: string,
+  ja: string | undefined,
+): boolean {
+  const autor = p.ownerId ?? ja
+  return autor === kdo || (p.sharedWith ?? []).includes(kdo)
+}

@@ -8,9 +8,9 @@ import { PRIORITY_LABELS, plural } from '../lib/labels'
 import { foldToken, mentionToken, parseQuickAdd } from '../lib/quickAdd'
 import { humanizeRule } from '../lib/rrule'
 import { ukazToast, type ToastAkce } from '../lib/toast'
-import { komuLzeSdilet } from '../lib/sdileniUkolu'
+import { komuLzeSdilet, vidiProjekt } from '../lib/sdileniUkolu'
 import { kratkaJmena } from '../lib/tymUkoly'
-import { useJa, useKolegove, useUmiSdileniUkolu } from '../lib/useTym'
+import { useJa, useKolegove, useUmiSdileniProjektu, useUmiSdileniUkolu } from '../lib/useTym'
 import { FETCH_WINDOW_DAYS } from '../sync/calendar'
 import { MonthPicker } from './MonthPicker'
 import { SlotChip, pill, slotBase } from './SlotChip'
@@ -129,6 +129,17 @@ export function QuickAdd({
   const komuSdilet = useMemo(() => komuLzeSdilet(lideUKlienta, ja), [lideUKlienta, ja])
   const jmenaLidi = useMemo(() => kratkaJmena(lideUKlienta.map((l) => l.email)), [lideUKlienta])
   const nabidnoutSdileni = !!effClientId && komuSdilet.length > 0 && umiSdilet !== false
+  const umiProjekty = useUmiSdileniProjektu(effClientId)
+  const bezProjektuPro =
+    effProject && umiProjekty === true
+      ? sdiletS
+          .filter((u) => !vidiProjekt(effProject, u, ja))
+          .map((u) => {
+            const e = komuSdilet.find((l) => l.userId === u)?.email
+            return (e && jmenaLidi.get(e)) ?? e ?? ''
+          })
+          .filter(Boolean)
+      : []
   useEffect(() => {
     setSdiletS([])
   }, [effClientId])
@@ -514,24 +525,33 @@ export function QuickAdd({
         </div>
       )}
       {picker === 'share' && (
-        <div className="flex flex-wrap gap-1.5">
-          {komuSdilet.map((l) => {
-            const vybrano = sdiletS.includes(l.userId)
-            return (
-              <button
-                key={l.userId}
-                type="button"
-                onPointerDown={keepFocus}
-                aria-pressed={vybrano}
-                onClick={() =>
-                  setSdiletS((s) => (vybrano ? s.filter((u) => u !== l.userId) : [...s, l.userId]))
-                }
-                className={`${pill} ${vybrano ? 'bg-accent text-card' : 'bg-card text-ink'}`}
-              >
-                {jmenaLidi.get(l.email) ?? l.email}
-              </button>
-            )
-          })}
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap gap-1.5">
+            {komuSdilet.map((l) => {
+              const vybrano = sdiletS.includes(l.userId)
+              return (
+                <button
+                  key={l.userId}
+                  type="button"
+                  onPointerDown={keepFocus}
+                  aria-pressed={vybrano}
+                  onClick={() =>
+                    setSdiletS((s) => (vybrano ? s.filter((u) => u !== l.userId) : [...s, l.userId]))
+                  }
+                  className={`${pill} ${vybrano ? 'bg-accent text-card' : 'bg-card text-ink'}`}
+                >
+                  {jmenaLidi.get(l.email) ?? l.email}
+                </button>
+              )
+            })}
+          </div>
+          {/* Projekt se sdílí zvlášť: kdo ho nevidí, dostane úkol bez něj.
+              Řekne se to tady, ne až u kolegy. */}
+          {bezProjektuPro.length > 0 && effProject && (
+            <p className="px-1 text-[12px] text-ink-soft">
+              {bezProjektuPro.join(', ')} uvidí úkol bez projektu — „{effProject.name}" nesdílíš.
+            </p>
+          )}
         </div>
       )}
           </div>

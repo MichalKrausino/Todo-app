@@ -838,6 +838,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
           clientId={clientId || undefined}
           ownerId={task.ownerId}
           sharedWith={sharedWith}
+          project={project}
           onChange={setSharedWith}
         />
 
