@@ -3,7 +3,7 @@
 
 import { db } from './db'
 import { emitRepoWrite } from './events'
-import type { Client, ClientKind, Priority, Project, Task, TaskStatus } from './types'
+import type { Client, ClientKind, Priority, Project, Task, TaskStatus, ZadaniUkolu } from './types'
 import { deterministicUuid } from '../lib/deterministicId'
 import { addDays, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { HISTORIE_DNI } from '../../supabase/functions/morning-plan/pick'
@@ -198,6 +198,8 @@ export async function addTask(input: {
   isClientCheck?: boolean
   /** Komu úkol rovnou nasdílet (slot „Sdílet" v zadávání). Výchozí je nikomu. */
   sharedWith?: string[]
+  /** Původní text pro zpřesnění modelem (`zadaniPro`), jen když ho parser nepobral. */
+  zadani?: ZadaniUkolu
 }): Promise<Task> {
   const status: TaskStatus = input.dueDate || input.scheduledFor ? 'active' : 'inbox'
   const task: Task = {
@@ -344,6 +346,7 @@ async function respawnRecurring(task: Task | undefined, t: string): Promise<void
     // jeden výskyt (viz `krokyProDalsiVyskyt`).
     subtasks: krokyProDalsiVyskyt(task.subtasks),
     pinnedFor: undefined, // špendlík patřil dnešku, ne dalšímu výskytu
+    zadani: undefined, // návrh k zadání patřil prvnímu výskytu
   }
   await db.tasks.add(successor)
 }

@@ -44,6 +44,7 @@ import { dnyMesice, kotvaMesice, posunMesic } from '../lib/mesic'
 import { klidovyRezim } from '../lib/motion'
 import { dilyDne, type Dil } from '../lib/pruhDne'
 import { parseQuickAdd } from '../lib/quickAdd'
+import { zadaniPro } from '../lib/zpresneni'
 import { ukazToast, type ToastAkce } from '../lib/toast'
 import { useNavrhPamet } from '../lib/navrhPamet'
 import { TaskRow } from '../components/TaskRow'
@@ -257,6 +258,15 @@ export function UpcomingView({
       projectId: parsed.projectId,
       recurrenceRule: parsed.recurrenceRule,
       notes: parsed.notes,
+      // Den je daný mřížkou, ne parserem — do základu nepatří, takže ho
+      // návrh modelu nikdy nepřebije.
+      zadani: zadaniPro(novy, {
+        title: parsed.title,
+        clientId: parsed.clientId,
+        projectId: parsed.projectId,
+        dueTime: parsed.dueTime,
+        priority: parsed.priority ?? 'normal',
+      }),
     })
     setNovy('')
     if (!hlidejStrop(iso, task)) ukazToast(`${nazevDne(iso)} — „${task.title}"`)

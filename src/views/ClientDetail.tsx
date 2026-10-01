@@ -25,6 +25,7 @@ import { CHECK_FREQUENCY_LABELS, checkFrequencyOf, getClientCheckTask } from '..
 import { stavKlienta } from '../lib/clientStatus'
 import { formatDayLabel, todayISO } from '../lib/dates'
 import { parseQuickAdd } from '../lib/quickAdd'
+import { zadaniPro } from '../lib/zpresneni'
 import { Chip } from '../components/Chip'
 import { KlientSheet } from '../components/KlientSheet'
 import { ProjektSheet } from '../components/ProjektSheet'
@@ -131,6 +132,15 @@ export function ClientDetail({
       notes: parsed.notes,
       projectId: parsed.projectId,
       clientId: id,
+      // Klient je daný obrazovkou, ne parserem — do základu nepatří, takže
+      // ho návrh modelu nikdy nepřebije.
+      zadani: zadaniPro(taskText, {
+        title: parsed.title,
+        projectId: parsed.projectId,
+        dueDate: parsed.dueDate,
+        dueTime: parsed.dueTime,
+        priority: parsed.priority ?? 'normal',
+      }),
     })
     setTaskText('')
   }

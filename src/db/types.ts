@@ -81,6 +81,18 @@ export interface TodoistComment {
   attachment?: string // název přílohy (soubor sám zůstává v Todoistu)
 }
 
+export interface ZadaniUkolu {
+  text: string
+  zaklad: {
+    title: string
+    clientId?: string
+    projectId?: string
+    dueDate?: string
+    dueTime?: string
+    priority: Priority
+  }
+}
+
 export interface Task extends BaseRecord {
   clientId?: string
   projectId?: string
@@ -124,6 +136,12 @@ export interface Task extends BaseRecord {
   // klienta je „hotovo" bez jména informace jen z poloviny.
   completedBy?: string
   subtasks?: Subtask[] // checklist — po respawnu opakování se nuluje na nehotové
+  // Původní zadání, které parser nepobral celé (Fáze 5, `src/lib/zpresneni.ts`).
+  // Visí na úkolu, dokud se k návrhu modelu člověk nevyjádří — přijetí
+  // i zahození ho smaže, a protože se úkol synchronizuje, zmizí nabídka
+  // na všech zařízeních naráz. `zaklad` je to, co parser vytáhl: návrh smí
+  // nabídnout jen pole, která od té doby nikdo ručně nezměnil.
+  zadani?: ZadaniUkolu
   isClientCheck?: boolean // pravidelná připomínka „zkontrolovat klienta" (marker přežívá respawn)
   // Úkol přišel z Todoistu (Fáze 8). Název, termín a priorita patří Todoistu —
   // lokální úpravy těchhle polí by další stažení přepsalo, proto jsou v UI zamčená.
