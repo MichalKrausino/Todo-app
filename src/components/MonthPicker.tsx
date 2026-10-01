@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { calendarEventsBetween, openTasks } from '../db/repo'
 import { addDays, fromISODate, toISODate, todayISO } from '../lib/dates'
@@ -33,6 +33,8 @@ export function MonthPicker({
 }) {
   const today = todayISO()
   const [month, setMonth] = useState(() => (value ?? today).slice(0, 7)) // YYYY-MM
+  // směr listování — nový měsíc přijíždí ze strany, kam se listuje
+  const [dir, setDir] = useState(0)
 
   const first = `${month}-01`
   const firstDate = fromISODate(first)
@@ -62,18 +64,25 @@ export function MonthPicker({
     }
   }
 
-  // směr listování — nový měsíc přijíždí ze strany, kam se listuje
-  const [dir, setDir] = useState(0)
-
   // Vybraný den může spadnout do jiného měsíce, než je zrovna vidět —
   // třicátého prvního srpna míří „Zítra" na září a kalendář zůstával
   // v srpnu, kde nebylo označeno nic. Měsíc proto jde za výběrem.
-  useEffect(() => {
+  //
+  // Ale JEN KDYŽ SE VÝBĚR ZMĚNÍ, ne pokaždé, když se liší od zobrazeného
+  // měsíce. Dřív se to hlídalo efektem nad `[value, month]`, takže šipka
+  // „Další měsíc" přepnula na říjen, efekt viděl, že výběr je v září,
+  // a vrátil ji zpátky — s vybraným dnem nešlo listovat vůbec a termín
+  // v jiném měsíci se nedal zadat (našel Michal na telefonu). Úprava stavu
+  // při změně propu, ne efekt: tak to React doporučuje a nic neproblikne.
+  const [sledovany, setSledovany] = useState(value)
+  if (value !== sledovany) {
+    setSledovany(value)
     const cil = value?.slice(0, 7)
-    if (!cil || cil === month) return
-    setDir(cil > month ? 1 : -1)
-    setMonth(cil)
-  }, [value, month])
+    if (cil && cil !== month) {
+      setDir(cil > month ? 1 : -1)
+      setMonth(cil)
+    }
+  }
   const shift = (delta: number) => {
     setDir(delta)
     const d = new Date(firstDate.getFullYear(), firstDate.getMonth() + delta, 1)
