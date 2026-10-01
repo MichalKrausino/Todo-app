@@ -216,7 +216,11 @@ všechny výběry. V kalendáříku u zadávání je jediná plná výplň vybra
 kroužek a vytížení dne je tečka pod číslem — dřív mělo „něco tam je"
 i „tohle jsi zvolil" tutéž modrou a nešlo je rozeznat. **Plán stojí na téže
 mřížce**, jen větší a s pruhem dne místo tečky — dva různě vypadající
-kalendáře v jedné appce jsou dva jazyky. Otevření termínu
+kalendáře v jedné appce jsou dva jazyky. Kalendářík jde za výběrem
+(„Zítra" 31. 8. ukáže září), ale **jen když se výběr ZMĚNÍ** — dokud to
+hlídal efekt nad `[výběr, zobrazený měsíc]`, vracel každou šipku zpátky
+a s vybraným dnem nešlo listovat vůbec (audit chování, oddíl 20, ověřeno
+vrácenou vadou). Otevření termínu
 schová klávesnici (a zavření ji vrátí): kalendář zmáčknutý do zbytku nad
 klávesnicí je k nepřečtení, takhle dostane celou výšku a den je dost
 velký na ťuknutí. Řádka se nikdy nezalamuje a panel má strop podle

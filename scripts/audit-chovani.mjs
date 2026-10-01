@@ -1675,6 +1675,57 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 20. kalendářík jde listovat i s vybraným dnem ---
+// Kalendářík jde za výběrem (vybereš „Zítra" 31. 8. → ukáže září). Dokud
+// to hlídal efekt nad [výběr, zobrazený měsíc], vracel ho ZPĚT pokaždé,
+// když se ty dva lišily — tedy i hned po šipce „Další měsíc". S vybraným
+// dnem pak nešlo listovat vůbec a termín v říjnu se nedal zadat. Měří se
+// zobrazený měsíc až po chvíli: návrat přišel o snímek později, takže
+// kontrola hned po kliknutí by prošla i s vadou.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  const dnes = await page.evaluate(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })
+  await page.evaluate(async (dnes) => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    await new Promise((res) => {
+      const tx = db.transaction(['tasks'], 'readwrite')
+      const st = tx.objectStore('tasks')
+      st.clear()
+      const t = new Date().toISOString()
+      st.put({ id: 'kal1', createdAt: t, updatedAt: t, title: 'Úkol na listování', priority: 'normal',
+        status: 'active', order: 0, dueDate: dnes })
+      tx.oncomplete = res
+    })
+  }, dnes)
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  await page.getByText('Úkol na listování').first().click(); await page.waitForTimeout(700)
+  await page.locator('.sheet-panel [data-slot="date"]').first().click(); await page.waitForTimeout(500)
+  const mesic = () => page.evaluate(() =>
+    document.querySelector('.sheet-panel button[data-day]')?.getAttribute('data-day')?.slice(0, 7) ?? '')
+  const vychozi = await mesic()
+  T_(vychozi === dnes.slice(0, 7), 'kalendářík se otevře na měsíci vybraného dne (' + vychozi + ')')
+  const dalsi = page.locator('.sheet-panel').getByRole('button', { name: 'Další měsíc' })
+  if (await dalsi.count()) { await dalsi.first().click(); await page.waitForTimeout(700) }
+  const poSipce = await mesic()
+  const [r, m] = dnes.split('-').map(Number)
+  const ocekavany = `${m === 12 ? r + 1 : r}-${String(m === 12 ? 1 : m + 1).padStart(2, '0')}`
+  T_(poSipce === ocekavany, 'šipka přelistuje na další měsíc a ten tam zůstane (' + poSipce + ', čekáno ' + ocekavany + ')')
+  // a den v něm jde vybrat — to je celý důvod, proč se listuje
+  const cil = `${ocekavany}-15`
+  const bunka = page.locator(`.sheet-panel button[data-day="${cil}"]`)
+  if (await bunka.count()) { await bunka.first().click(); await page.waitForTimeout(500) }
+  const vybrano = await page.evaluate((c) =>
+    document.querySelector(`.sheet-panel button[data-day="${c}"] span`)?.className.includes('bg-accent') ?? false, cil)
+  T_(vybrano, 'den v dalším měsíci jde vybrat (' + cil + ')')
+  await ctx.close()
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)
