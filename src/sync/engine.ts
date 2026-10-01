@@ -225,6 +225,7 @@ async function ensureAccount(userId: string): Promise<void> {
     for (const name of LOCAL_TABLE_NAMES) await localTable(name).clear()
     await db.calendarEvents.clear()
     await db.pushState.clear()
+    await db.navrhy.clear()
   }
   await db.syncState.put({ id: 'meta', userId })
 }

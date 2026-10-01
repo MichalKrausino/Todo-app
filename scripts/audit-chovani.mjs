@@ -1726,6 +1726,75 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 21. zpřesnění zadání modelem (Fáze 5) ---
+// Model sám v auditu neběží (je na serveru a stojí peníze); měří se to,
+// co dělá appka: (a) dlouhé zadání si úkol nechá, krátké ne — a založení
+// na to nečeká; (b) návrh se NEPOUŽIJE sám, jen nabídne; (c) co člověk
+// odškrtne, to se nepoužije; (d) ručně změněné pole se nenabídne; (e)
+// vyřízení smaže `zadani`, takže nabídka zmizí i z druhého zařízení.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  const db = (fn, arg) => page.evaluate(async ({ fn, arg }) => {
+    const req = indexedDB.open('todo')
+    const d = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    return await (new Function('d', 'arg', `return (${fn})(d, arg)`))(d, arg)
+  }, { fn: fn.toString(), arg })
+  const vsechny = () => db((d) => new Promise((res) => {
+    const r = d.transaction('tasks').objectStore('tasks').getAll(); r.onsuccess = () => res(r.result)
+  }))
+
+  // (a) zadání přes dok
+  await page.getByRole('button',{name:'Nový úkol'}).click(); await page.waitForTimeout(300)
+  await page.locator('input[placeholder]').first().fill('po schůzce připravit tři varianty banneru a poslat je klientovi')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(700)
+  await page.locator('input[placeholder]').first().fill('zavolat Pavlovi')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(700)
+  const ukoly = await vsechny()
+  const dlouhy = ukoly.find((t) => t.title.startsWith('po schůzce'))
+  const kratky = ukoly.find((t) => t.title === 'zavolat Pavlovi')
+  T_(!!dlouhy?.zadani?.text, 'dlouhé zadání, které parser nepobral, si úkol nechá pro model')
+  T_(!!kratky && !kratky.zadani, 'krátký úkol model nepotřebuje — nic se neukládá ani neposílá')
+  await page.keyboard.press('Escape'); await page.waitForTimeout(400)
+
+  // (b) návrh dorazil (zasazený tak, jak by ho uložil sync) — sám se nepoužije
+  const zitra = await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() + 2); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })
+  await db((d, a) => new Promise((res) => {
+    const tx = d.transaction(['navrhy', 'tasks'], 'readwrite')
+    tx.objectStore('navrhy').put({ taskId: a.id, text: a.text, at: new Date().toISOString(),
+      navrh: { nazev: 'Připravit tři varianty banneru', termin: a.zitra, kroky: ['Varianta 1', 'Varianta 2', 'Poslat klientovi'] } })
+    // druhý úkol: člověk mu mezitím sám přepsal název — ten se nabízet nesmí
+    const t = new Date().toISOString()
+    tx.objectStore('tasks').put({ id: 'rucne', createdAt: t, updatedAt: t, title: 'Můj vlastní název', priority: 'normal', status: 'inbox', order: 0,
+      zadani: { text: 'něco dlouhého co parser nepobral a model zpřesnil', zaklad: { title: 'něco dlouhého co parser nepobral a model zpřesnil', priority: 'normal' } } })
+    tx.objectStore('navrhy').put({ taskId: 'rucne', text: 'něco dlouhého co parser nepobral a model zpřesnil', at: t, navrh: { nazev: 'Zpřesněný název' } })
+    tx.oncomplete = res
+  }), { id: dlouhy?.id, text: dlouhy?.zadani?.text, zitra })
+  // Zápis mimo Dexie živé dotazy neprobudí — v appce návrh zapisuje
+  // Dexie sama (`src/sync/zpresneni.ts`), tady stačí znovu načíst.
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  const chip = await page.evaluate(() => [...document.querySelectorAll('main button')].map((b) => b.textContent ?? '').find((t) => /Zpřesnit/.test(t)) ?? null)
+  T_(chip !== null && /·\s*1\b/.test(chip), 'návrh se ohlásí chipem — a ručně přepsané pole nepočítá (' + (chip ?? 'chybí') + ')')
+  const porad = (await vsechny()).find((t) => t.id === dlouhy?.id)
+  T_(porad?.title === dlouhy?.title && !porad?.dueDate, 'návrh se sám nepoužil — úkol je, jak ho člověk zadal')
+
+  // (c) odškrtnout termín, použít zbytek
+  if (chip) { await page.getByRole('button', { name: /Zpřesnit/ }).click(); await page.waitForTimeout(700) }
+  const termin = page.locator('.sheet-panel').getByRole('checkbox', { name: 'Použít: Termín' })
+  if (await termin.count()) { await termin.click(); await page.waitForTimeout(200) }
+  const pouzit = page.locator('.sheet-panel').getByRole('button', { name: 'Použít', exact: true })
+  if (await pouzit.count()) { await pouzit.click(); await page.waitForTimeout(800) }
+  const po = (await vsechny()).find((t) => t.id === dlouhy?.id)
+  T_(po?.title === 'Připravit tři varianty banneru', 'zaškrtnuté se použije (' + (po?.title ?? '?') + ')')
+  T_(po && !po.dueDate, 'odškrtnuté se nepoužije — termín zůstal prázdný')
+  T_((po?.subtasks ?? []).length === 3, 'kroky se přidají do checklistu (' + (po?.subtasks ?? []).length + ')')
+  T_(po && !po.zadani, 'vyřízení smaže zadání — nabídka zmizí i z druhého zařízení')
+  const chipPo = await page.evaluate(() => [...document.querySelectorAll('main button')].some((b) => /Zpřesnit/.test(b.textContent ?? '')))
+  T_(!chipPo, 'po vyřízení chip zmizí')
+  await ctx.close()
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)

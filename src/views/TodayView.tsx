@@ -17,6 +17,8 @@ import {
 } from '../db/repo'
 import { noveProMe } from '../lib/sdileniUkolu'
 import { NoveSdileneSheet } from '../components/NoveSdileneSheet'
+import { ZpresneniSheet } from '../components/ZpresneniSheet'
+import { useZpresneni } from '../lib/useZpresneni'
 import { jePreplneno } from '../lib/kapacitaDne'
 import { useOsobniStrop } from '../lib/prutok'
 import { klidovyRezim } from '../lib/motion'
@@ -99,6 +101,8 @@ export function TodayView({
   const [triageOpen, setTriageOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [noveOpen, setNoveOpen] = useState(false)
+  const [zpresnitOpen, setZpresnitOpen] = useState(false)
+  const zavritZpresneni = useCallback(() => setZpresnitOpen(false), [])
   // Jednorázový tip na swipe gesta — jinak je nikdo neobjeví. Zmizí
   // navždy po zavření nebo po prvním použití gesta.
   const [gestureTip, setGestureTip] = useState(() => localStorage.getItem('todo.gestureTipSeen') !== '1')
@@ -171,6 +175,7 @@ export function TodayView({
   // „moje" vyřadil — a právě proto potřebuje vlastní cestu na obrazovku.
   const videne = useLiveQuery(videneSdilene, []) ?? new Set<string>()
   const nove = useMemo(() => noveProMe(openRaw ?? [], ja, videne), [openRaw, ja, videne])
+  const zpresnit = useZpresneni()
   const jmenaLidi = useLide()
   const clients = useLiveQuery(allClients, []) ?? []
   const projects = useLiveQuery(allProjects, []) ?? []
@@ -416,7 +421,7 @@ export function TodayView({
           práce, každé je na jedno ťuknutí v panelu. Pořadí podle toho, co
           se dnes mění: návrh (ráno), schůzka (během dne), uzávěrka
           (večer), signály a inbox (kdykoli). */}
-      {(nove.length > 0 || navrhy.length > 0 || events.length > 0 || (isEvening && unfinished.length > 0) || signaly.length > 0 || inbox.length > 0) && (
+      {(nove.length > 0 || zpresnit.length > 0 || navrhy.length > 0 || events.length > 0 || (isEvening && unfinished.length > 0) || signaly.length > 0 || inbox.length > 0) && (
         <div className="radka-mizi rise -mx-4 flex gap-2 overflow-x-auto px-4 pb-1" style={{ scrollbarWidth: 'none', ...stagger(1) }}>
           {/* První v řadě: „někdo ti dal práci" je ze všech kontextů ten, na
               který se čeká. Nasdílený a nepřidělený úkol by jinak šlo najít
@@ -429,6 +434,17 @@ export function TodayView({
                 <path d="M3.5 19c.6-2.9 2.8-4.5 5.5-4.5s4.9 1.6 5.5 4.5M14.5 15.2c.6-.2 1.3-.3 2-.3 2.2 0 3.9 1.3 4.4 3.6" />
               </svg>
               Nové pro tebe · {nove.length}
+            </Chip>
+          )}
+          {/* Model dočetl zadání, které parser nepobral (Fáze 5). Hned za
+              „Nové pro tebe": je to taky „někdo ti něco připravil", jen tím
+              někým je appka — a nic z toho se nestane bez ťuknutí. */}
+          {zpresnit.length > 0 && (
+            <Chip tone="accent" onClick={() => setZpresnitOpen(true)}>
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 20l9.5-9.5M14.5 4.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1zM19 13l.6 1.4 1.4.6-1.4.6L19 17l-.6-1.4-1.4-.6 1.4-.6z" />
+              </svg>
+              Zpřesnit · {zpresnit.length}
             </Chip>
           )}
           {navrhy.length > 0 && (
@@ -719,6 +735,15 @@ export function TodayView({
           jmena={jmenaLidi}
           onOpenTask={onOpenTask}
           onClose={() => setNoveOpen(false)}
+        />
+      )}
+      {zpresnitOpen && (
+        <ZpresneniSheet
+          nabidky={zpresnit}
+          clients={clientMap}
+          projects={projectMap}
+          jmena={jmenaLidi}
+          onClose={zavritZpresneni}
         />
       )}
       {triageOpen && <TriageSheet ukoly={visOverdue} clients={clientMap} nadpis={popis?.slovo} onClose={() => setTriageOpen(false)} />}
