@@ -13,6 +13,7 @@ import { maybeRefreshCalendar, refreshCalendar } from './calendar'
 import { syncNow } from './engine'
 import { isDue, wokeUp } from '../lib/freshness'
 import { maybeRefreshTodoist, refreshTodoist } from './todoist'
+import { zpresniCekajici } from './zpresneni'
 
 const TICK_MS = 30_000
 const SYNC_INTERVAL_MS = 60_000
@@ -43,6 +44,9 @@ async function tick(): Promise<void> {
   }
   await maybeRefreshCalendar()
   await maybeRefreshTodoist()
+  // Návrhy k zadání úkolů (Fáze 5). Po syncu, ať už jsou nové úkoly na
+  // serveru; bez kandidátů je to jeden dotaz do Dexie, žádná síť.
+  await zpresniCekajici()
 }
 
 // Okamžité stažení všeho — po návratu signálu, po přepnutí wifi ↔ data
@@ -55,6 +59,7 @@ export async function refreshAll(reason: string): Promise<void> {
     await syncNow()
     await refreshCalendar()
     await refreshTodoist(true)
+    await zpresniCekajici()
   } catch (e) {
     console.warn(`obnova (${reason}):`, e instanceof Error ? e.message : e)
   }

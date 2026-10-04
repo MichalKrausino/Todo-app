@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie'
 import type { CalendarEvent, Client, DayPlan, Project, Task, Template } from './types'
+import type { Navrh } from '../../supabase/functions/zpresni/navrh'
 
 // Lokální stav synchronizace (kurzory pull/push, přihlášený účet).
 // Nesynchronizuje se — je to čistě lokální účetnictví.
@@ -23,6 +24,19 @@ export interface PushStateRow {
 // Jenže „u-8f3c…" na řádku úkolu nikomu nic neřekne, takže se jména
 // dohledávají přes RPC a ukládají sem: v letadle a v metru pak u úkolu
 // pořád stojí „jana" a ne prázdno. Taky čistě lokální, nesynchronizuje se.
+// Návrh modelu k zadání úkolu (Fáze 5). JEN LOKÁLNĚ, nesynchronizuje se:
+// kdyby ležel ve sdíleném řádku úkolu, zápis návrhu na pozadí by podle
+// LWW mohl přebít úpravu, kterou člověk mezitím udělal na jiném zařízení.
+// Každé zařízení si ho vyzvedne samo — server má mezipaměť, takže podruhé
+// to nic nestojí. `text` je zadání, ke kterému návrh patří: změní-li se,
+// návrh se zahodí.
+export interface NavrhRow {
+  taskId: string
+  text: string
+  navrh: Navrh
+  at: string
+}
+
 export interface OsobaRow {
   userId: string
   email: string
@@ -38,6 +52,7 @@ export class TodoDB extends Dexie {
   pushState!: Table<PushStateRow, string>
   calendarEvents!: Table<CalendarEvent, string>
   lide!: Table<OsobaRow, string>
+  navrhy!: Table<NavrhRow, string>
 
   constructor() {
     super('todo')
@@ -69,6 +84,10 @@ export class TodoDB extends Dexie {
     // do jejího naplnění se u cizího úkolu ukáže „někdo další".
     this.version(6).stores({
       lide: 'userId',
+    })
+    // Fáze 5: návrhy modelu k zadání. Lokální — viz NavrhRow.
+    this.version(7).stores({
+      navrhy: 'taskId',
     })
   }
 }

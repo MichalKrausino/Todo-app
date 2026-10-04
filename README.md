@@ -17,6 +17,13 @@ Pravidla pro vývoj: [`CLAUDE.md`](CLAUDE.md).
   všechny tvoje projekty, dokud mu je v panelu projektu nenasdílíš.
   Ověřeno chováním proti živé databázi v transakci s rollbackem.
   (`supabase/sdileni-ukolu.sql` už běží — spuštěno 28. 9.)
+- [ ] **Zpřesnění zadání modelem** (Fáze 5) — tři kroky, v tomhle pořadí:
+  1. spustit `supabase/zpresneni.sql` (mezipaměť a denní strop, idempotentní);
+  2. nasadit edge funkci `zpresni` (`supabase/functions/zpresni/`, verify_jwt: true);
+  3. v Supabase → Edge Functions → Secrets vložit `ANTHROPIC_API_KEY` —
+     **klíč vkládáš sám, do chatu ani do repa nepatří**.
+  Bez klíče funkce odpoví 503 a appka se tiše přestane ptát; zadávání
+  úkolů to neovlivní nijak.
 - [ ] **Propojit Google znovu** v appce (obláček vpravo nahoře → „Propojit
   Google znovu"). Uložený refresh token je z 20. 9., tedy z doby, kdy byla
   OAuth aplikace v režimu Testing a tokeny platily sedm dní — publikace ho

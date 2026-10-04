@@ -10,7 +10,8 @@ import { humanizeRule } from '../lib/rrule'
 import { ukazToast, type ToastAkce } from '../lib/toast'
 import { komuLzeSdilet, vidiProjekt } from '../lib/sdileniUkolu'
 import { kratkaJmena } from '../lib/tymUkoly'
-import { useJa, useKolegove, useUmiSdileniProjektu, useUmiSdileniUkolu } from '../lib/useTym'
+import { useJa, useKolegove, useLide, useUmiSdileniProjektu, useUmiSdileniUkolu } from '../lib/useTym'
+import { zadaniPro } from '../lib/zpresneni'
 import { FETCH_WINDOW_DAYS } from '../sync/calendar'
 import { MonthPicker } from './MonthPicker'
 import { SlotChip, pill, slotBase } from './SlotChip'
@@ -124,6 +125,8 @@ export function QuickAdd({
   // celého klienta, se slot vůbec nenabídne: nebylo by co vybírat a slot
   // by jen předstíral, že „nevybráno" znamená „nevidí".
   const ja = useJa()
+  const lideMapa = useLide()
+  const jmenaVsech = useMemo(() => [...lideMapa.values()], [lideMapa])
   const { lide: lideUKlienta } = useKolegove(effClientId)
   const umiSdilet = useUmiSdileniUkolu(effClientId)
   const komuSdilet = useMemo(() => komuLzeSdilet(lideUKlienta, ja), [lideUKlienta, ja])
@@ -270,6 +273,21 @@ export function QuickAdd({
       recurrenceRule: parsed.recurrenceRule,
       notes: parsed.notes,
       sharedWith: nabidnoutSdileni && sdiletS.length ? sdiletS : undefined,
+      // Základ je to, co vytáhl PARSER, ne to, co bylo nakonec vybráno ve
+      // slotech: ruční volba je rozhodnutí a návrh modelu ji nesmí přebít
+      // (pole, které se od základu liší, se nenabízí).
+      zadani: zadaniPro(
+        text,
+        {
+          title: parsed.title,
+          clientId: parsed.clientId,
+          projectId: parsed.projectId,
+          dueDate: parsed.dueDate,
+          dueTime: parsed.dueTime,
+          priority: parsed.priority ?? 'normal',
+        },
+        jmenaVsech,
+      ),
     })
     setText('')
     setOverrides({})
