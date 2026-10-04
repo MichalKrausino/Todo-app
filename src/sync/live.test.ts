@@ -18,7 +18,7 @@ def('navigator', {
 })
 def('window', { addEventListener: (t: string, f: () => void) => listeners.set(`win:${t}`, f) })
 
-vi.mock('./engine', () => ({ syncNow: vi.fn(async () => {}) }))
+vi.mock('./engine', () => ({ syncNow: vi.fn(async () => {}), getSupabase: vi.fn(() => null) }))
 vi.mock('./calendar', () => ({
   maybeRefreshCalendar: vi.fn(async () => {}),
   refreshCalendar: vi.fn(async () => {}),
