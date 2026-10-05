@@ -101,9 +101,8 @@ export function TriageSheet({
     // ale zůstane v datech — zahozená práce je taky informace.
     if (odpoved === 'neplati') void updateTask(task.id, { status: 'dropped' })
     // Sundat datum, ne úkol. Status se ÚMYSLNĚ nemění na `inbox`:
-    // odtamtud by ho po pár dnech vyhrabal signál „ležáky v inboxu"
-    // (`agingInbox` v `signals.ts` filtruje právě na `inbox`), tedy
-    // další nadávání za něco, co člověk udělal schválně.
+    // inbox je „ještě nezpracované" a tenhle úkol člověk zpracoval
+    // právě teď — rozhodl, že datum nemá. Zůstává rozdělaný, jen bez dne.
     if (odpoved === 'bezdata') void updateTask(task.id, { dueDate: undefined, scheduledFor: undefined })
     setHotovo((h) => [...h, { task, odpoved, pred }])
   }

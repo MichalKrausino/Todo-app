@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { Task } from '../db/types'
 import {
   MIN_VZOREK,
-  PRAH_ODKLADU,
   dokonceniPodleOdkladu,
   jeOdkladanySlib,
   jeParkovany,
@@ -10,7 +9,6 @@ import {
   popisOdkladu,
   vetaOOdkladani,
 } from './odkladani'
-import { POSTPONE_THRESHOLD, computeSignals } from './signals'
 
 const ukol = (extra: Partial<Task>): Task =>
   ({
@@ -70,22 +68,6 @@ describe('slib vs parkoviště', () => {
   it('popis mlčí, dokud není o čem mluvit', () => {
     expect(popisOdkladu(ukol({ ...SLIB, postponeCount: 1 }))).toBe('')
     expect(popisOdkladu(ukol({ ...SLIB, postponeCount: 4 }))).toBe('odloženo 4×')
-  })
-
-  // Dvě různá čísla o téže věci by byla vada; tady je ten rozdíl záměr
-  // a drží ho test: seznam, který se ukáže sám (signály), má být vzácnější
-  // než věta u úkolu, na který se člověk zrovna dívá.
-  it('signály na Dnes jsou hlasitější práh než zmínka u úkolu', () => {
-    expect(POSTPONE_THRESHOLD).toBeGreaterThan(PRAH_ODKLADU)
-  })
-
-  // Appka nesmí mít na jednu věc dva názory: co triáž nepovažuje za
-  // odklad, o kterém se mluví, nesmí vyhrabat ani signál na Dnes.
-  it('signály na Dnes ctí totéž pravidlo — parkovaný úkol tam není', () => {
-    const park = ukol({ postponeCount: POSTPONE_THRESHOLD + 2 })
-    const slib = ukol({ ...SLIB, postponeCount: POSTPONE_THRESHOLD })
-    const s = computeSignals([], [], [park, slib], '2026-09-20')
-    expect(s.postponed.map((t) => t.id)).toEqual([slib.id])
   })
 })
 

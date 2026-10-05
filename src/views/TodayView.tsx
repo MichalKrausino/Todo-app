@@ -26,7 +26,6 @@ import { dilyDne } from '../lib/pruhDne'
 import { PruhDne } from '../components/PruhDne'
 import { formatFullDate, todayISO } from '../lib/dates'
 import { WORK_END, WORK_START, freeGaps, freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
-import { computeSignals } from '../lib/signals'
 import { plural } from '../lib/labels'
 import { poradiDne, type PolozkaDne } from '../lib/dnesPoradi'
 import { popisPropadlych } from '../lib/vseUkoly'
@@ -37,7 +36,6 @@ import { TriageSheet } from '../components/TriageSheet'
 import { NavrhSheet, type Odpocivajici } from '../components/NavrhSheet'
 import { useNavrhPamet } from '../lib/navrhPamet'
 import { KalendarSheet, minutesOfDay, untilLabel } from '../components/KalendarSheet'
-import { SignalySheet, signalRadky } from '../components/SignalySheet'
 import { TaskRow } from '../components/TaskRow'
 import { useRozbaleno } from '../components/SbalenaSekce'
 import { TextEffect } from '../components/ui/TextEffect'
@@ -50,8 +48,8 @@ import { Ripple } from '../components/ui/Ripple'
 import confetti from 'canvas-confetti'
 
 // Obrazovka Dnes je jedna odpověď na „co teď?": nahoře hlavička, pod ní
-// JEDNA řádka kontextu (nejbližší schůzka, ranní návrh, uzávěrka, signály,
-// inbox — každé je chip, každé se otevře v panelu) a pod tím JEDEN seznam
+// JEDNA řádka kontextu (nejbližší schůzka, ranní návrh, uzávěrka, inbox —
+// každé je chip, každé se otevře v panelu) a pod tím JEDEN seznam
 // úkolů v jedné kartě: připnuté, propadlé, dnešní; hotové sbalené na
 // konci. Dřív tu stálo až jedenáct bloků pod sebou a každý s vlastním
 // nadpisem — obrazovka odpovídala jedenáctkrát a pokaždé jinak.
@@ -86,17 +84,14 @@ type Polozka = PolozkaDne
 // Kontextový chip: jedna řádka nad seznamem, každý chip otevře panel.
 export function TodayView({
   onOpenTask,
-  onOpenClient,
   onOpenInbox,
 }: {
   onOpenTask: (t: Task) => void
-  onOpenClient: (id: string) => void
   onOpenInbox: () => void
 }) {
   const today = todayISO()
   const [navrhOpen, setNavrhOpen] = useState(false)
   const [kalendarOpen, setKalendarOpen] = useState(false)
-  const [signalyOpen, setSignalyOpen] = useState(false)
   const [shutdownOpen, setShutdownOpen] = useState(false)
   const [triageOpen, setTriageOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
@@ -339,7 +334,7 @@ export function TodayView({
       .map(([id, polozky]) => ({ client: id ? clientMap.get(id) : undefined, polozky }))
   }, [razeni, klientiDnes, viditelne, clientMap])
 
-  // Kontext: ranní návrh, nejbližší schůzka, uzávěrka, signály, inbox.
+  // Kontext: ranní návrh, nejbližší schůzka, uzávěrka, inbox.
   const taskById = useMemo(() => new Map(open.map((t) => [t.id, t])), [open])
   const navrhy = (dayPlan?.suggestions ?? [])
     .filter((s) => s.decision === 'ignored' && taskById.has(s.taskId))
@@ -353,18 +348,6 @@ export function TodayView({
   const dalsi = events
     .filter((e) => !e.allDay && minutesOfDay(e.start) > nowMin)
     .sort((a, b) => minutesOfDay(a.start) - minutesOfDay(b.start))[0]
-  // `computeSignals` projde několikrát všechny úkoly i klienty — nejdražší
-  // výpočet obrazovky. Na otevřeném panelu ani na tiknutí minuty nezávisí,
-  // takže se drží stranou od překreslení.
-  // Signály se počítají ze VŠECH viditelných úkolů, ne jen z mých. Ptají
-  // se „nepropadá něco u klienta", ne „co mám dnes dělat": kdyby koukaly
-  // jen na moje, hlásily by „projekt bez dalšího kroku" pokaždé, když ten
-  // další krok má kolega — planý poplach na obrazovce, která má být tichá.
-  const signalyData = useMemo(
-    () => computeSignals(clients, projects, [...(openRaw ?? []), ...(doneRaw ?? [])], today),
-    [clients, projects, openRaw, doneRaw, today],
-  )
-  const signaly = signalRadky(signalyData, { onOpenClient, onOpenTask, onOpenInbox })
   const timeFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
 
   return (
@@ -420,8 +403,8 @@ export function TodayView({
       {/* Kontext: jedna vodorovná řádka chipů. Nic z toho není dnešní
           práce, každé je na jedno ťuknutí v panelu. Pořadí podle toho, co
           se dnes mění: návrh (ráno), schůzka (během dne), uzávěrka
-          (večer), signály a inbox (kdykoli). */}
-      {(nove.length > 0 || zpresnit.length > 0 || navrhy.length > 0 || events.length > 0 || (isEvening && unfinished.length > 0) || signaly.length > 0 || inbox.length > 0) && (
+          (večer) a inbox (kdykoli). */}
+      {(nove.length > 0 || zpresnit.length > 0 || navrhy.length > 0 || events.length > 0 || (isEvening && unfinished.length > 0) || inbox.length > 0) && (
         <div className="radka-mizi rise -mx-4 flex gap-2 overflow-x-auto px-4 pb-1" style={{ scrollbarWidth: 'none', ...stagger(1) }}>
           {/* První v řadě: „někdo ti dal práci" je ze všech kontextů ten, na
               který se čeká. Nasdílený a nepřidělený úkol by jinak šlo najít
@@ -492,12 +475,6 @@ export function TodayView({
           {isEvening && unfinished.length > 0 && dayClosed && (
             <Chip tone="moss" disabled className="opacity-100">
               ✓ Den uzavřen
-            </Chip>
-          )}
-          {signaly.length > 0 && (
-            <Chip tone="note" onClick={() => setSignalyOpen(true)}>
-              <span className="inline-block h-2 w-2 rounded-full bg-amber" />
-              Signály · {signaly.length}
             </Chip>
           )}
           {inbox.length > 0 && (
@@ -727,7 +704,6 @@ export function TodayView({
           onClose={() => setKalendarOpen(false)}
         />
       )}
-      {signalyOpen && <SignalySheet radky={signaly} onClose={() => setSignalyOpen(false)} />}
       {noveOpen && (
         <NoveSdileneSheet
           ukoly={nove}

@@ -226,8 +226,8 @@ const effectiveDate = (due?: string, scheduled?: string): string | undefined => 
 export async function updateTask(id: string, patch: Partial<Task>): Promise<void> {
   const existing = await db.tasks.get(id)
   const stamped: Partial<Task> = { ...patch, updatedAt: now() }
-  // Posun na pozdější den = odklad. Počítadlo je podklad pro tiché signály
-  // („odloženo už 4×") a týdenní zpětnou vazbu (Fáze 7).
+  // Posun na pozdější den = odklad. Počítadlo je podklad pro značku v triáži
+  // („odloženo 4×") a týdenní zpětnou vazbu (Fáze 7).
   if (existing) {
     const oldEff = effectiveDate(existing.dueDate, existing.scheduledFor)
     const newEff = effectiveDate(
