@@ -26,9 +26,12 @@ function loadDot(count: number): string {
 
 export function MonthPicker({
   value,
+  odDne,
   onSelect,
 }: {
   value?: string
+  /** Dny před tímhle nejdou vybrat (třeba v triáži — den v minulosti by úkol nechal propadlý). */
+  odDne?: string
   onSelect: (iso: string) => void
 }) {
   const today = todayISO()
@@ -143,6 +146,7 @@ export function MonthPicker({
           const selected = iso === value
           const isToday = iso === today
           const past = iso < today
+          const zakazany = odDne !== undefined && iso < odDne
           const cls = selected
             ? 'bg-accent font-semibold text-card'
             : isToday
@@ -158,6 +162,7 @@ export function MonthPicker({
               data-load={count}
               onPointerDown={keep}
               onClick={() => onSelect(iso)}
+              disabled={zakazany}
               aria-label={`${iso}${count > 0 ? `, ${count} položek` : ', volno'}`}
               className="flex flex-col items-center justify-center"
             >

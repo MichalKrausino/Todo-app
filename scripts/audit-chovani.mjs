@@ -1795,6 +1795,108 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 22. vlastní termín v průchodu a úkoly bez termínu po jednom ---
+// Žebřík v „Projít" končí za týden, takže „ten úkol je až 20." nešlo
+// říct jinak než odchodem do detailu. Teď je pod ním „Vybrat termín"
+// (kalendářík na místě, ťuknutí na den je odpověď, minulost nejde).
+// A týž průchod mají úkoly bez termínu z chipu na Dnes — dřív chip jen
+// přepnul do Plánu. Tam se „Přeskočit" jmenuje „Nechat bez termínu"
+// a fronta jde podle priority.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  const dny = await page.evaluate(() => {
+    const f = (o) => { const d = new Date(); d.setDate(d.getDate() + o); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+    return { dnes: f(0), vcera: f(-1), cil: f(12), propadlo: f(-3) }
+  })
+  await page.evaluate(async (dny) => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    await new Promise((res) => {
+      const tx = db.transaction('tasks', 'readwrite')
+      const st = tx.objectStore('tasks')
+      st.clear()
+      const t = (m) => new Date(Date.now() - m * 60000).toISOString()
+      st.put({ id: 'prop', createdAt: t(9), updatedAt: t(9), title: 'Propadlý report', priority: 'normal', status: 'active', order: 0, dueDate: dny.propadlo })
+      // Bez termínu: priorita má přednost před stářím.
+      st.put({ id: 'u-stary', createdAt: t(500), updatedAt: t(500), title: 'Starý nápad', priority: 'normal', status: 'inbox', order: 1 })
+      st.put({ id: 'u-ceny', createdAt: t(400), updatedAt: t(400), title: 'Zjistit ceny tisku', priority: 'normal', status: 'inbox', order: 2 })
+      st.put({ id: 'u-vysoka', createdAt: t(5), updatedAt: t(5), title: 'Připravit podklady', priority: 'high', status: 'active', order: 3 })
+      tx.oncomplete = res
+    })
+  }, dny)
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  const ukol = (id) => page.evaluate(async (id) => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    return await new Promise((res) => {
+      const r = db.transaction('tasks').objectStore('tasks').get(id)
+      r.onsuccess = () => res({ due: r.result?.dueDate ?? null, stav: r.result?.status ?? null })
+    })
+  }, id)
+  const panel = page.locator('.sheet-panel')
+  const vyberDen = async (iso) => {
+    await panel.getByRole('button', { name: /^Vybrat termín/ }).click(); await page.waitForTimeout(400)
+    const bunka = () => panel.locator(`button[data-day="${iso}"]`)
+    if (!(await bunka().count())) { await panel.getByRole('button', { name: 'Další měsíc' }).click(); await page.waitForTimeout(500) }
+    await bunka().click(); await page.waitForTimeout(600)
+  }
+
+  // (a) propadlý úkol: vlastní termín v kalendáříku
+  await page.getByRole('button', { name: /Projít/ }).click(); await page.waitForTimeout(800)
+  T_(await panel.getByRole('button', { name: /^Vybrat termín/ }).count() === 1, '„Projít" nabízí i vlastní termín')
+  await panel.getByRole('button', { name: /^Vybrat termín/ }).click(); await page.waitForTimeout(400)
+  const vcera = panel.locator(`button[data-day="${dny.vcera}"]`)
+  const vceraZakazana = (await vcera.count()) === 0 || await vcera.isDisabled()
+  T_(vceraZakazana, 'den v minulosti vybrat nejde — úkol by zůstal propadlý')
+  await panel.getByRole('button', { name: /^Vybrat termín/ }).click(); await page.waitForTimeout(300)
+  await vyberDen(dny.cil)
+  const prop = await ukol('prop')
+  T_(prop.due === dny.cil, 'ťuknutí na den je odpověď — termín je ten vybraný (' + prop.due + ', čekáno ' + dny.cil + ')')
+  const konec = await panel.innerText()
+  T_(/vlastní termín 1/.test(konec), 'souhrn průchodu vlastní termín počítá (' + konec.replace(/\s+/g, ' ').slice(0, 80) + ')')
+  await panel.getByRole('button', { name: 'Hotovo' }).click(); await page.waitForTimeout(700)
+
+  // (b) úkoly bez termínu: chip na Dnes otevře týž průchod
+  const chip = page.getByRole('button', { name: /Bez termínu · 3/ })
+  T_(await chip.count() === 1, 'na Dnes je chip „Bez termínu · 3"')
+  if (await chip.count()) { await chip.click(); await page.waitForTimeout(800) }
+  const nadpis = await panel.locator('h2').first().textContent().catch(() => '')
+  T_(/bez termínu/i.test(nadpis ?? ''), 'chip otevře průchod, ne Plán (' + nadpis + ')')
+  const nazev = () => panel.locator('p.display').first().textContent().catch(() => '')
+  T_(/Připravit podklady/.test(await nazev() ?? ''), 'první jde nejdůležitější, ne nejstarší (' + (await nazev()) + ')')
+  const odpovedi = await panel.locator('button').allInnerTexts()
+  const ma = (re) => odpovedi.some((t) => re.test(t.replace(/\s+/g, ' ').trim()))
+  T_(ma(/^Dnes$/) && ma(/^Zítra/) && ma(/^Volnější den/) && ma(/^Vybrat termín/) && ma(/^Nechat bez termínu/) && ma(/^Už neplatí/),
+     'odpovědi: dnes, zítra, volnější den, vybrat termín, nechat bez termínu, už neplatí')
+  T_(!ma(/^Přeskočit$/), '„Přeskočit" tu není — jeho roli má „Nechat bez termínu"')
+
+  await panel.getByRole('button', { name: 'Dnes', exact: true }).click(); await page.waitForTimeout(600)
+  const vysoka = await ukol('u-vysoka')
+  T_(vysoka.due === dny.dnes, '„Dnes" dá úkolu dnešní termín (' + vysoka.due + ')')
+
+  // druhý: starší ze dvou se shodnou prioritou
+  T_(/Starý nápad/.test(await nazev() ?? ''), 'při shodné prioritě jde dřív zapsaný (' + (await nazev()) + ')')
+  await vyberDen(dny.cil)
+  const stary = await ukol('u-stary')
+  T_(stary.due === dny.cil && stary.stav === 'active', 'vlastní termín platí i tady a úkol odejde z inboxu (' + JSON.stringify(stary) + ')')
+
+  // „Zpět" vrátí i vlastní termín — včetně inboxu
+  await panel.getByRole('button', { name: 'Zpět' }).click(); await page.waitForTimeout(700)
+  const zpet = await ukol('u-stary')
+  T_(zpet.due === null && zpet.stav === 'inbox', '„Zpět" vrátí vlastní termín i stav (' + JSON.stringify(zpet) + ')')
+
+  await panel.getByRole('button', { name: /^Nechat bez termínu/ }).click(); await page.waitForTimeout(500)
+  await panel.getByRole('button', { name: /^Nechat bez termínu/ }).click(); await page.waitForTimeout(600)
+  const ceny = await ukol('u-ceny')
+  T_(ceny.due === null && ceny.stav === 'inbox', '„Nechat bez termínu" úkol nechá, jak je (' + JSON.stringify(ceny) + ')')
+  const souhrn = await panel.innerText()
+  T_(/dnes 1/.test(souhrn) && /bez termínu 2/.test(souhrn),
+     'souhrn říká, co se s hromádkou stalo (' + souhrn.replace(/\s+/g, ' ').slice(0, 90) + ')')
+  await ctx.close()
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)

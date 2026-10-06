@@ -84,16 +84,15 @@ type Polozka = PolozkaDne
 // Kontextový chip: jedna řádka nad seznamem, každý chip otevře panel.
 export function TodayView({
   onOpenTask,
-  onOpenInbox,
 }: {
   onOpenTask: (t: Task) => void
-  onOpenInbox: () => void
 }) {
   const today = todayISO()
   const [navrhOpen, setNavrhOpen] = useState(false)
   const [kalendarOpen, setKalendarOpen] = useState(false)
   const [shutdownOpen, setShutdownOpen] = useState(false)
   const [triageOpen, setTriageOpen] = useState(false)
+  const [bezTerminuOpen, setBezTerminuOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [noveOpen, setNoveOpen] = useState(false)
   const [zpresnitOpen, setZpresnitOpen] = useState(false)
@@ -478,7 +477,7 @@ export function TodayView({
             </Chip>
           )}
           {inbox.length > 0 && (
-            <Chip onClick={onOpenInbox} className="text-ink-soft">
+            <Chip onClick={() => setBezTerminuOpen(true)} className="text-ink-soft">
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 13l2.5-7h11L20 13v6H4z" />
                 <path d="M4 13h5l1.5 2h3L15 13h5" />
@@ -723,6 +722,11 @@ export function TodayView({
         />
       )}
       {triageOpen && <TriageSheet ukoly={visOverdue} clients={clientMap} nadpis={popis?.slovo} onClose={() => setTriageOpen(false)} />}
+      {/* Úkoly bez termínu se procházejí stejně jako propadlé — po jednom,
+          s otázkou „kam s tímhle?". Dřív chip jen přepnul do Plánu. */}
+      {bezTerminuOpen && (
+        <TriageSheet druh="bezTerminu" ukoly={inbox} clients={clientMap} onClose={() => setBezTerminuOpen(false)} />
+      )}
       {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
       {shutdownOpen && (
         <ShutdownSheet tasks={unfinished} onOpenTask={onOpenTask} onCloseDay={closeDay} onClose={() => setShutdownOpen(false)} />

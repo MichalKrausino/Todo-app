@@ -46,6 +46,8 @@ await page.evaluate(async () => {
     { id:'t4', createdAt:t, updatedAt:t, title:'Připravit report kampaní za srpen', priority:'critical', status:'active', order:0, clientId:'c3', scheduledFor:den(0), pinnedFor:den(0) },
     { id:'t5', createdAt:t, updatedAt:t, title:'Nachystat podklady pro fakturaci', priority:'low', status:'active', order:0, dueDate:den(2) },
     { id:'t6', createdAt:t, updatedAt:t, title:'Hotový úkol', priority:'normal', status:'done', order:0, clientId:'c1', completedAt:t, dueDate:den(0) },
+    // Bez termínu — kvůli chipu na Dnes a jeho průchodu po jednom.
+    { id:'t7', createdAt:t, updatedAt:t, title:'Promyslet podzimní kampaň', priority:'normal', status:'inbox', order:0, clientId:'c2' },
   ])
 })
 await page.reload({ waitUntil: 'networkidle' }); await page.waitForTimeout(700)
@@ -357,6 +359,13 @@ const panely = [
   // Triáž propadlých: velká tlačítka a červený „Už neplatí" — přesně to,
   // co se dá snadno podměřit (kontrast a cíl pro prst).
   ['Triaz', async () => { await page.getByRole('button', { name: /Projít/ }).click() }, 1],
+  // Rozbalený kalendářík v průchodu — sedí v kartě pod odpověďmi, takže
+  // se dá rozsypat jinak než tentýž kalendářík v zadávání.
+  ['Triaz (vlastni termin)', async () => {
+    await page.getByRole('button', { name: /Projít/ }).click(); await page.waitForTimeout(500)
+    await page.locator('.sheet-panel').getByRole('button', { name: /^Vybrat termín/ }).click()
+  }, 1],
+  ['Bez terminu', async () => { await page.getByRole('button', { name: /Bez termínu · / }).click() }, 1],
   ['Detail ukolu', async () => { await page.getByText('Zavolat Ondrovi').first().click() }, 1],
   // Druhé datum je schované za odkazem — rozbalené se musí změřit zvlášť,
   // jinak by se rozsypané pole nikdy neukázalo.
