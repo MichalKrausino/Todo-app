@@ -8,7 +8,7 @@ import { Sheet } from './Sheet'
 // Večerní uzávěrka (Cal Newport „shutdown ritual"): nedokončené úkoly drží
 // hlavu v práci, dokud nemají plán. Tady každému zbylému úkolu dáš osud —
 // zítra / nechat / upravit — a den vědomě zavřeš. Odklad přes „Zítra" jde
-// přes updateTask, takže se přirozeně počítá do postponeCount (signály).
+// přes updateTask, takže se přirozeně počítá do postponeCount (triáž, ohlédnutí).
 export function ShutdownSheet({
   tasks,
   onOpenTask,

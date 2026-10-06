@@ -144,7 +144,7 @@ export default function App() {
   addOpenRef.current = addOpen
   // Odscrollováno = horní lišta se zamlží a ukáže kompaktní titulek.
   const [scrolled, setScrolled] = useState(false)
-  // Navigace z tichých signálů: otevřít konkrétního klienta na záložce Klienti.
+  // Navigace z hledání: otevřít konkrétního klienta na záložce Klienti.
   const [clientFocus, setClientFocus] = useState<string | null>(null)
 
   const openClient = (id: string) => {
@@ -501,7 +501,6 @@ export default function App() {
           {tab === 'today' && !vse && (
             <TodayView
               onOpenTask={setEditing}
-              onOpenClient={openClient}
               onOpenInbox={() => setTab('upcoming')}
             />
           )}

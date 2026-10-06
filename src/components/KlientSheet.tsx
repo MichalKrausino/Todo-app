@@ -21,7 +21,7 @@ import {
 } from '../db/clientCheck'
 import { COLOR_NAMES, KIND_LABELS, plural } from '../lib/labels'
 import { formatDayLabel, formatDaysAgo } from '../lib/dates'
-import { HLIDANI_VYCHOZI_DNI } from '../lib/signals'
+import { HLIDANI_VYCHOZI_DNI } from '../lib/hlidani'
 import { nabidniVraceni } from '../lib/toast'
 import { ClientSharing } from './ClientSharing'
 import { ColorPicker } from './ColorPicker'
@@ -209,7 +209,7 @@ export function KlientSheet({
                     to teď říká nahlas. Dřív tu stál `placeholder="14"`,
                     tedy slib čtrnácti dní, který logika nedodala: bez
                     ručního nastavení hlídání nefungovalo vůbec (viz
-                    `neglectedDays` v src/lib/signals.ts). Vypnout jde
+                    `neglectedDays` v src/lib/hlidani.ts). Vypnout jde
                     nulou, protože „nechci to hlídat" je rozhodnutí,
                     které musí jít vyslovit. */}
                 <div className="min-w-0 text-sm">

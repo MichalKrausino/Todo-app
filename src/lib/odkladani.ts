@@ -30,9 +30,9 @@
 //   |   1 úkol   |   4 úkoly   |
 //
 // Čtyři z pěti „ležáků" žádný termín nemají, takže by značka mířila
-// hlavně na parkoviště. `POSTPONE_THRESHOLD` (3) v signálech na Dnes na
-// tom byl ještě hůř: OBA úkoly, které ho dnes přetahují, jsou bez
-// termínu — ten signál svítil výhradně na vědomě odložené věci.
+// hlavně na parkoviště. (Signály na Dnes, dokud v appce byly, na tom
+// byly ještě hůř: OBA úkoly, které přetahovaly jejich práh, byly bez
+// termínu — svítily výhradně na vědomě odložené věci.)
 //
 // Pravidlo je proto totéž, které appka už používá nad seznamem
 // propadlých („po termínu" vs „nestihnuto", `vseUkoly.ts`): MLUVÍ SE JEN
@@ -57,10 +57,8 @@ export const jeSlib = (t: Pick<Task, 'dueDate'>): boolean => Boolean(t.dueDate)
  * Od kolika odkladů se o tom mluví. Dvojka je z měření, ne z citu: je to
  * hranice, za kterou se v datech přestalo dodělávat.
  *
- * Signály na Dnes mají práh o jedna vyšší (`POSTPONE_THRESHOLD`): tam jde
- * o seznam, který se ukazuje sám od sebe, a ten má zůstat vzácný. Tady
- * jde o jeden konkrétní úkol, který má člověk zrovna před očima — tam to
- * není hluk, ale kontext rozhodnutí.
+ * Mluví se o tom jen u úkolu, který má člověk zrovna před očima (karta
+ * triáže) — tam to není hluk, ale kontext rozhodnutí.
  */
 export const PRAH_ODKLADU = 2
 

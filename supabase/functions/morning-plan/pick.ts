@@ -68,7 +68,7 @@ function takeClient(c: Scored, used: Map<string, number>): void {
 
 /**
  * Po kolika dnech ticha u klienta začne návrh připomínat, že se tam nic
- * neděje. TÁŽ čtrnáctka jako `HLIDANI_VYCHOZI_DNI` v src/lib/signals.ts —
+ * neděje. TÁŽ čtrnáctka jako `HLIDANI_VYCHOZI_DNI` v src/lib/hlidani.ts —
  * appka a server musí říkat totéž. Kdyby tu zůstalo jen vyplněné pole,
  * ukazovala by appka u klienta „ticho 45 dní" a ranní návrh by o něm
  * mlčel; jedna appka by pak měla na téhož klienta dva názory.

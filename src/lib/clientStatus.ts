@@ -13,7 +13,7 @@
 import type { Client, Task } from '../db/types'
 import { formatDayLabel, todayISO } from './dates'
 import { KIND_LABELS } from './labels'
-import { neglectedDays } from './signals'
+import { neglectedDays } from './hlidani'
 
 export interface StavovaCast {
   text: string

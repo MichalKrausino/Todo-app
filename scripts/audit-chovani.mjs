@@ -1487,8 +1487,8 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
 
 // --- 18. o odkládání se mluví jen tam, kde byl slib ---
 // Appka počítá `postponeCount` odjakživa, ale mluvila o něm jen
-// v signálech a v nedělním ohlédnutí — tedy nikdy ve chvíli, kdy člověk
-// mačká „Volnější den" potřetí. První pokus to napravil značkou
+// v (dnes už zrušených) signálech a v nedělním ohlédnutí — tedy nikdy
+// ve chvíli, kdy člověk mačká „Volnější den" potřetí. První pokus to napravil značkou
 // „odloženo 5×" u každého odkládaného úkolu, jenže odklad není jedna věc:
 // úkol BEZ termínu se často posouvá schválně („vím, že to budu muset
 // udělat, ale ne teď") a to posouvání je zároveň ta připomínka. Změřeno
@@ -1583,8 +1583,8 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   })
   T_(poSundani.due === null && poSundani.sched === null,
      '„Bez data" sundá termín i naplánování, takže úkol přestane být propadlý (' + JSON.stringify(poSundani) + ')')
-  // Status se schválně nemění na `inbox` — odtamtud by ho po pár dnech
-  // vyhrabal signál „ležáky v inboxu", tedy další nadávání za totéž.
+  // Status se schválně nemění na `inbox` — ten je „ještě nezpracované",
+  // a tenhle úkol člověk zpracoval právě teď: rozhodl, že datum nemá.
   T_(poSundani.stav === 'active', 'úkol přitom zůstane rozdělaný, ne v inboxu (' + poSundani.stav + ')')
 
   const treti = await karta()
