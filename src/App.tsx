@@ -501,7 +501,6 @@ export default function App() {
           {tab === 'today' && !vse && (
             <TodayView
               onOpenTask={setEditing}
-              onOpenInbox={() => setTab('upcoming')}
             />
           )}
           {tab === 'today' && vse && <VseView onOpenTask={setEditing} onZpet={() => setVse(false)} />}
