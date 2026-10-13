@@ -457,10 +457,50 @@ describe('úkoly bez termínu se střídají i bez odpovědí', () => {
     }
   })
 
-  it('nikdy nenabídnutý jde v rámci své priority první', () => {
-    const t = [task({ id: 'stary', createdAt: '2026-09-01T10:00:00Z', postponeCount: 4 }), task({ id: 'novy' })]
-    const naposledy = new Map([['stary', '2026-08-30']])
-    expect(pickSuggestions(scored(t), naposledy)[0].t.id).toBe('novy')
+  // Tvoje data 13. 10.: rušný den — čtyři úkoly s termínem si vezmou čtyři
+  // místa, na úkoly bez termínu zbudou dvě a podle priorit by je vždycky
+  // spolkly vysoké. Normální úkol by se nedostal na řadu nikdy.
+  it('i v rušný den přijde na řadu každý úkol bez termínu — jedno místo má ten, kdo čeká nejdéle', () => {
+    const t: Rec[] = [
+      ...['a', 'b', 'c', 'd'].map((id) => task({ id: `termin-${id}`, status: 'active', dueDate: '2026-09-20' })),
+      task({ id: 'ico', priority: 'high', status: 'active', createdAt: '2026-09-21T10:00:00Z' }),
+      task({ id: 'travertin', priority: 'high', status: 'active', createdAt: '2026-09-16T10:00:00Z', postponeCount: 4 }),
+      task({ id: 'wpc', priority: 'high', status: 'active', createdAt: '2026-09-16T10:00:00Z', postponeCount: 2 }),
+      task({ id: 'desatky', status: 'active', createdAt: '2026-09-03T10:00:00Z', postponeCount: 3 }),
+      task({ id: 'search', status: 'active', createdAt: '2026-09-03T10:00:00Z', postponeCount: 4 }),
+      task({ id: 'gtm', createdAt: '2026-09-04T10:00:00Z' }),
+      task({ id: 'disk', status: 'active', createdAt: '2026-09-26T10:00:00Z' }),
+    ]
+    const hist: Rozhodnuti[] = []
+    const videne = new Set<string>()
+    for (let i = 0; i < 7; i++) {
+      const den = addDaysISO('2026-10-14', i)
+      const vyber = pickSuggestions(ohodnot(t, NO_CLIENTS, den, hist), naposledyNabidnuto(hist))
+      expect(vyber.filter((v) => String(v.t.id).startsWith('termin-'))).toHaveLength(4)
+      for (const v of vyber) {
+        videne.add(String(v.t.id))
+        hist.push({ date: den, taskId: String(v.t.id), decision: 'ignored', videno: false })
+      }
+    }
+    for (const id of ['ico', 'travertin', 'wpc', 'desatky', 'search', 'gtm', 'disk']) expect(videne).toContain(id)
+  })
+
+  it('bez historie se výběr nemění — místo pro nejdéle čekajícího chce vědět, kdo čeká', () => {
+    const t = [task({ priority: 'high' }), task({ priority: 'critical' }), task()]
+    expect(prios(pickSuggestions(scored(t)))).toEqual(prios(pickSuggestions(scored(t), new Map())))
+  })
+
+  it('nikdy nenabídnutý dostane místo před tím, kdo se nabízel nedávno, i když má nižší skóre', () => {
+    const t = [
+      ...['a', 'b', 'c', 'd'].map((id) => task({ id: `termin-${id}`, status: 'active', dueDate: '2026-08-20' })),
+      task({ id: 'stary', createdAt: '2026-08-01T10:00:00Z', postponeCount: 4 }),
+      task({ id: 'novy' }),
+      task({ id: 'vysoka', priority: 'high' }),
+    ]
+    const naposledy = new Map([['stary', '2026-08-30'], ['vysoka', '2026-08-30']])
+    const ids = pickSuggestions(scored(t), naposledy).map((v) => v.t.id)
+    expect(ids).toContain('novy')
+    expect(ids).not.toContain('stary')
   })
 
   it('naposledyNabidnuto bere nejpozdější ráno bez ohledu na odpověď a viděnost', () => {

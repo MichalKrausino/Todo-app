@@ -208,6 +208,14 @@ function cascade(undated: Scored[], limit: number, usedClients: Map<string, numb
  * se za 17 dní nenabídl ANI JEDNOU. Střídání trest není — skóre nikomu
  * nebere, jen v rámci téže priority pustí napřed toho, kdo se nejdéle
  * nenabízel (nikdy nenabídnutý první). Priority drží dál `cascade`.
+ *
+ * A JEDNO MÍSTO MÁ TEN, KDO ČEKÁ NEJDÉLE, bez ohledu na prioritu. Samo
+ * střídání v rušný den nestačí: úkoly s termínem si vezmou čtyři místa
+ * ze šesti, na úkoly bez termínu zbudou dvě a ta podle priorit pokaždé
+ * spolknou vysoké — normální úkol by se nedostal na řadu nikdy, jen by
+ * se točil uvnitř své hladiny, která žádné místo nemá. Platí jen s
+ * historií (`naposledy`), bez ní by tohle místo dostal prostě úkol
+ * s nejvyšším skóre a výběr by se měnil bez důvodu.
  */
 export function pickSuggestions(
   candidates: Scored[],
@@ -236,13 +244,17 @@ export function pickSuggestions(
     takeClient(c, usedClients)
   }
 
+  const limitBez = Math.min(UNDATED_MAX, zbyva - datedPicked.length)
+  const nejdeleCeka =
+    naposledy.size > 0 && limitBez > 0 ? undated.find((c) => clientFree(c, usedClients)) : undefined
+  if (nejdeleCeka) takeClient(nejdeleCeka, usedClients)
   const undatedPicked = cascade(
-    undated,
-    Math.min(UNDATED_MAX, zbyva - datedPicked.length),
+    nejdeleCeka ? undated.filter((c) => c !== nejdeleCeka) : undated,
+    limitBez - (nejdeleCeka ? 1 : 0),
     usedClients,
   )
 
-  return [...navraty, ...datedPicked, ...undatedPicked]
+  return [...navraty, ...datedPicked, ...undatedPicked, ...(nejdeleCeka ? [nejdeleCeka] : [])]
 }
 
 // ── Učení z rozhodnutí ──────────────────────────────────────────────────
