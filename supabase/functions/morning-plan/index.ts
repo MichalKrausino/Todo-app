@@ -17,7 +17,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import * as webpush from 'jsr:@negrel/webpush@0.3'
 // Skórování a výběr jsou čistá logika ve vlastním souboru — testuje je
 // pick.test.ts vitestem, sem se jen zavolají.
-import { addDaysISO, eff, HISTORIE_DNI, historieZPlanu, ohodnot, pickSuggestions } from './pick.ts'
+import { addDaysISO, eff, HISTORIE_DNI, historieZPlanu, naposledyNabidnuto, ohodnot, pickSuggestions } from './pick.ts'
 // Kdy návrh odejde a kam vede — taky čistá logika s testy (kdy.test.ts).
 import { cilOdkazu, maPoslat, type NastaveniRana } from './kdy.ts'
 
@@ -181,7 +181,7 @@ Deno.serve(async () => {
     } else {
       // Skórování, paměť rozhodnutí, pestrost, rezerva pro úkoly bez
       // termínu a jejich vážení prioritou — všechno v pick.ts.
-      const picked = pickSuggestions(ohodnot(tasks, clientsById, today, historie))
+      const picked = pickSuggestions(ohodnot(tasks, clientsById, today, historie), naposledyNabidnuto(historie))
       if (picked.length === 0 && !isSunday) continue
 
       if (picked.length > 0) {

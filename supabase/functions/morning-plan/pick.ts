@@ -199,8 +199,20 @@ function cascade(undated: Scored[], limit: number, usedClients: Map<string, numb
  * odložení nesmí být zapomenutí), pak úkoly s termínem (jsou opravdu
  * naléhavé), ale pár slotů se drží úkolům bez termínu — bez toho by je
  * nabité dny s termíny vytlačily úplně a nikdy by se nepřipomněly.
+ *
+ * ÚKOLY BEZ TERMÍNU SE STŘÍDAJÍ (`naposledy`, viz `naposledyNabidnuto`).
+ * Dřív je řadilo jen skóre, a to se bez odpovědí nehýbe: trest za „bez
+ * odpovědi" se schválně počítá jen z rán, která člověk viděl (`videno`),
+ * a na skutečných datech jich bylo 2 z 20. Nahoře tak stály pořád tytéž
+ * úkoly („Založit si IČO" 14× za sebou) a „Dát přístup na Google disk"
+ * se za 17 dní nenabídl ANI JEDNOU. Střídání trest není — skóre nikomu
+ * nebere, jen v rámci téže priority pustí napřed toho, kdo se nejdéle
+ * nenabízel (nikdy nenabídnutý první). Priority drží dál `cascade`.
  */
-export function pickSuggestions(candidates: Scored[]): Scored[] {
+export function pickSuggestions(
+  candidates: Scored[],
+  naposledy: ReadonlyMap<string, string> = new Map(),
+): Scored[] {
   const usedClients = new Map<string, number>()
   const navraty = candidates.filter((c) => c.navrat).sort(byScore).slice(0, NAVRAT_MAX)
   for (const c of navraty) takeClient(c, usedClients)
@@ -208,7 +220,10 @@ export function pickSuggestions(candidates: Scored[]): Scored[] {
   // rána, takže přijdou na řadu zítra, místo aby zaplavily dnešek.
   const zbytek = candidates.filter((c) => !c.navrat)
   const dated = zbytek.filter((c) => eff(c.t)).sort(byScore)
-  const undated = zbytek.filter((c) => !eff(c.t)).sort(byScore)
+  const kdyNaposled = (c: Scored) => naposledy.get(String(c.t.id ?? '')) ?? ''
+  const undated = zbytek
+    .filter((c) => !eff(c.t))
+    .sort((a, b) => kdyNaposled(a).localeCompare(kdyNaposled(b)) || byScore(a, b))
 
   const zbyva = TOTAL - navraty.length
   const rezerva = Math.min(UNDATED_MIN, undated.length)
@@ -321,6 +336,20 @@ const jeISODen = (s: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(s)
 const planVideno = (p: Rec, suggestions: Rec[]): boolean =>
   (typeof p.seenAt === 'string' && p.seenAt !== '') ||
   suggestions.some((s) => s && typeof s.decision === 'string' && s.decision !== 'ignored')
+
+/**
+ * Kdy se který úkol naposledy nabídl — z jakéhokoli rána, viděného nebo ne.
+ * Tady na tom nezáleží: střídání nikoho netrestá, jen určuje pořadí
+ * (viz `pickSuggestions`). Úkol starší než historie se bere jako nikdy.
+ */
+export function naposledyNabidnuto(hist: Rozhodnuti[]): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const h of hist) {
+    const byl = out.get(h.taskId)
+    if (!byl || h.date > byl) out.set(h.taskId, h.date)
+  }
+  return out
+}
 
 /** Rozhodnutí z uložených plánů za posledních HISTORIE_DNI dní před `today` (ten den se nepočítá). */
 export function historieZPlanu(plans: Rec[], today: string): Rozhodnuti[] {

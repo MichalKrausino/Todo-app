@@ -8,6 +8,7 @@ import {
   DUVOD_NAVRATU,
   historieZPlanu,
   IGNOROVANI_STROP,
+  naposledyNabidnuto,
   NAVRAT_BONUS,
   NAVRAT_MAX,
   ohodnot,
@@ -408,5 +409,66 @@ describe('ticho u klienta', () => {
 
   it('a bez razítka aktivity se nehlídá nic', () => {
     expect(scoreAndReason(ukol(), klient(), TODAY).reason).not.toMatch(/nic nedělo/)
+  })
+})
+
+describe('úkoly bez termínu se střídají i bez odpovědí', () => {
+  // Skutečná data: za 20 rán byl panel návrhu otevřený dvakrát, takže
+  // skóre se nehýbalo a nahoře stály pořád tytéž úkoly. „Dát přístup na
+  // Google disk" (normální priorita, nejčerstvější) se za 17 dní nenabídl
+  // ani jednou. Tady jsou tytéž úkoly a rána, která nikdo neviděl.
+  const ukoly = (): Rec[] => [
+    task({ id: 'ico', priority: 'high', status: 'active', createdAt: '2026-09-21T10:00:00Z' }),
+    task({ id: 'travertin', priority: 'high', status: 'active', createdAt: '2026-09-16T10:00:00Z', postponeCount: 4 }),
+    task({ id: 'desatky', status: 'active', createdAt: '2026-09-03T10:00:00Z', postponeCount: 3 }),
+    task({ id: 'search', status: 'active', createdAt: '2026-09-03T10:00:00Z', postponeCount: 4 }),
+    task({ id: 'gtm', createdAt: '2026-09-04T10:00:00Z' }),
+    task({ id: 'disk', status: 'active', createdAt: '2026-09-26T10:00:00Z' }),
+  ]
+  const rana = (stridat: boolean, dni: number) => {
+    const t = ukoly()
+    const hist: Rozhodnuti[] = []
+    const nabidnuto: string[][] = []
+    for (let i = 0; i < dni; i++) {
+      const den = addDaysISO('2026-10-01', i)
+      const kandidati = ohodnot(t, NO_CLIENTS, den, hist)
+      const vyber = stridat ? pickSuggestions(kandidati, naposledyNabidnuto(hist)) : pickSuggestions(kandidati)
+      const ids = vyber.map((v) => String(v.t.id))
+      nabidnuto.push(ids)
+      // Nikdo panel neotevřel: bez odpovědi a neviděno.
+      for (const id of ids) hist.push({ date: den, taskId: id, decision: 'ignored', videno: false })
+    }
+    return nabidnuto
+  }
+
+  it('bez střídání se jeden úkol nenabídne nikdy — přesně ta vada', () => {
+    expect(rana(false, 7).flat()).not.toContain('disk')
+  })
+
+  it('se střídáním přijde na řadu každý úkol bez termínu do dvou rán', () => {
+    const r = rana(true, 2).flat()
+    for (const id of ['ico', 'travertin', 'desatky', 'search', 'gtm', 'disk']) expect(r).toContain(id)
+  })
+
+  it('priorita platí dál — vysoké se nabízejí každé ráno, střídají se jen ty normální', () => {
+    for (const den of rana(true, 5)) {
+      expect(den).toContain('ico')
+      expect(den).toContain('travertin')
+    }
+  })
+
+  it('nikdy nenabídnutý jde v rámci své priority první', () => {
+    const t = [task({ id: 'stary', createdAt: '2026-09-01T10:00:00Z', postponeCount: 4 }), task({ id: 'novy' })]
+    const naposledy = new Map([['stary', '2026-08-30']])
+    expect(pickSuggestions(scored(t), naposledy)[0].t.id).toBe('novy')
+  })
+
+  it('naposledyNabidnuto bere nejpozdější ráno bez ohledu na odpověď a viděnost', () => {
+    const h: Rozhodnuti[] = [
+      { date: '2026-10-01', taskId: 'a', decision: 'ignored', videno: false },
+      { date: '2026-10-03', taskId: 'a', decision: 'rejected', videno: true },
+      { date: '2026-10-02', taskId: 'b', decision: 'ignored', videno: false },
+    ]
+    expect(Object.fromEntries(naposledyNabidnuto(h))).toEqual({ a: '2026-10-03', b: '2026-10-02' })
   })
 })
