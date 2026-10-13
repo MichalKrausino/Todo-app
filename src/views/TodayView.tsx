@@ -29,6 +29,7 @@ import { WORK_END, WORK_START, freeGaps, freeMinutes, minutesToLabel, type BusyI
 import { plural } from '../lib/labels'
 import { poradiDne, type PolozkaDne } from '../lib/dnesPoradi'
 import { popisPropadlych } from '../lib/vseUkoly'
+import { bezTerminuKProjiti } from '../lib/projitBezTerminu'
 import { Chip } from '../components/Chip'
 import { HelpSheet } from '../components/HelpSheet'
 import { ShutdownSheet } from '../components/ShutdownSheet'
@@ -84,16 +85,15 @@ type Polozka = PolozkaDne
 // Kontextový chip: jedna řádka nad seznamem, každý chip otevře panel.
 export function TodayView({
   onOpenTask,
-  onOpenInbox,
 }: {
   onOpenTask: (t: Task) => void
-  onOpenInbox: () => void
 }) {
   const today = todayISO()
   const [navrhOpen, setNavrhOpen] = useState(false)
   const [kalendarOpen, setKalendarOpen] = useState(false)
   const [shutdownOpen, setShutdownOpen] = useState(false)
   const [triageOpen, setTriageOpen] = useState(false)
+  const [bezTerminuOpen, setBezTerminuOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [noveOpen, setNoveOpen] = useState(false)
   const [zpresnitOpen, setZpresnitOpen] = useState(false)
@@ -306,6 +306,12 @@ export function TodayView({
   // Co ta hromádka doopravdy je — propadlé termíny, nebo jen vlastní
   // plán, na který nedošlo (`src/lib/vseUkoly.ts`).
   const popis = useMemo(() => popisPropadlych(visOverdue, today), [visOverdue, today])
+  // Úkoly bez termínu, které jedou v „Projít" za propadlými — všechny,
+  // kromě těch, které jsem nedávno nechal bez termínu
+  // (`src/lib/projitBezTerminu.ts`). Bez nich se úkol bez dne neozval
+  // nikde: na skutečných datech jeden ležel 17 dní a nikdo ho neviděl.
+  const kProjiti = useMemo(() => bezTerminuKProjiti(inbox, today, pamet.odpociva), [inbox, today, pamet.odpociva])
+  const fronta = useMemo(() => [...visOverdue, ...kProjiti], [visOverdue, kProjiti])
   const otevrene = poradi.length
   const viditelne = useMemo(() => poradi.slice(0, limit), [poradi, limit])
   const zbyva = otevrene - viditelne.length
@@ -348,6 +354,36 @@ export function TodayView({
   const dalsi = events
     .filter((e) => !e.allDay && minutesOfDay(e.start) > nowMin)
     .sort((a, b) => minutesOfDay(a.start) - minutesOfDay(b.start))[0]
+  // Řádka triáže: u stovky propadlých je seznam slepá ulička — průchod
+  // po jednom je jediná cesta ven. Ukazuje se i tehdy, když nic
+  // nepropadlo, ale na řadě jsou úkoly bez termínu.
+  const radkaProjit = (popis || kProjiti.length > 0) && (
+    <button
+      onClick={() => setTriageOpen(true)}
+      className="flex w-full items-center justify-between gap-2 border-b border-line px-4 py-2.5 text-left transition-colors duration-150 active:bg-well/60"
+    >
+      {/* Jméno i barva se řídí tím, co v hromádce doopravdy je: „po
+          termínu" jen s propadlým TERMÍNEM, jinak tiché „nestihnuto"
+          (`popisPropadlych`). Dřív tu stálo červené „po termínu" i nad
+          osmi úkoly, z nichž ani jeden termín neměl. Úkoly bez termínu
+          jedou za nimi a mluví tišeji — nic nepropadlo, jen na ně přišla
+          řada. */}
+      <span
+        className={`min-w-0 truncate text-[13px] font-medium first-letter:uppercase ${
+          !popis ? 'text-ink-soft' : popis.tone === 'danger' ? 'text-danger' : 'text-note-ink'
+        }`}
+      >
+        {popis ? `${popis.slovo} · ${popis.pocet}` : `bez termínu · ${kProjiti.length}`}
+        {popis && kProjiti.length > 0 && <span className="text-ink-soft"> + {kProjiti.length} bez termínu</span>}
+      </span>
+      <span className="flex shrink-0 items-center gap-1 text-[13px] font-medium text-accent-deep">
+        Projít
+        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+      </span>
+    </button>
+  )
   const timeFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
 
   return (
@@ -478,7 +514,7 @@ export function TodayView({
             </Chip>
           )}
           {inbox.length > 0 && (
-            <Chip onClick={onOpenInbox} className="text-ink-soft">
+            <Chip onClick={() => setBezTerminuOpen(true)} className="text-ink-soft">
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 13l2.5-7h11L20 13v6H4z" />
                 <path d="M4 13h5l1.5 2h3L15 13h5" />
@@ -513,33 +549,7 @@ export function TodayView({
             </div>
 
             <div className="seznam-na-papire">
-              {popis && (
-                // Řádka triáže: u stovky propadlých je seznam slepá ulička —
-                // průchod po jednom je jediná cesta ven.
-                <button
-                  onClick={() => setTriageOpen(true)}
-                  className="flex w-full items-center justify-between gap-2 border-b border-line px-4 py-2.5 text-left transition-colors duration-150 active:bg-well/60"
-                >
-                  {/* Jméno i barva se řídí tím, co v hromádce doopravdy
-                      je: „po termínu" jen s propadlým TERMÍNEM, jinak
-                      tiché „nestihnuto" (`popisPropadlych`). Dřív tu
-                      stálo červené „po termínu" i nad osmi úkoly, z nichž
-                      ani jeden termín neměl. */}
-                  <span
-                    className={`text-[13px] font-medium first-letter:uppercase ${
-                      popis.tone === 'danger' ? 'text-danger' : 'text-note-ink'
-                    }`}
-                  >
-                    {popis.slovo} · {popis.pocet}
-                  </span>
-                  <span className="flex shrink-0 items-center gap-1 text-[13px] font-medium text-accent-deep">
-                    Projít
-                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 6l6 6-6 6" />
-                    </svg>
-                  </span>
-                </button>
-              )}
+              {radkaProjit}
 
               <ul className="divide-y divide-line">
                 {skupiny.map((sk, i) => (
@@ -612,6 +622,10 @@ export function TodayView({
           // a dok musí naskočit hned, ať appka nezačíná prázdnou plochou.
           nacteno && (
             <>
+              {/* Prázdný dnešek neznamená, že není co rozhodnout — úkoly bez
+                  termínu na řadě by se jinak neukázaly právě v den, kdy je
+                  na ně čas. */}
+              {radkaProjit && <div className="seznam-na-papire mb-3">{radkaProjit}</div>}
               <div className="relative overflow-hidden rounded-2xl bg-card px-5 py-8 text-center shadow-card">
                 {/* Ripple (magicui): klidná hladina za sluníčkem */}
                 <Ripple className="-translate-y-6" />
@@ -722,7 +736,14 @@ export function TodayView({
           onClose={zavritZpresneni}
         />
       )}
-      {triageOpen && <TriageSheet ukoly={visOverdue} clients={clientMap} nadpis={popis?.slovo} onClose={() => setTriageOpen(false)} />}
+      {triageOpen && (
+        <TriageSheet ukoly={fronta} clients={clientMap} nadpis={popis?.slovo ?? 'bez termínu'} onClose={() => setTriageOpen(false)} />
+      )}
+      {/* Úkoly bez termínu se procházejí stejně jako propadlé — po jednom,
+          s otázkou „kam s tímhle?". Dřív chip jen přepnul do Plánu. */}
+      {bezTerminuOpen && (
+        <TriageSheet druh="bezTerminu" ukoly={inbox} clients={clientMap} onClose={() => setBezTerminuOpen(false)} />
+      )}
       {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
       {shutdownOpen && (
         <ShutdownSheet tasks={unfinished} onOpenTask={onOpenTask} onCloseDay={closeDay} onClose={() => setShutdownOpen(false)} />

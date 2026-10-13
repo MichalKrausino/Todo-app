@@ -521,7 +521,7 @@ export function UpcomingView({
           <button
             type="button"
             onClick={() => setInbox({ cil: vybrany })}
-            className="px-1 py-2 text-[13px] font-medium text-accent-deep"
+            className="block w-full py-2 text-left text-[13px] font-medium text-accent-deep"
           >
             + Vybrat z úkolů bez termínu · {bezTerminu.length}
           </button>
