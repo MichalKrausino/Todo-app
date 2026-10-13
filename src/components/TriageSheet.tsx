@@ -35,6 +35,16 @@
 // to odklad rozhodnutí, tady plnohodnotná odpověď — úkol bez dne není
 // chyba a dál ho nabízí ranní návrh. Pořadí je podle priority, ne podle
 // stáří: nic tu nepropadlo, takže nejdůležitější jde první.
+//
+// A ÚKOLY BEZ TERMÍNU CHODÍ I DO BĚŽNÉHO „PROJÍT", ne jen do toho z chipu.
+// Na skutečných datech ležel úkol „Dát přístup na Google disk" sedmnáct
+// dní bez termínu a nikde se neozval — chip je nabídka, kterou si člověk
+// musí sám vzpomenout otevřít, a ranní návrh se skoro nečte. „Projít" je
+// to, co se opravdu dělá, takže za propadlými přijde pár úkolů bez dne
+// (`src/lib/projitBezTerminu.ts`: nejvýš pět denně, prošlý má týden
+// pokoj). Odpovědi se řídí KAŽDÝM ÚKOLEM ZVLÁŠŤ (`bezDne`), ne celým
+// panelem: propadlý má „Přeskočit" a značku odkládání, úkol bez dne
+// „Nechat bez termínu", které ho na ten týden uloží (`prohlednuto`).
 
 import { useState } from 'react'
 import type { Client, Task } from '../db/types'
@@ -42,17 +52,18 @@ import { sortTasks, updateTask } from '../db/repo'
 import { jeOdkladanySlib, jeParkovany, popisOdkladu } from '../lib/odkladani'
 import { addDays, formatDayLabel, formatDaysAgo, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { useNaloz, volnejsiDen } from '../lib/volnyDen'
+import { PAUZA_DNI, jeBezTerminu } from '../lib/projitBezTerminu'
 import { plural } from '../lib/labels'
 import { MonthPicker } from './MonthPicker'
 import { Sheet } from './Sheet'
 
-type Odpoved = 'dnes' | 'zitra' | 'volny' | 'termin' | 'neplati' | 'bezdata' | 'preskoceno'
+type Odpoved = 'dnes' | 'zitra' | 'volny' | 'termin' | 'neplati' | 'bezdata' | 'nechano' | 'preskoceno'
 
 interface Krok {
   task: Task
   odpoved: Odpoved
   // Co bylo před zásahem — na tom stojí „Zpět".
-  pred: Pick<Task, 'scheduledFor' | 'dueDate' | 'status'>
+  pred: Pick<Task, 'scheduledFor' | 'dueDate' | 'status' | 'prohlednuto'>
 }
 
 // Termín se posouvá stejně jako jinde v appce (gesto na řádku, večerní
@@ -95,17 +106,29 @@ export function TriageSheet({
   nadpis?: string
   onClose: () => void
 }) {
-  const bezTerminu = druh === 'bezTerminu'
   // Propadlé od nejstaršího: co leží nejdéle, potřebuje rozhodnout nejvíc.
-  // Bez termínu podle priority: nic tu nepropadlo.
+  // Bez termínu podle priority: nic tu nepropadlo. Ve smíšené frontě jdou
+  // propadlé první a úkoly bez dne za nimi v pořadí, jak je volající
+  // vybral (`bezTerminuKProjiti` už řadí sám).
   const [fronta] = useState(() =>
-    bezTerminu ? sortTasks(ukoly) : [...ukoly].sort((a, b) => propadloDne(a).localeCompare(propadloDne(b))),
+    druh === 'bezTerminu'
+      ? sortTasks(ukoly)
+      : [
+          ...ukoly.filter((t) => !jeBezTerminu(t)).sort((a, b) => propadloDne(a).localeCompare(propadloDne(b))),
+          ...ukoly.filter(jeBezTerminu),
+        ],
   )
   const [hotovo, setHotovo] = useState<Krok[]>([])
   const [vyber, setVyber] = useState(false)
 
   const na = hotovo.length
   const task = fronta[na]
+  // Odpovědi patří úkolu, ne panelu. Čte se ze snímku fronty, takže se
+  // nezmění pod rukama, když úkol právě dostal den.
+  const bezDne = task ? jeBezTerminu(task) : false
+  // Nadpis jde za kartou: ve smíšené frontě se z „po termínu" stane „bez
+  // termínu" ve chvíli, kdy na řadu přijde úkol bez dne — ne podle toho,
+  // co mezitím zbylo na Dnes.
   const dnes = todayISO()
   const zitra = toISODate(addDays(fromISODate(dnes), 1))
   // Volnější den = nejbližší pracovní den s nejmenší zátěží, nejdál za
@@ -113,6 +136,7 @@ export function TriageSheet({
   // Zátěž je živá, takže každý odložený úkol posune volbu dalšímu.
   const naloz = useNaloz()
   const volny = volnejsiDen(naloz, zitra, 7)
+  const navrat = toISODate(addDays(fromISODate(dnes), PAUZA_DNI))
 
   const odpovez = (odpoved: Odpoved, den?: string) => {
     if (!task) return
@@ -121,6 +145,7 @@ export function TriageSheet({
       scheduledFor: task.scheduledFor,
       dueDate: task.dueDate,
       status: task.status,
+      prohlednuto: task.prohlednuto,
     }
     if (odpoved === 'dnes') void updateTask(task.id, posun(task, dnes))
     if (odpoved === 'zitra') void updateTask(task.id, posun(task, zitra))
@@ -132,7 +157,11 @@ export function TriageSheet({
     // Sundat datum, ne úkol. Status se ÚMYSLNĚ nemění na `inbox`:
     // inbox je „ještě nezpracované" a tenhle úkol člověk zpracoval
     // právě teď — rozhodl, že datum nemá. Zůstává rozdělaný, jen bez dne.
-    if (odpoved === 'bezdata') void updateTask(task.id, { dueDate: undefined, scheduledFor: undefined })
+    // Razítko `prohlednuto`: o datu se právě rozhodlo, tak ať se úkol
+    // nevrací do průchodu hned zítra jako „bez termínu".
+    if (odpoved === 'bezdata') void updateTask(task.id, { dueDate: undefined, scheduledFor: undefined, prohlednuto: dnes })
+    // Nechat bez termínu = viděl jsem, teď ne. Týden pokoj, pak se vrátí.
+    if (odpoved === 'nechano') void updateTask(task.id, { prohlednuto: dnes })
     setHotovo((h) => [...h, { task, odpoved, pred }])
   }
 
@@ -151,7 +180,7 @@ export function TriageSheet({
       {(close) => (
         <>
           <header className="flex items-baseline justify-between gap-3 pt-1">
-            <h2 className="display text-2xl font-bold first-letter:uppercase">{nadpis}</h2>
+            <h2 className="display text-2xl font-bold first-letter:uppercase">{bezDne ? 'bez termínu' : nadpis}</h2>
             <span className="shrink-0 text-sm text-ink-soft">
               {Math.min(na + 1, fronta.length)} / {fronta.length}
             </span>
@@ -184,7 +213,11 @@ export function TriageSheet({
                 </div>
                 <p className="display mt-1 text-xl font-semibold leading-snug">{task.title}</p>
                 <p className="mt-1.5 text-[13px] text-ink-faint">
-                  {bezTerminu ? `Zapsáno ${formatDaysAgo(task.createdAt)}` : `Propadlo ${formatDaysAgo(propadloDne(task))}`}
+                  {bezDne
+                    ? task.prohlednuto
+                      ? `Bez termínu · v průchodu naposledy ${formatDaysAgo(task.prohlednuto)}`
+                      : `Bez termínu · zapsáno ${formatDaysAgo(task.createdAt)}`
+                    : `Propadlo ${formatDaysAgo(propadloDne(task))}`}
                   {task.dueDate && task.dueDate < dnes && ` · pevný termín byl ${formatDayLabel(task.dueDate)}`}
                   {/* Kolikrát se tenhle úkol už posouval — ale JEN u slibu,
                       tedy u úkolu, který má termín. Odkládaný úkol bez
@@ -192,7 +225,7 @@ export function TriageSheet({
                       to budu muset udělat, ale ne teď"), a to není chyba,
                       za kterou se nadává; ten dostane nabídku „Bez data"
                       níž. Zdůvodnění i měření jsou v `odkladani.ts`. */}
-                  {!bezTerminu && jeOdkladanySlib(task) && (
+                  {!bezDne && jeOdkladanySlib(task) && (
                     <span className="font-medium text-note-ink"> · {popisOdkladu(task)}</span>
                   )}
                 </p>
@@ -235,10 +268,11 @@ export function TriageSheet({
                     <MonthPicker odDne={dnes} onSelect={(iso) => odpovez('termin', iso)} />
                   </div>
                 )}
-                {bezTerminu && (
-                  <button onClick={() => odpovez('preskoceno')} className={tlacitko}>
+                {bezDne && (
+                  <button onClick={() => odpovez('nechano')} className={tlacitko}>
                     <span className="block text-[15px] font-medium text-ink">Nechat bez termínu</span>
-                    <span className="block text-[13px] text-ink-soft">dál ho nabídne ranní návrh</span>
+                    {/* Pauza má den konce, který je vidět — odložení není zapomenutí. */}
+                    <span className="block text-[13px] text-ink-soft">sem se vrátí {popisDne(navrat)}</span>
                   </button>
                 )}
                 {/* Úkol bez termínu, který se posouvá pořád dokola, není
@@ -251,7 +285,7 @@ export function TriageSheet({
                     Nabízí se jen tam, kde se ten vzorec opravdu ukázal
                     (`jeParkovany`), jinak by to byla pátá odpověď pro
                     každého a žebřík by se rozpadl. */}
-                {!bezTerminu && jeParkovany(task) && (
+                {!bezDne && jeParkovany(task) && (
                   <button onClick={() => odpovez('bezdata')} className={tlacitko}>
                     <span className="block text-[15px] font-medium text-ink">Bez data</span>
                     <span className="block text-[13px] text-ink-soft">zůstane v „Bez termínu"</span>
@@ -265,14 +299,14 @@ export function TriageSheet({
                 </button>
               </div>
 
-              <div className={`flex items-center ${bezTerminu ? 'justify-end' : 'justify-between'}`}>
+              <div className={`flex items-center ${bezDne ? 'justify-end' : 'justify-between'}`}>
                 {/* „Přeskočit", ne „Nechat být". Tohle tlačítko není odpověď —
                     úkol nechá propadlý a jen posune frontu na další. „Nechat
                     být" ale zní jako rozhodnutí („tenhle už řešit nebudu"),
                     tedy skoro jako „Už neplatí" o dvě řádky výš, a nešlo je
                     od sebe poznat. Sloveso říká přesně ten mechanismus a
                     tvoří dvojici se „Zpět" vedle. */}
-                {!bezTerminu && (
+                {!bezDne && (
                   <button
                     onClick={() => {
                       setVyber(false)
@@ -310,7 +344,8 @@ export function TriageSheet({
                       ['termin', 'vlastní termín'],
                       ['bezdata', 'bez data'],
                       ['neplati', 'už neplatí'],
-                      ['preskoceno', bezTerminu ? 'bez termínu' : 'přeskočeno'],
+                      ['nechano', 'bez termínu'],
+                      ['preskoceno', 'přeskočeno'],
                     ] as [Odpoved, string][]
                   )
                     .filter(([o]) => spocitej(o) > 0)

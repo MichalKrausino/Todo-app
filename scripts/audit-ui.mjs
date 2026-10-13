@@ -46,8 +46,10 @@ await page.evaluate(async () => {
     { id:'t4', createdAt:t, updatedAt:t, title:'Připravit report kampaní za srpen', priority:'critical', status:'active', order:0, clientId:'c3', scheduledFor:den(0), pinnedFor:den(0) },
     { id:'t5', createdAt:t, updatedAt:t, title:'Nachystat podklady pro fakturaci', priority:'low', status:'active', order:0, dueDate:den(2) },
     { id:'t6', createdAt:t, updatedAt:t, title:'Hotový úkol', priority:'normal', status:'done', order:0, clientId:'c1', completedAt:t, dueDate:den(0) },
-    // Bez termínu — kvůli chipu na Dnes a jeho průchodu po jednom.
-    { id:'t7', createdAt:t, updatedAt:t, title:'Promyslet podzimní kampaň', priority:'normal', status:'inbox', order:0, clientId:'c2' },
+    // Bez termínu a deset dní starý — kvůli chipu na Dnes a kvůli tomu,
+    // že přijde na řadu v „Projít" (řádka „+ 1 bez termínu" se musí
+    // vejít i na 320 px).
+    { id:'t7', createdAt:new Date(Date.now() - 10 * 864e5).toISOString(), updatedAt:t, title:'Promyslet podzimní kampaň', priority:'normal', status:'inbox', order:0, clientId:'c2' },
   ])
 })
 await page.reload({ waitUntil: 'networkidle' }); await page.waitForTimeout(700)

@@ -115,6 +115,10 @@ export interface Task extends BaseRecord {
   sourceTemplateItemId?: string
   completedAt?: string
   postponeCount?: number // kolikrát byl termín posunut na později (signál odkládání)
+  // Den (YYYY-MM-DD), kdy jsem úkol bez termínu prošel v „Projít" a nechal
+  // ho bez termínu. Do průchodu se pak vrátí až po pauze
+  // (`src/lib/projitBezTerminu.ts`), jinak by se týž seznam vracel každé ráno.
+  prohlednuto?: string
   // „Top 3 dne" — YYYY-MM-DD, na který den je úkol připíchnutý. Váže se
   // ke dni (ne bool), takže špendlík zítra sám vyprchá a neuklízí se ručně.
   pinnedFor?: string

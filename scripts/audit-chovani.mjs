@@ -1819,10 +1819,12 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
       st.clear()
       const t = (m) => new Date(Date.now() - m * 60000).toISOString()
       st.put({ id: 'prop', createdAt: t(9), updatedAt: t(9), title: 'Propadlý report', priority: 'normal', status: 'active', order: 0, dueDate: dny.propadlo })
-      // Bez termínu: priorita má přednost před stářím.
-      st.put({ id: 'u-stary', createdAt: t(500), updatedAt: t(500), title: 'Starý nápad', priority: 'normal', status: 'inbox', order: 1 })
-      st.put({ id: 'u-ceny', createdAt: t(400), updatedAt: t(400), title: 'Zjistit ceny tisku', priority: 'normal', status: 'inbox', order: 2 })
-      st.put({ id: 'u-vysoka', createdAt: t(5), updatedAt: t(5), title: 'Připravit podklady', priority: 'high', status: 'active', order: 3 })
+      // Bez termínu: priorita má přednost před stářím. Dnes už prošlé
+      // (`prohlednuto`), aby „Projít" v části (a) neslo jen propadlý úkol —
+      // úkoly bez termínu v běžném průchodu hlídá oddíl 23.
+      st.put({ id: 'u-stary', createdAt: t(500), updatedAt: t(500), title: 'Starý nápad', priority: 'normal', status: 'inbox', order: 1, prohlednuto: dny.dnes })
+      st.put({ id: 'u-ceny', createdAt: t(400), updatedAt: t(400), title: 'Zjistit ceny tisku', priority: 'normal', status: 'inbox', order: 2, prohlednuto: dny.dnes })
+      st.put({ id: 'u-vysoka', createdAt: t(5), updatedAt: t(5), title: 'Připravit podklady', priority: 'high', status: 'active', order: 3, prohlednuto: dny.dnes })
       tx.oncomplete = res
     })
   }, dny)
@@ -1894,6 +1896,92 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   const souhrn = await panel.innerText()
   T_(/dnes 1/.test(souhrn) && /bez termínu 2/.test(souhrn),
      'souhrn říká, co se s hromádkou stalo (' + souhrn.replace(/\s+/g, ' ').slice(0, 90) + ')')
+  await ctx.close()
+}
+
+// --- 23. úkoly bez termínu chodí do „Projít" samy ---
+// Skutečný případ: „Dát přístup na Google disk se soubory" ležel 17 dní
+// bez termínu a nikde se neukázal — „Projít" bralo jen propadlé, chip
+// „Bez termínu" si člověk musí sám vzpomenout otevřít a ranní návrh se
+// skoro nečte (otevřený 2 rána z 20). Teď za propadlými jede pár úkolů
+// bez dne (`bezTerminuKProjiti`), „Nechat bez termínu" jim dá týden
+// pokoj a řádka „Projít" stojí i nad prázdným dneškem.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}})
+  const page = await ctx.newPage()
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  const dny = await page.evaluate(() => {
+    const f = (o) => { const d = new Date(); d.setDate(d.getDate() + o); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+    return { dnes: f(0), predDvema: f(-2), propadlo: f(-3) }
+  })
+  const zasej = (ukoly) => page.evaluate(async (ukoly) => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    await new Promise((res) => {
+      const tx = db.transaction('tasks', 'readwrite')
+      const st = tx.objectStore('tasks')
+      st.clear()
+      for (const u of ukoly) st.put(u)
+      tx.oncomplete = res
+    })
+  }, ukoly)
+  const pred = (dni) => new Date(Date.now() - dni * 86400000).toISOString()
+  const ukol = (id) => page.evaluate(async (id) => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    return await new Promise((res) => {
+      const r = db.transaction('tasks').objectStore('tasks').get(id)
+      r.onsuccess = () => res({ due: r.result?.dueDate ?? null, sched: r.result?.scheduledFor ?? null, prohlednuto: r.result?.prohlednuto ?? null })
+    })
+  }, id)
+  const radka = () => page.evaluate(() => {
+    const b = [...document.querySelectorAll('main button')].find((e) => /Projít/.test(e.innerText))
+    return b ? b.innerText.replace(/\s+/g, ' ').trim() : null
+  })
+  const panel = page.locator('.sheet-panel')
+
+  await zasej([
+    { id: 'prop', createdAt: pred(9), updatedAt: pred(9), title: 'Propadlý report', priority: 'normal', status: 'active', order: 0, dueDate: dny.propadlo },
+    { id: 'disk', createdAt: pred(17), updatedAt: pred(13), title: 'Dát přístup na Google disk se soubory', priority: 'normal', status: 'active', order: 1 },
+    // prošlý předevčírem: má týden pokoj
+    { id: 'prosly', createdAt: pred(30), updatedAt: pred(2), title: 'Už jednou prošlý', priority: 'high', status: 'active', order: 2, prohlednuto: dny.predDvema },
+    // zapsaný dnes: rozhodne se o něm až zítra
+    { id: 'cerstvy', createdAt: pred(0), updatedAt: pred(0), title: 'Dnes zapsaný nápad', priority: 'critical', status: 'inbox', order: 3 },
+  ])
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  const r1 = await radka()
+  T_(r1 !== null && /po termínu · 1/i.test(r1) && /\+ 1 bez termínu/.test(r1),
+     'řádka „Projít" řekne i o úkolech bez termínu, které jsou na řadě (' + r1 + ')')
+
+  await page.getByRole('button', { name: /Projít/ }).click(); await page.waitForTimeout(800)
+  const pocet = await panel.locator('header span').first().textContent().catch(() => '')
+  T_(/1 \/ 2/.test(pocet ?? ''), 've frontě je propadlý a jeden bez termínu — prošlý ani dnešní ne (' + pocet + ')')
+  await panel.getByRole('button', { name: /^Zítra/ }).click(); await page.waitForTimeout(600)
+  const nazev = await panel.locator('p.display').first().textContent().catch(() => '')
+  T_(/Google disk/.test(nazev ?? ''), 'za propadlým přijde úkol, který 17 dní nikdo neviděl (' + nazev + ')')
+  const popis = await panel.innerText()
+  T_(/Bez termínu · zapsáno před 17 dny/.test(popis), 'karta řekne, že je bez termínu a jak dlouho leží')
+  const tlacitka = (await panel.locator('button').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim())
+  T_(tlacitka.some((t) => /^Nechat bez termínu sem se vrátí/.test(t)) && !tlacitka.includes('Přeskočit'),
+     'úkol bez dne dostane „Nechat bez termínu" i s dnem návratu, ne „Přeskočit"')
+  T_(tlacitka.some((t) => /^Vybrat termín/.test(t)), 'a může dostat i vlastní termín')
+
+  await panel.getByRole('button', { name: /^Nechat bez termínu/ }).click(); await page.waitForTimeout(700)
+  const disk = await ukol('disk')
+  T_(disk.prohlednuto === dny.dnes && disk.due === null && disk.sched === null,
+     '„Nechat bez termínu" úkol nechá bez data, jen si zapamatuje, že ho dnes viděl (' + JSON.stringify(disk) + ')')
+  await panel.getByRole('button', { name: 'Hotovo' }).click(); await page.waitForTimeout(700)
+  T_(await radka() === null, 'po průchodu řádka zmizí — prošlý úkol má týden pokoj')
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  T_(await radka() === null, 'a nevrátí se ani po znovunačtení')
+
+  // Prázdný dnešek: řádka stojí i nad „Čistým stolem".
+  await zasej([
+    { id: 'disk2', createdAt: pred(17), updatedAt: pred(13), title: 'Dát přístup na Google disk se soubory', priority: 'normal', status: 'active', order: 0 },
+  ])
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  const r2 = await radka()
+  T_(r2 !== null && /^Bez termínu · 1/.test(r2), 'i nad prázdným dneškem je řádka „Projít" s úkolem bez termínu (' + r2 + ')')
   await ctx.close()
 }
 
