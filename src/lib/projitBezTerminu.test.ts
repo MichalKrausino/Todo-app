@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Task } from '../db/types'
-import { NA_DEN, PAUZA_DNI, bezTerminuKProjiti } from './projitBezTerminu'
+import { PAUZA_DNI, bezTerminuKProjiti } from './projitBezTerminu'
 
 const DNES = '2026-10-13'
 const u = (id: string, o: Partial<Task> = {}): Task => ({
@@ -25,10 +25,9 @@ describe('bezTerminuKProjiti', () => {
     expect(bezTerminuKProjiti([u('a', { dueDate: '2026-10-20' }), u('b', { scheduledFor: '2026-10-01' })], DNES)).toEqual([])
   })
 
-  it('co jsem zapsal dnes, nemusím hned znovu rozhodovat — ozve se zítra', () => {
-    const cerstvy = u('dnes', { createdAt: `${DNES}T08:00:00` })
-    expect(bezTerminuKProjiti([cerstvy], DNES)).toEqual([])
-    expect(ids(bezTerminuKProjiti([cerstvy], '2026-10-14'))).toEqual(['dnes'])
+  // Michalova volba: všechny, i ten zapsaný před hodinou.
+  it('i úkol zapsaný dnes jde do průchodu', () => {
+    expect(ids(bezTerminuKProjiti([u('dnes', { createdAt: `${DNES}T08:00:00` })], DNES))).toEqual(['dnes'])
   })
 
   it('prošel jsem ho a nechal bez termínu → týden pokoj, pak se vrátí', () => {
@@ -67,8 +66,8 @@ describe('bezTerminuKProjiti', () => {
     expect(ids(bezTerminuKProjiti(t, DNES))).toEqual(['vysoka', 'prohlednuty', 'normal-stary', 'normal-novy'])
   })
 
-  it(`nejvýš ${NA_DEN} za den — zbytek přijde zítra, průchod nemá být zeď`, () => {
-    const t = Array.from({ length: 12 }, (_, i) => u(`u${i}`))
-    expect(bezTerminuKProjiti(t, DNES)).toHaveLength(NA_DEN)
+  it('všechny naráz — žádný denní strop', () => {
+    const t = Array.from({ length: 30 }, (_, i) => u(`u${i}`))
+    expect(bezTerminuKProjiti(t, DNES)).toHaveLength(30)
   })
 })

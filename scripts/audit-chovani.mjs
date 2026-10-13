@@ -1903,9 +1903,10 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
 // Skutečný případ: „Dát přístup na Google disk se soubory" ležel 17 dní
 // bez termínu a nikde se neukázal — „Projít" bralo jen propadlé, chip
 // „Bez termínu" si člověk musí sám vzpomenout otevřít a ranní návrh se
-// skoro nečte (otevřený 2 rána z 20). Teď za propadlými jede pár úkolů
-// bez dne (`bezTerminuKProjiti`), „Nechat bez termínu" jim dá týden
-// pokoj a řádka „Projít" stojí i nad prázdným dneškem.
+// skoro nečte (otevřený 2 rána z 20). Teď za propadlými jedou VŠECHNY
+// úkoly bez dne (`bezTerminuKProjiti`, i ten zapsaný dnes — Michalova
+// volba), „Nechat bez termínu" jim dá týden pokoj a řádka „Projít" stojí
+// i nad prázdným dneškem.
 {
   const ctx = await b.newContext({viewport:{width:390,height:844}})
   const page = await ctx.newPage()
@@ -1945,17 +1946,17 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
     { id: 'disk', createdAt: pred(17), updatedAt: pred(13), title: 'Dát přístup na Google disk se soubory', priority: 'normal', status: 'active', order: 1 },
     // prošlý předevčírem: má týden pokoj
     { id: 'prosly', createdAt: pred(30), updatedAt: pred(2), title: 'Už jednou prošlý', priority: 'high', status: 'active', order: 2, prohlednuto: dny.predDvema },
-    // zapsaný dnes: rozhodne se o něm až zítra
-    { id: 'cerstvy', createdAt: pred(0), updatedAt: pred(0), title: 'Dnes zapsaný nápad', priority: 'critical', status: 'inbox', order: 3 },
+    // zapsaný dnes: jde do průchodu taky, jen za tím, kdo čeká déle
+    { id: 'cerstvy', createdAt: pred(0), updatedAt: pred(0), title: 'Dnes zapsaný nápad', priority: 'normal', status: 'inbox', order: 3 },
   ])
   await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
   const r1 = await radka()
-  T_(r1 !== null && /po termínu · 1/i.test(r1) && /\+ 1 bez termínu/.test(r1),
+  T_(r1 !== null && /po termínu · 1/i.test(r1) && /\+ 2 bez termínu/.test(r1),
      'řádka „Projít" řekne i o úkolech bez termínu, které jsou na řadě (' + r1 + ')')
 
   await page.getByRole('button', { name: /Projít/ }).click(); await page.waitForTimeout(800)
   const pocet = await panel.locator('header span').first().textContent().catch(() => '')
-  T_(/1 \/ 2/.test(pocet ?? ''), 've frontě je propadlý a jeden bez termínu — prošlý ani dnešní ne (' + pocet + ')')
+  T_(/1 \/ 3/.test(pocet ?? ''), 've frontě je propadlý a všechny úkoly bez termínu i dnešní — jen nedávno prošlý ne (' + pocet + ')')
   await panel.getByRole('button', { name: /^Zítra/ }).click(); await page.waitForTimeout(600)
   const nazev = await panel.locator('p.display').first().textContent().catch(() => '')
   T_(/Google disk/.test(nazev ?? ''), 'za propadlým přijde úkol, který 17 dní nikdo neviděl (' + nazev + ')')
@@ -1970,8 +1971,11 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   const disk = await ukol('disk')
   T_(disk.prohlednuto === dny.dnes && disk.due === null && disk.sched === null,
      '„Nechat bez termínu" úkol nechá bez data, jen si zapamatuje, že ho dnes viděl (' + JSON.stringify(disk) + ')')
+  const dalsi = await panel.locator('p.display').first().textContent().catch(() => '')
+  T_(/Dnes zapsaný/.test(dalsi ?? ''), 'i úkol zapsaný dnes přijde na řadu, za tím, kdo čeká déle (' + dalsi + ')')
+  await panel.getByRole('button', { name: /^Nechat bez termínu/ }).click(); await page.waitForTimeout(700)
   await panel.getByRole('button', { name: 'Hotovo' }).click(); await page.waitForTimeout(700)
-  T_(await radka() === null, 'po průchodu řádka zmizí — prošlý úkol má týden pokoj')
+  T_(await radka() === null, 'po průchodu řádka zmizí — prošlé úkoly mají týden pokoj')
   await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
   T_(await radka() === null, 'a nevrátí se ani po znovunačtení')
 

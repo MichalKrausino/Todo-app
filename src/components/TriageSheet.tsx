@@ -40,9 +40,8 @@
 // Na skutečných datech ležel úkol „Dát přístup na Google disk" sedmnáct
 // dní bez termínu a nikde se neozval — chip je nabídka, kterou si člověk
 // musí sám vzpomenout otevřít, a ranní návrh se skoro nečte. „Projít" je
-// to, co se opravdu dělá, takže za propadlými přijde pár úkolů bez dne
-// (`src/lib/projitBezTerminu.ts`: nejvýš pět denně, prošlý má týden
-// pokoj). Odpovědi se řídí KAŽDÝM ÚKOLEM ZVLÁŠŤ (`bezDne`), ne celým
+// to, co se opravdu dělá, takže za propadlými přijdou VŠECHNY úkoly bez
+// dne (`src/lib/projitBezTerminu.ts`; jen prošlý má týden pokoj). Odpovědi se řídí KAŽDÝM ÚKOLEM ZVLÁŠŤ (`bezDne`), ne celým
 // panelem: propadlý má „Přeskočit" a značku odkládání, úkol bez dne
 // „Nechat bez termínu", které ho na ten týden uloží (`prohlednuto`).
 

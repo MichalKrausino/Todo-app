@@ -306,9 +306,10 @@ export function TodayView({
   // Co ta hromádka doopravdy je — propadlé termíny, nebo jen vlastní
   // plán, na který nedošlo (`src/lib/vseUkoly.ts`).
   const popis = useMemo(() => popisPropadlych(visOverdue, today), [visOverdue, today])
-  // Pár úkolů bez termínu, které dnes přijdou na řadu v „Projít" za
-  // propadlými (`src/lib/projitBezTerminu.ts`). Bez nich se úkol bez dne
-  // neozval nikde: na skutečných datech jeden ležel 17 dní a nikdo ho neviděl.
+  // Úkoly bez termínu, které jedou v „Projít" za propadlými — všechny,
+  // kromě těch, které jsem nedávno nechal bez termínu
+  // (`src/lib/projitBezTerminu.ts`). Bez nich se úkol bez dne neozval
+  // nikde: na skutečných datech jeden ležel 17 dní a nikdo ho neviděl.
   const kProjiti = useMemo(() => bezTerminuKProjiti(inbox, today, pamet.odpociva), [inbox, today, pamet.odpociva])
   const fronta = useMemo(() => [...visOverdue, ...kProjiti], [visOverdue, kProjiti])
   const otevrene = poradi.length
