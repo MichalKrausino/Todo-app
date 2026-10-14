@@ -11,11 +11,17 @@ Pravidla pro vývoj: [`CLAUDE.md`](CLAUDE.md).
 
 ## Čeká na tebe
 
-- [ ] **Vložit `ANTHROPIC_API_KEY`** v Supabase → Edge Functions → Secrets
-  pro zpřesnění zadání modelem (Fáze 5) — **klíč vkládáš sám, do chatu ani
-  do repa nepatří**. SQL (`supabase/zpresneni.sql`) i edge funkce `zpresni`
-  už běží (13. 10.). Bez klíče funkce odpoví 503 a appka se tiše přestane
-  ptát; zadávání úkolů to neovlivní nijak.
+- [ ] **Přidat rutině „Todo — zpřesnění zadání" konektor Supabase**:
+  claude.ai/code/routines → rutina → upravit → Connectors → Supabase →
+  uložit. Zpřesnění zadání (Fáze 5) teď běží na tvém předplatném, žádný
+  API klíč se nikam nevkládá. Rutina jede každou hodinu 7–22, ale bez
+  konektoru nemá jak sáhnout do databáze — a nástroj, kterým ji Claude
+  založil, konektor připojit neumí. SQL (`supabase/zpresneni.sql`) běží od
+  14. 10.
+- [ ] Volitelně: smazat edge funkci `zpresni` (vrací jen 503, drží ji tam
+  jen stará verze appky v telefonu) a prázdnou tabulku z doby API —
+  v SQL editoru `drop table public.zpresneni;` (nová se jmenuje
+  `zpresneni_navrhy`, na tu nesahej).
 - [x] `supabase/sdileni-projektu.sql` běží od 13. 10. — kolega vidí jen
   projekty, které mu v panelu projektu nasdílíš (ověřeno chováním: Ben 0 ze
   4 projektů Panelory, ty všechny 4). `supabase/sdileni-ukolu.sql` běží

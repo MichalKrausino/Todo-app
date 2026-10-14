@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie'
 import type { CalendarEvent, Client, DayPlan, Project, Task, Template } from './types'
-import type { Navrh } from '../../supabase/functions/zpresni/navrh'
+import type { Navrh } from '../lib/zpresneniNavrh'
 
 // Lokální stav synchronizace (kurzory pull/push, přihlášený účet).
 // Nesynchronizuje se — je to čistě lokální účetnictví.

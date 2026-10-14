@@ -1,18 +1,22 @@
-// Zpřesnění zadání úkolu modelem — čistá logika sdílená serverem a appkou.
+// Zpřesnění zadání úkolu modelem — čistá logika s testy.
 //
-// Edge funkce `zpresni` z toho staví dotaz na model a čistí jeho odpověď;
-// appka (`src/lib/zpresneni.ts`) dováží TENTÝŽ soubor, takže co server
-// pustí ven, to appka umí přečíst, a obě strany ověřují stejně. Žádná
-// síť ani Deno API tady — testuje to vitest (`navrh.test.ts`).
+// Návrh píše rutina Claude Code na předplatném (supabase/rutina-zpresneni.md)
+// a ukládá ho do databáze tak, jak ho model napsal; tady se čistí, než
+// ho appka nabídne. Žádná síť — testuje to vitest (`zpresneniNavrh.test.ts`).
 //
 // Model nedostává id z databáze, ale krátké odkazy (k1, p2, l1). Dlouhé
 // uuid se špatně opisují a každý přepsaný znak je odkaz, který nikam
-// nevede; krátký odkaz se buď trefí do seznamu, nebo se zahodí.
+// nevede; krátký odkaz se buď trefí do seznamu, nebo se zahodí. Seznamy
+// s id v pořadí odkazů si server ukládá k odpovědi (`vstup.kontext`),
+// takže se dají přeložit zpátky (`navrhZRadku`).
 
 export type Priorita = 'low' | 'normal' | 'high' | 'critical'
 
 export interface Kontext {
-  /** Dnešek v Praze, `YYYY-MM-DD` — relativní data („v pátek") se počítají od něj. */
+  /**
+   * Den, kdy člověk úkol napsal (v Praze, `YYYY-MM-DD`) — relativní data
+   * („v pátek") se počítají od něj, ne ode dne, kdy se k tomu rutina dostala.
+   */
   dnes: string
   klienti: { id: string; jmeno: string }[]
   projekty: { id: string; jmeno: string; klientId: string }[]
@@ -55,81 +59,12 @@ export const LIMITY = {
 
 const PRIORITY: readonly Priorita[] = ['low', 'normal', 'high', 'critical']
 
-// Výstup modelu. Všechna pole jsou povinná a „nevím" je null — strukturovaný
-// výstup pak nemá jak vynechat pole a appka nemusí hádat, jestli chybí,
-// protože ho model nenašel, nebo protože ho zapomněl.
-const nebo = (t: Record<string, unknown>) => ({ anyOf: [t, { type: 'null' }] })
-export const SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['nazev', 'klient', 'projekt', 'termin', 'cas', 'priorita', 'komu', 'kroky'],
-  properties: {
-    nazev: nebo({ type: 'string' }),
-    klient: nebo({ type: 'string' }),
-    projekt: nebo({ type: 'string' }),
-    termin: nebo({ type: 'string', format: 'date' }),
-    cas: nebo({ type: 'string' }),
-    priorita: nebo({ type: 'string', enum: [...PRIORITY] }),
-    komu: nebo({ type: 'string' }),
-    kroky: { type: 'array', items: { type: 'string' } },
-  },
-} as const
-
-export const SYSTEM = `Zpřesňuješ zadání úkolu v české todo appce pro marketéra, který pracuje pro více klientů.
-Dostaneš původní text, který člověk napsal, a co z něj už vytáhl jednoduchý parser.
-Vrať JSON podle schématu. Pravidla:
-- nazev: krátký název úkolu v rozkazovacím nebo infinitivním tvaru, bez data, času, klienta, priority a jména člověka, kterému se úkol předává. Velké první písmeno. Pokud parserův název už je dobrý, vrať null.
-- klient, projekt, komu: JEN odkaz ze seznamu (např. "k2", "p1", "l1"), nebo null. Nikdy si odkaz nevymýšlej. Projekt musí patřit vybranému klientovi.
-- komu: vyplň jen když text výslovně říká, že úkol má udělat ten člověk (např. "ať Ben…", "pro Bena", "předat Benovi"). "Poslat Benovi" je krok, ne předání.
-- termin: YYYY-MM-DD, jen když ho text uvádí. Relativní výrazy počítej od data "dnes". Týden začíná pondělím.
-- cas: HH:MM ve 24h formátu, jen když ho text uvádí.
-- priorita: jen když text výslovně mluví o naléhavosti.
-- kroky: dílčí kroky jen tehdy, když text sám vyjmenovává víc věcí, které je potřeba udělat. Nevymýšlej obecné kroky. Jinak prázdné pole.
-- Když si něčím nejsi jistý, vrať null. Prázdný návrh je lepší než špatný.`
-
 /** Krátké odkazy pro model a cesta zpátky na id. */
 export function odkazy(k: Kontext) {
   const klienti = k.klienti.slice(0, LIMITY.klientu).map((c, i) => ({ ref: `k${i + 1}`, ...c }))
   const projekty = k.projekty.slice(0, LIMITY.projektu).map((p, i) => ({ ref: `p${i + 1}`, ...p }))
   const lide = k.lide.slice(0, LIMITY.lidi).map((l, i) => ({ ref: `l${i + 1}`, ...l }))
   return { klienti, projekty, lide }
-}
-
-const DNY = ['neděle', 'pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota']
-
-export function zprava(zadani: string, parser: Parser, k: Kontext): string {
-  const o = odkazy(k)
-  const refKlienta = (id?: string) => o.klienti.find((c) => c.id === id)?.ref ?? null
-  const refProjektu = (id?: string) => o.projekty.find((p) => p.id === id)?.ref ?? null
-  const den = DNY[new Date(`${k.dnes}T12:00:00Z`).getUTCDay()]
-  const radky = [
-    `dnes: ${k.dnes} (${den})`,
-    '',
-    'klienti:',
-    ...o.klienti.map((c) => `${c.ref}: ${c.jmeno.slice(0, LIMITY.jmeno)}`),
-    '',
-    'projekty:',
-    ...o.projekty.map(
-      (p) => `${p.ref}: ${p.jmeno.slice(0, LIMITY.jmeno)} (klient ${refKlienta(p.klientId) ?? '?'})`,
-    ),
-    '',
-    'lidé:',
-    ...o.lide.map((l) => `${l.ref}: ${l.jmeno.slice(0, LIMITY.jmeno)}`),
-    '',
-    'parser vytáhl:',
-    JSON.stringify({
-      nazev: parser.nazev,
-      klient: refKlienta(parser.klientId),
-      projekt: refProjektu(parser.projektId),
-      termin: parser.termin ?? null,
-      cas: parser.cas ?? null,
-      priorita: parser.priorita ?? null,
-    }),
-    '',
-    'původní text:',
-    zadani.slice(0, LIMITY.zadani),
-  ]
-  return radky.join('\n')
 }
 
 const jeDatum = (s: string): boolean => {
@@ -198,7 +133,44 @@ export function ocisti(raw: unknown, parser: Parser, k: Kontext): Navrh {
   return out
 }
 
-/** Klíč mezipaměti: tentýž vstup = tatáž odpověď, i z druhého zařízení. */
-export function klic(zadani: string, parser: Parser, k: Kontext): string {
-  return JSON.stringify([zadani, parser, k.dnes, k.klienti, k.projekty, k.lide])
+// Pořadí v seznamu JE odkaz (k1 = první klient), takže se vadný prvek
+// nesmí jen vynechat — všechny za ním by se posunuly a „k3" by ukázalo
+// na jiného klienta. Jeden vadný prvek proto znehodnotí celý seznam.
+const seznam = <T,>(x: unknown, max: number, ok: (o: Record<string, unknown>) => boolean): T[] | null => {
+  if (!Array.isArray(x)) return null
+  const vsechnyOk = x.every((o) => Boolean(o) && typeof o === 'object' && ok(o as Record<string, unknown>))
+  return vsechnyOk ? (x.slice(0, max) as T[]) : null
+}
+
+const retezec = (v: unknown): v is string => typeof v === 'string' && v.length > 0
+
+/**
+ * Řádek od rutiny → návrh, který smí do appky.
+ *
+ * Server si ke každé odpovědi uložil, co model dostal (`vstup`: parser
+ * a seznamy s id v pořadí odkazů); odpověď je syrová, s odkazy k1/p2/l1.
+ * Překlad i čištění dělá `ocisti` — stejně jako dřív, jen se nevolá na
+ * serveru, ale tady. Rozbitý vstup znamená prázdný návrh, ne pád.
+ */
+export function navrhZRadku(vstup: unknown, odpoved: unknown): Navrh {
+  if (!vstup || typeof vstup !== 'object') return {}
+  const v = vstup as { parser?: unknown; kontext?: unknown }
+  const p = v.parser as Record<string, unknown> | undefined
+  const k = v.kontext as Record<string, unknown> | undefined
+  if (!p || typeof p !== 'object' || typeof p.nazev !== 'string') return {}
+  if (!k || typeof k !== 'object' || typeof k.dnes !== 'string') return {}
+  const parser: Parser = {
+    nazev: p.nazev,
+    klientId: retezec(p.klientId) ? p.klientId : undefined,
+    projektId: retezec(p.projektId) ? p.projektId : undefined,
+    termin: retezec(p.termin) ? p.termin : undefined,
+    cas: retezec(p.cas) ? p.cas : undefined,
+    priorita: PRIORITY.find((x) => x === p.priorita),
+  }
+  const klienti = seznam<Kontext['klienti'][number]>(k.klienti, LIMITY.klientu, (o) => retezec(o.id) && retezec(o.jmeno))
+  const projekty = seznam<Kontext['projekty'][number]>(k.projekty, LIMITY.projektu, (o) => retezec(o.id) && retezec(o.jmeno) && retezec(o.klientId))
+  const lide = seznam<Kontext['lide'][number]>(k.lide, LIMITY.lidi, (o) => retezec(o.id) && retezec(o.jmeno))
+  if (!klienti || !projekty || !lide) return {}
+  const kontext: Kontext = { dnes: k.dnes, klienti, projekty, lide }
+  return ocisti(odpoved, parser, kontext)
 }
