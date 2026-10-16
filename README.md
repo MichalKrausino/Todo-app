@@ -26,6 +26,10 @@ Pravidla pro vývoj: [`CLAUDE.md`](CLAUDE.md).
   projekty, které mu v panelu projektu nasdílíš (ověřeno chováním: Ben 0 ze
   4 projektů Panelory, ty všechny 4). `supabase/sdileni-ukolu.sql` běží
   od 28. 9.
+- [x] Šabat (od pátečního do sobotního západu slunce) běží od 16. 10.:
+  edge funkce `reminders` verze 2 během něj nepípá, páteční uzávěrku posílá
+  úloha `reminders-shutdown-patek` před západem a ranní návrh v sobotu
+  neběží (`supabase/sabat.sql`, už spuštěné).
 - [x] Ranní návrh se střídá i bez odpovědí (edge funkce `morning-plan`
   verze 12, 13. 10.).
 - [ ] **Propojit Google znovu** v appce (obláček vpravo nahoře → „Propojit

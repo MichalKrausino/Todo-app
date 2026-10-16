@@ -326,6 +326,11 @@ async function svislice(kde) {
 
 const obrazovky = [
   ['Dnes', async () => {}],
+  // Den za dneškem (tah přes hlavičku, tady šipkou): pozítří má v ukázce
+  // úkol, takže se změří i seznam, nejen hlavička.
+  ['Dnes pozitri', async () => {
+    for (let i = 0; i < 2; i++) { await page.getByRole('button', { name: 'Další den' }).click(); await page.waitForTimeout(450) }
+  }],
   // Druhá poloha záložky Dnes (dvojité ťuknutí). Měří se hned za Dnes,
   // aby ji další obrazovka (Plán) sama složila — přepnutí záložky ji ruší.
   ['Vse', async () => { await page.getByRole('button', { name: 'Dnes', exact: true }).dblclick(); await page.waitForTimeout(600) }],

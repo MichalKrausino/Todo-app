@@ -3,6 +3,7 @@ import type { Task } from '../db/types'
 import { updateTask } from '../db/repo'
 import { deleteBlockForTask } from '../sync/calendar'
 import { addDays, fromISODate, toISODate, todayISO } from '../lib/dates'
+import { poznamkaKSobote } from '../lib/sabat'
 import { Sheet } from './Sheet'
 
 // Večerní uzávěrka (Cal Newport „shutdown ritual"): nedokončené úkoly drží
@@ -24,6 +25,9 @@ export function ShutdownSheet({
   const [kept, setKept] = useState<Set<string>>(new Set())
   const pending = tasks.filter((t) => !kept.has(t.id))
   const tomorrow = toISODate(addDays(fromISODate(todayISO()), 1))
+  // V pátek je zítra šabat. „Zítra" zůstává doslovné (sobotní večer je
+  // pracovní), ale řekne se to — páteční uzávěrka je ta před šabatem.
+  const sabatZitra = poznamkaKSobote(tomorrow)
 
   const moveToTomorrow = (t: Task) => {
     // blok v kalendáři „Todo" patřil dnešku — uvolnit
@@ -41,6 +45,7 @@ export function ShutdownSheet({
               Projdi, co zbylo, ať to večer nenosíš v hlavě. Odklad není
               prohra — je to plán.
             </p>
+            {sabatZitra && <p className="mt-1 text-sm text-ink-soft">Zítra je {sabatZitra}.</p>}
           </header>
 
           {pending.length > 0 ? (

@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import type { CalendarEvent, Priority, Task } from '../db/types'
 import { activeClients, addTask, allProjects, calendarCacheCount, calendarEventsOn, openTasks, removeTask } from '../db/repo'
 import { addDays, formatDayLabel, formatEventRange, formatFullDate, fromISODate, nextMonday, toISODate, todayISO } from '../lib/dates'
+import { poznamkaKSobote } from '../lib/sabat'
 import { WORK_END, WORK_START, freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { PRIORITY_LABELS, plural } from '../lib/labels'
 import { foldToken, mentionToken, parseQuickAdd } from '../lib/quickAdd'
@@ -303,7 +304,13 @@ export function QuickAdd({
       akce.push({ popisek: 'Zobrazit', kdyz: onShowUpcoming })
     }
     akce.push({ popisek: 'Zpět', kdyz: () => void removeTask(task.id) })
-    ukazToast(den ? `${formatDayLabel(den)} — „${task.title}"` : `Do inboxu — „${task.title}"`, akce)
+    // Úkol na sobotu: šabat trvá do západu slunce — řekne se to hned při
+    // zadání, kdy se s tím ještě dá něco dělat (`src/lib/sabat.ts`).
+    const sabat = den ? poznamkaKSobote(den) : null
+    ukazToast(
+      den ? `${formatDayLabel(den)}${sabat ? ` · ${sabat}` : ''} — „${task.title}"` : `Do inboxu — „${task.title}"`,
+      akce,
+    )
   }
 
   const today = todayISO()
