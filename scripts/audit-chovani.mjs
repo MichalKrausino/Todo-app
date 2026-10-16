@@ -1989,6 +1989,107 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await ctx.close()
 }
 
+// --- 24. dny se listují tahem přes hlavičku Dnes ---
+// Tah DOLEVA přes hlavičku = další den, DOPRAVA = zpátky, před dnešek se
+// nejde (`src/lib/tahDnu.ts`). Jen přes hlavičku (Michalova volba): řádky
+// úkolů mají vlastní vodorovná gesta (doprava odškrtne), takže tah po
+// řádku den přepnout nesmí — jinak by „den zpátky" úkol tiše odškrtl.
+// Prst se posílá přes CDP jako u panelů: pointer events s touch-action
+// se v Chromiu chovají jinak než myš.
+{
+  const ctx = await b.newContext({viewport:{width:390,height:844}, hasTouch:true, isMobile:true})
+  const page = await ctx.newPage()
+  const cdp = await ctx.newCDPSession(page)
+  await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
+  const dny = await page.evaluate(() => {
+    const f = (o) => { const d = new Date(); d.setDate(d.getDate() + o); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+    const dow = new Date().getDay()
+    return { dnes: f(0), zitra: f(1), pozitri: f(2), doSoboty: ((6 - dow + 7) % 7) || 7 }
+  })
+  await page.evaluate(async (dny) => {
+    const req = indexedDB.open('todo')
+    const db = await new Promise((res) => { req.onsuccess = () => res(req.result) })
+    const ted = new Date().toISOString()
+    const u = (id, title, dueDate) => ({ id, title, dueDate, priority: 'normal', status: 'active', order: 0, createdAt: ted, updatedAt: ted })
+    await new Promise((res) => {
+      const tx = db.transaction('tasks', 'readwrite')
+      const st = tx.objectStore('tasks')
+      st.clear()
+      st.put(u('d0', 'dnešní úkol', dny.dnes))
+      st.put(u('d1', 'zítřejší úkol', dny.zitra))
+      st.put(u('d2', 'pozítří úkol', dny.pozitri))
+      tx.oncomplete = res
+    })
+  }, dny)
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
+  const titulek = () => page.evaluate(() => { const h = document.querySelector('main h1'); return h?.getAttribute('aria-label') || h?.textContent || '' })
+  const seznam = () => page.evaluate(() => document.querySelector('main')?.innerText ?? '')
+  const hlavicka = await page.evaluate(() => { const r = document.querySelector('main header').getBoundingClientRect(); return { y: Math.round(r.y + 22) } })
+  const tah = async (x0, dx, dy = 0, y = hlavicka.y) => {
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:x0,y}]})
+    for (let i=1;i<=8;i++){ await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x0+dx*i/8,y:y+dy*i/8}]}); await page.waitForTimeout(25) }
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]}); await page.waitForTimeout(700)
+  }
+
+  await tah(80, 180)
+  T_(await titulek() === 'Dnes', 'z dneška tah doprava nikam nevede — před dnešek se nejde (' + await titulek() + ')')
+  T_(await page.getByRole('button', { name: 'Předchozí den' }).count() === 0, 'a na dnešku není ani šipka zpátky')
+
+  await tah(250, -180)
+  const zitra = await seznam()
+  T_(await titulek() === 'Zítra', 'tah doleva přes hlavičku ukáže zítřek (' + await titulek() + ')')
+  T_(zitra.includes('zítřejší úkol') && !zitra.includes('dnešní úkol'), 'zítřek ukazuje úkoly zítřka, ne dneška')
+
+  await tah(250, -180)
+  T_(!['Dnes', 'Zítra'].includes(await titulek()) && (await seznam()).includes('pozítří úkol'),
+     'další tah doleva jde dál — pozítří pod jménem dne (' + await titulek() + ')')
+
+  await tah(80, 180)
+  T_(await titulek() === 'Zítra', 'tah doprava vrátí den zpátky')
+
+  await tah(200, 8, 200)
+  T_(await titulek() === 'Zítra', 'svislý tah přes hlavičku den nepřepne (je to rolování)')
+
+  // Tah po ŘÁDKU úkolu patří řádku: kdyby přepnul den, „zpátky" by po
+  // řádku úkol odškrtlo (tah doprava = hotovo).
+  const radek = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('main li')].find((li) => li.textContent?.includes('zítřejší úkol'))
+    const r = el?.getBoundingClientRect()
+    return r ? Math.round(r.y + r.height / 2) : null
+  })
+  if (radek !== null) await tah(300, -100, 0, radek)
+  T_(await titulek() === 'Zítra', 'tah po řádku úkolu den nepřepne — řádek má vlastní gesto')
+
+  await page.getByRole('button', { name: 'Předchozí den' }).click(); await page.waitForTimeout(600)
+  T_(await titulek() === 'Dnes', 'šipka „Předchozí den" vrátí na dnešek')
+  await page.getByRole('button', { name: 'Další den' }).click(); await page.waitForTimeout(600)
+  T_(await titulek() === 'Zítra', 'šipka „Další den" jde na zítřek')
+
+  // Přepnutí obrazovky listování zapomene: návrat na Dnes je dnešek.
+  await page.getByRole('button', { name: 'Plán', exact: true }).click(); await page.waitForTimeout(700)
+  await page.getByRole('button', { name: 'Dnes', exact: true }).click(); await page.waitForTimeout(900)
+  T_(await titulek() === 'Dnes', 'odchod z obrazovky listování zapomene — appka se vrací na dnešek')
+
+  // Šabat: sobota řekne, do kdy klid trvá (`src/lib/sabat.ts`).
+  for (let i = 0; i < dny.doSoboty; i++) { await page.getByRole('button', { name: 'Další den' }).click(); await page.waitForTimeout(300) }
+  const sobota = await page.evaluate(() => document.querySelector('main header')?.innerText ?? '')
+  T_(/šabat · práce až po \d{1,2}:\d{2}/i.test(sobota), 'sobota v hlavičce řekne, že je šabat a do kdy (' + sobota.replace(/\s+/g, ' ') + ')')
+  await page.getByRole('button', { name: 'Předchozí den' }).click(); await page.waitForTimeout(500)
+  const patek = await page.evaluate(() => document.querySelector('main header')?.innerText ?? '')
+  T_(dny.doSoboty === 1 || /od \d{1,2}:\d{2} šabat/i.test(patek), 'pátek řekne, kdy šabat začíná (' + patek.replace(/\s+/g, ' ') + ')')
+  await ctx.close()
+
+  // Klidový režim: listovat jde dál, jen bez nájezdu.
+  const ctx2 = await b.newContext({viewport:{width:390,height:844}, reducedMotion:'reduce'})
+  const p2 = await ctx2.newPage()
+  await p2.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await p2.waitForTimeout(900)
+  await p2.getByRole('button', { name: 'Další den' }).click(); await p2.waitForTimeout(80)
+  const bezi = await p2.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').length)
+  const t2 = await p2.evaluate(() => { const h = document.querySelector('main h1'); return h?.getAttribute('aria-label') || h?.textContent || '' })
+  T_(t2 === 'Zítra' && bezi === 0, 'v klidovém režimu se den přepne bez jediné animace (' + t2 + ', běží ' + bezi + ')')
+  await ctx2.close()
+}
+
 await b.close(); server.close()
 console.log(chyby.length? '\n'+chyby.length+' nálezů:\n'+chyby.map(c=>' - '+c).join('\n') : '\nvšechno prošlo ('+ok+' kontrol)')
 process.exit(chyby.length?1:0)

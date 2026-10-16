@@ -11,19 +11,27 @@ Pravidla pro vývoj: [`CLAUDE.md`](CLAUDE.md).
 
 ## Čeká na tebe
 
-- [ ] **Spustit `supabase/sdileni-projektu.sql`** hned po nasazení appky
-  (celé najednou, je idempotentní). Do té doby kolega vidí všechny projekty
-  sdíleného klienta a appka to u projektu řekne. Po spuštění zmizí kolegovi
-  všechny tvoje projekty, dokud mu je v panelu projektu nenasdílíš.
-  Ověřeno chováním proti živé databázi v transakci s rollbackem.
-  (`supabase/sdileni-ukolu.sql` už běží — spuštěno 28. 9.)
-- [ ] **Zpřesnění zadání modelem** (Fáze 5) — tři kroky, v tomhle pořadí:
-  1. spustit `supabase/zpresneni.sql` (mezipaměť a denní strop, idempotentní);
-  2. nasadit edge funkci `zpresni` (`supabase/functions/zpresni/`, verify_jwt: true);
-  3. v Supabase → Edge Functions → Secrets vložit `ANTHROPIC_API_KEY` —
-     **klíč vkládáš sám, do chatu ani do repa nepatří**.
-  Bez klíče funkce odpoví 503 a appka se tiše přestane ptát; zadávání
-  úkolů to neovlivní nijak.
+- [ ] **Přidat rutině „Todo — zpřesnění zadání" konektor Supabase**:
+  claude.ai/code/routines → rutina → upravit → Connectors → Supabase →
+  uložit. Zpřesnění zadání (Fáze 5) teď běží na tvém předplatném, žádný
+  API klíč se nikam nevkládá. Rutina jede každou hodinu 7–22, ale bez
+  konektoru nemá jak sáhnout do databáze — a nástroj, kterým ji Claude
+  založil, konektor připojit neumí. SQL (`supabase/zpresneni.sql`) běží od
+  14. 10.
+- [ ] Volitelně: smazat edge funkci `zpresni` (vrací jen 503, drží ji tam
+  jen stará verze appky v telefonu) a prázdnou tabulku z doby API —
+  v SQL editoru `drop table public.zpresneni;` (nová se jmenuje
+  `zpresneni_navrhy`, na tu nesahej).
+- [x] `supabase/sdileni-projektu.sql` běží od 13. 10. — kolega vidí jen
+  projekty, které mu v panelu projektu nasdílíš (ověřeno chováním: Ben 0 ze
+  4 projektů Panelory, ty všechny 4). `supabase/sdileni-ukolu.sql` běží
+  od 28. 9.
+- [x] Šabat (od pátečního do sobotního západu slunce) běží od 16. 10.:
+  edge funkce `reminders` verze 2 během něj nepípá, páteční uzávěrku posílá
+  úloha `reminders-shutdown-patek` před západem a ranní návrh v sobotu
+  neběží (`supabase/sabat.sql`, už spuštěné).
+- [x] Ranní návrh se střídá i bez odpovědí (edge funkce `morning-plan`
+  verze 12, 13. 10.).
 - [ ] **Propojit Google znovu** v appce (obláček vpravo nahoře → „Propojit
   Google znovu"). Uložený refresh token je z 20. 9., tedy z doby, kdy byla
   OAuth aplikace v režimu Testing a tokeny platily sedm dní — publikace ho

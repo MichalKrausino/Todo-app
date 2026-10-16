@@ -60,6 +60,13 @@ export function formatFullDate(d: Date): string {
   return fullFmt.format(d)
 }
 
+// „sobota" — jméno dne v 1. pádě.
+const DNY = ['neděle', 'pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota']
+export function formatDayName(iso: string): string {
+  const d = fromISODate(iso)
+  return Number.isNaN(d.getTime()) ? '' : DNY[d.getDay()]
+}
+
 // Totéž ve 4. pádě po předložce „na": „na sobotu 12. září". Intl umí
 // jen 1. pád, den v týdnu se proto vymění ručně.
 const DNY_NA = ['neděli', 'pondělí', 'úterý', 'středu', 'čtvrtek', 'pátek', 'sobotu']

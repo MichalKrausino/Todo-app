@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { klic, ocisti, odkazy, zprava, type Kontext, type Parser } from './navrh'
+import { navrhZRadku, ocisti, odkazy, type Kontext, type Parser } from './zpresneniNavrh'
 
 const K: Kontext = {
   dnes: '2026-10-01',
@@ -21,7 +21,6 @@ describe('odkazy', () => {
     expect(o.klienti.map((c) => c.ref)).toEqual(['k1', 'k2'])
     expect(o.projekty.map((p) => p.ref)).toEqual(['p1', 'p2'])
     expect(o.lide[0].ref).toBe('l1')
-    expect(zprava('x', P, K)).not.toContain('c-panelora')
   })
 })
 
@@ -82,9 +81,37 @@ describe('ocisti', () => {
   })
 })
 
-describe('klic', () => {
-  it('jiný den = jiný klíč (relativní data se počítají od dneška)', () => {
-    expect(klic('x', P, K)).not.toBe(klic('x', P, { ...K, dnes: '2026-10-02' }))
-    expect(klic('x', P, K)).toBe(klic('x', P, { ...K }))
+// Rutina zapisuje odpověď s odkazy a server k ní ukládá, co model dostal.
+// Tvar `vstup` je přesně to, co staví `zpresneni_vezmi` v supabase/zpresneni.sql.
+describe('navrhZRadku', () => {
+  const vstup = {
+    parser: { nazev: P.nazev, klientId: 'c-panelora', termin: '2026-10-02', priorita: 'normal' },
+    kontext: K,
+  }
+
+  it('odkazy z odpovědi rutiny se přeloží na id', () => {
+    const n = navrhZRadku(vstup, { nazev: 'Připravit varianty banneru', projekt: 'p1', komu: 'l1', termin: null, kroky: [] })
+    expect(n).toEqual({ nazev: 'Připravit varianty banneru', projektId: 'p-b2b', komu: 'u-ben' })
+  })
+
+  // Rutina zpracuje úkol klidně až druhý den — „dnes" ve vstupu je den,
+  // kdy člověk úkol napsal, a termín se poměřuje s ním, ne s dneškem.
+  it('termín se poměřuje dnem, kdy úkol vznikl', () => {
+    expect(navrhZRadku(vstup, { termin: '2026-10-01' }).termin).toBe('2026-10-01')
+    expect(navrhZRadku(vstup, { termin: '2026-09-30' }).termin).toBeUndefined()
+  })
+
+  // Pořadí je odkaz: kdyby se vadný prvek vynechal, „k2" by ukázalo
+  // na jiného klienta. Celý návrh radši zmizí.
+  it('vadný prvek seznamu neposune odkazy — návrh se zahodí celý', () => {
+    const rozbity = { ...vstup, kontext: { ...K, klienti: [{ id: 'c-panelora' }, ...K.klienti] } }
+    expect(navrhZRadku(rozbity, { klient: 'k2', nazev: 'Banner' })).toEqual({})
+  })
+
+  it('rozbitý vstup → prázdný návrh, ne pád', () => {
+    expect(navrhZRadku(null, { nazev: 'x' })).toEqual({})
+    expect(navrhZRadku({ parser: {} }, { nazev: 'x' })).toEqual({})
+    expect(navrhZRadku({ parser: { nazev: 'a' }, kontext: { dnes: '2026-10-01' } }, { nazev: 'x' })).toEqual({})
+    expect(navrhZRadku(vstup, null)).toEqual({})
   })
 })
