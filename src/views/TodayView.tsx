@@ -25,6 +25,9 @@ import { klidovyRezim } from '../lib/motion'
 import { dilyDne } from '../lib/pruhDne'
 import { PruhDne } from '../components/PruhDne'
 import { formatFullDate, todayISO } from '../lib/dates'
+import { jeSabat, konecPracePatek, posunDen, vetaSabatu, zacatekUzaverky } from '../lib/sabat'
+import { DalsiDen } from '../components/DalsiDen'
+import { SipkyDnu, useTahDnu } from '../components/TahDnu'
 import { WORK_END, WORK_START, freeGaps, freeMinutes, minutesToLabel, type BusyInterval } from '../lib/freeSlot'
 import { plural } from '../lib/labels'
 import { poradiDne, type PolozkaDne } from '../lib/dnesPoradi'
@@ -89,6 +92,21 @@ export function TodayView({
   onOpenTask: (t: Task) => void
 }) {
   const today = todayISO()
+  // Listování dnů tahem přes hlavičku (`src/lib/tahDnu.ts`): o kolik dní
+  // za dneškem obrazovka stojí, a odkud přijel nový den (kvůli směru
+  // nájezdu). Nepamatuje se — přepnutí obrazovky i nový den vrací na dnešek.
+  const [posun, setPosun] = useState(0)
+  const [smer, setSmer] = useState<-1 | 0 | 1>(0)
+  const zmenDen = useCallback((o: -1 | 1) => {
+    setSmer(o)
+    setPosun((p) => Math.max(0, p + o))
+  }, [])
+  useEffect(() => {
+    setPosun(0)
+    setSmer(0)
+  }, [today])
+  const tah = useTahDnu(posun, zmenDen)
+  const den = posun === 0 ? today : posunDen(today, posun)
   const [navrhOpen, setNavrhOpen] = useState(false)
   const [kalendarOpen, setKalendarOpen] = useState(false)
   const [shutdownOpen, setShutdownOpen] = useState(false)
@@ -219,8 +237,11 @@ export function TodayView({
   )
   // Volno se počítá od TEĎ do konce pracovní doby — ve dvě odpoledne
   // nemá smysl hlásit celodenních osm hodin. Po pracovní době je nula.
-  const restStart = Math.min(Math.max(nowMin, WORK_START), WORK_END)
-  const freeMin = events.length > 0 ? freeMinutes(busy, restStart) : null
+  // V pátek končí práce západem slunce (šabat, `src/lib/sabat.ts`), takže
+  // v zimě je den o hodinu kratší a „zbývá ~3 h" by lhalo.
+  const konecPrace = Math.min(WORK_END, konecPracePatek(today) ?? WORK_END)
+  const restStart = Math.min(Math.max(nowMin, WORK_START), konecPrace)
+  const freeMin = events.length > 0 ? freeMinutes(busy, restStart, konecPrace) : null
   const klid = klidovyRezim()
   // Díly pruhu dne — táž čistá funkce, jakou počítá Plán, aby se ta dvě
   // místa nerozešla v tom, co se do dne počítá.
@@ -247,7 +268,7 @@ export function TodayView({
     freeMin !== null ? `zbývá ~${minutesToLabel(freeMin)}` : '',
   ].filter(Boolean)
   // Volná okna zbývající do konce pracovní doby (pro panel kalendáře).
-  const gaps = freeGaps(busy, restStart).filter((g) => g.endMin - g.startMin >= MIN_GAP_MIN && g.endMin > nowMin)
+  const gaps = freeGaps(busy, restStart, konecPrace).filter((g) => g.endMin - g.startMin >= MIN_GAP_MIN && g.endMin > nowMin)
 
   // Splněný den slaví konfety přes celou obrazovku (canvas-confetti, jak
   // ho zapojuje magicui) — jednou za den, ne při každém překreslení, a v
@@ -271,7 +292,13 @@ export function TodayView({
     })
   }, [allDone, today])
 
-  const isEvening = new Date().getHours() >= 16
+  // Uzávěrka se nabízí od čtyř odpoledne, v pátek nejpozději hodinu
+  // a půl před západem slunce; během šabatu se nenabízí vůbec — den
+  // se uzavírá před ním, ne v něm.
+  const sabatTed = jeSabat(today, Date.now())
+  const isEvening = nowMin >= zacatekUzaverky(today) && !sabatTed
+  // Pátek a sobota: kdy začíná a končí šabat (jinak `null`).
+  const vetaSabat = vetaSabatu(today, Date.now())
   const closeDay = () => {
     localStorage.setItem('todo.dayClosed', today)
     setDayClosed(true)
@@ -386,314 +413,353 @@ export function TodayView({
   )
   const timeFmt = new Intl.DateTimeFormat('cs-CZ', { hour: '2-digit', minute: '2-digit' })
 
+  // Úkoly dne, na který se tahem díváš — moje, otevřené, se dnem podle
+  // téhož „kdy to je" jako všude. Pořadí jako dnes: připnuté nahoře
+  // (na ten den), zbytek podle priority.
+  const ukolyDne = useMemo(
+    () =>
+      posun === 0
+        ? []
+        : poradiDne([], open.filter((t) => effectiveDate(t) === den), den, sortTasks).poradi.map((p) => p.task),
+    [posun, open, den],
+  )
+  const radekDne = useCallback((t: Task) => row(t, false), [row]) // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="space-y-5">
-      <header className="rise">
-        <TextEffect as="h1" per="char" preset="blur" className="display text-[2.1rem] font-semibold leading-tight">Dnes</TextEffect>
-        {/* Jedna tichá řádka pod titulkem: kroužek postupu, datum a počet;
-            odhad práce má vlastní řádku — jediné, co tu smí mít barvu, je
-            přetížení dne. */}
-        <div className="relative mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-ink-soft">
-          {planned > 0 && (
-            <svg key={done.length} viewBox="0 0 20 20" className="pop-soft h-[18px] w-[18px] shrink-0 -rotate-90" aria-hidden="true">
-              <circle cx="10" cy="10" r="7.5" fill="none" stroke="var(--color-line)" strokeWidth="3" />
-              <circle
-                cx="10"
-                cy="10"
-                r="7.5"
-                fill="none"
-                stroke={allDone ? 'var(--color-moss)' : 'var(--color-accent)'}
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeDasharray={RING}
-                strokeDashoffset={RING * (1 - progress)}
-                style={{ transition: 'stroke-dashoffset 0.7s var(--ease-glide), stroke 0.4s' }}
-              />
-            </svg>
-          )}
-          <span className="inline-block first-letter:uppercase">{formatFullDate(new Date())}</span>
-          {planned > 0 && (
-            <span className="font-medium">
-              · <AnimatedNumber value={done.length} /> z {planned}
-            </span>
-          )}
-        </div>
-        {unfinished.length > 0 && (
-          /* Tvar dne: týž pruh jako v Plánu — délka je čas, barvy klienti.
-             Dřív tu stála jen věta a před ní barevná tečka: tečka říkala
-             „je toho moc / je to v pohodě" a to je přesně to, co pruh
-             ukáže sám, a navíc řekne, komu dnešek patří. Není to nový
-             blok — je to tatáž řádka, která dostala svůj obrázek, a věta
-             pod ním zůstala jako popisek, stejně jako u dne v Plánu. */
-          <div className="mt-2">
-            <PruhDne dily={dilyDnes} klid={klid} strop={strop} className="h-1.5" />
-            {popisekDne.length > 0 && (
-              <p className={`mt-1.5 text-[13px] leading-snug ${overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'}`}>
-                {popisekDne.join(' · ')}
-              </p>
-            )}
-          </div>
-        )}
-      </header>
+      {/* Nový den přijede ze strany, kam se listovalo; `key` ho pokaždé
+          postaví znovu, takže se nájezd přehraje. */}
+      <div key={posun} className={`space-y-5 ${smer > 0 ? 'den-zprava' : smer < 0 ? 'den-zleva' : ''}`}>
+        {posun > 0 ? (
+          <DalsiDen
+            den={den}
+            posun={posun}
+            tah={tah}
+            onZmen={zmenDen}
+            ukoly={ukolyDne}
+            clientMap={clientMap}
+            strop={strop}
+            klid={klid}
+            radek={radekDne}
+          />
+        ) : (
+          <>
+            <header className="rise" {...tah.obsluha} style={tah.styl}>
+              <div style={tah.stylObalu}>
+                <TextEffect as="h1" per="char" preset="blur" className="display text-[2.1rem] font-semibold leading-tight">Dnes</TextEffect>
+                {/* Jedna tichá řádka pod titulkem: kroužek postupu, datum a počet;
+                    odhad práce má vlastní řádku — jediné, co tu smí mít barvu, je
+                    přetížení dne. */}
+                <div className="relative mt-1.5 flex items-center gap-2 text-[13px] text-ink-soft">
+                  <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+                    {planned > 0 && (
+                      <svg key={done.length} viewBox="0 0 20 20" className="pop-soft h-[18px] w-[18px] shrink-0 -rotate-90" aria-hidden="true">
+                        <circle cx="10" cy="10" r="7.5" fill="none" stroke="var(--color-line)" strokeWidth="3" />
+                        <circle
+                          cx="10"
+                          cy="10"
+                          r="7.5"
+                          fill="none"
+                          stroke={allDone ? 'var(--color-moss)' : 'var(--color-accent)'}
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeDasharray={RING}
+                          strokeDashoffset={RING * (1 - progress)}
+                          style={{ transition: 'stroke-dashoffset 0.7s var(--ease-glide), stroke 0.4s' }}
+                        />
+                      </svg>
+                    )}
+                    <span className="inline-block first-letter:uppercase">{formatFullDate(new Date())}</span>
+                    {planned > 0 && (
+                      <span className="font-medium">
+                        · <AnimatedNumber value={done.length} /> z {planned}
+                      </span>
+                    )}
+                  </span>
+                  {/* Šipky: listování dnů pro klávesnici a myš — a vidět, že to jde. */}
+                  <SipkyDnu posun={posun} onZmen={zmenDen} />
+                </div>
+                {vetaSabat && <p className="text-[13px] text-ink-soft first-letter:uppercase">{vetaSabat}</p>}
+                {unfinished.length > 0 && (
+                  /* Tvar dne: týž pruh jako v Plánu — délka je čas, barvy klienti.
+                     Dřív tu stála jen věta a před ní barevná tečka: tečka říkala
+                     „je toho moc / je to v pohodě" a to je přesně to, co pruh
+                     ukáže sám, a navíc řekne, komu dnešek patří. Není to nový
+                     blok — je to tatáž řádka, která dostala svůj obrázek, a věta
+                     pod ním zůstala jako popisek, stejně jako u dne v Plánu. */
+                  <div className="mt-2">
+                    <PruhDne dily={dilyDnes} klid={klid} strop={strop} className="h-1.5" />
+                    {popisekDne.length > 0 && (
+                      <p className={`mt-1.5 text-[13px] leading-snug ${overloaded ? 'font-medium text-note-ink' : 'text-ink-soft'}`}>
+                        {popisekDne.join(' · ')}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </header>
 
-      {/* Kontext: jedna vodorovná řádka chipů. Nic z toho není dnešní
-          práce, každé je na jedno ťuknutí v panelu. Pořadí podle toho, co
-          se dnes mění: návrh (ráno), schůzka (během dne), uzávěrka
-          (večer) a inbox (kdykoli). */}
-      {(nove.length > 0 || zpresnit.length > 0 || navrhy.length > 0 || events.length > 0 || (isEvening && unfinished.length > 0) || inbox.length > 0) && (
-        <div className="radka-mizi rise -mx-4 flex gap-2 overflow-x-auto px-4 pb-1" style={{ scrollbarWidth: 'none', ...stagger(1) }}>
-          {/* První v řadě: „někdo ti dal práci" je ze všech kontextů ten, na
-              který se čeká. Nasdílený a nepřidělený úkol by jinak šlo najít
-              jedině ve Vše — tedy vůbec ne, když člověk neví, že tam je. */}
-          {nove.length > 0 && (
-            <Chip tone="accent" onClick={() => setNoveOpen(true)}>
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="9" cy="9" r="3" />
-                <circle cx="16.5" cy="10.5" r="2.5" />
-                <path d="M3.5 19c.6-2.9 2.8-4.5 5.5-4.5s4.9 1.6 5.5 4.5M14.5 15.2c.6-.2 1.3-.3 2-.3 2.2 0 3.9 1.3 4.4 3.6" />
-              </svg>
-              Nové pro tebe · {nove.length}
-            </Chip>
-          )}
-          {/* Model dočetl zadání, které parser nepobral (Fáze 5). Hned za
-              „Nové pro tebe": je to taky „někdo ti něco připravil", jen tím
-              někým je appka — a nic z toho se nestane bez ťuknutí. */}
-          {zpresnit.length > 0 && (
-            <Chip tone="accent" onClick={() => setZpresnitOpen(true)}>
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 20l9.5-9.5M14.5 4.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1zM19 13l.6 1.4 1.4.6-1.4.6L19 17l-.6-1.4-1.4-.6 1.4-.6z" />
-              </svg>
-              Zpřesnit · {zpresnit.length}
-            </Chip>
-          )}
-          {navrhy.length > 0 && (
-            <Chip tone="accent" className="relative overflow-hidden" onClick={() => setNavrhOpen(true)}>
-              {/* BorderBeam (magicui): světlo obíhá jediný chip, který napsal server */}
-              <BorderBeam doba={5} />
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-                <path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z" />
-              </svg>
-              Návrh · {navrhy.length}
-            </Chip>
-          )}
-          {events.length > 0 && (
-            <Chip onClick={() => setKalendarOpen(true)}>
-              <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-soft" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                <rect x="4" y="5.5" width="16" height="15" rx="3" />
-                <path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" />
-              </svg>
-              {bezici ? (
+            {/* Kontext: jedna vodorovná řádka chipů. Nic z toho není dnešní
+                práce, každé je na jedno ťuknutí v panelu. Pořadí podle toho, co
+                se dnes mění: návrh (ráno), schůzka (během dne), uzávěrka
+                (večer) a inbox (kdykoli). */}
+            {(nove.length > 0 || zpresnit.length > 0 || navrhy.length > 0 || events.length > 0 || (isEvening && unfinished.length > 0) || inbox.length > 0) && (
+              <div className="radka-mizi rise -mx-4 flex gap-2 overflow-x-auto px-4 pb-1" style={{ scrollbarWidth: 'none', ...stagger(1) }}>
+                {/* První v řadě: „někdo ti dal práci" je ze všech kontextů ten, na
+                    který se čeká. Nasdílený a nepřidělený úkol by jinak šlo najít
+                    jedině ve Vše — tedy vůbec ne, když člověk neví, že tam je. */}
+                {nove.length > 0 && (
+                  <Chip tone="accent" onClick={() => setNoveOpen(true)}>
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="9" cy="9" r="3" />
+                      <circle cx="16.5" cy="10.5" r="2.5" />
+                      <path d="M3.5 19c.6-2.9 2.8-4.5 5.5-4.5s4.9 1.6 5.5 4.5M14.5 15.2c.6-.2 1.3-.3 2-.3 2.2 0 3.9 1.3 4.4 3.6" />
+                    </svg>
+                    Nové pro tebe · {nove.length}
+                  </Chip>
+                )}
+                {/* Model dočetl zadání, které parser nepobral (Fáze 5). Hned za
+                    „Nové pro tebe": je to taky „někdo ti něco připravil", jen tím
+                    někým je appka — a nic z toho se nestane bez ťuknutí. */}
+                {zpresnit.length > 0 && (
+                  <Chip tone="accent" onClick={() => setZpresnitOpen(true)}>
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 20l9.5-9.5M14.5 4.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1zM19 13l.6 1.4 1.4.6-1.4.6L19 17l-.6-1.4-1.4-.6 1.4-.6z" />
+                    </svg>
+                    Zpřesnit · {zpresnit.length}
+                  </Chip>
+                )}
+                {navrhy.length > 0 && (
+                  <Chip tone="accent" className="relative overflow-hidden" onClick={() => setNavrhOpen(true)}>
+                    {/* BorderBeam (magicui): světlo obíhá jediný chip, který napsal server */}
+                    <BorderBeam doba={5} />
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                      <path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9z" />
+                    </svg>
+                    Návrh · {navrhy.length}
+                  </Chip>
+                )}
+                {events.length > 0 && (
+                  <Chip onClick={() => setKalendarOpen(true)}>
+                    <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-soft" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                      <rect x="4" y="5.5" width="16" height="15" rx="3" />
+                      <path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" />
+                    </svg>
+                    {bezici ? (
+                      <>
+                        <span className="text-accent-deep">Teď</span>
+                        <span className="max-w-[9rem] truncate">{bezici.title}</span>
+                      </>
+                    ) : dalsi ? (
+                      <>
+                        <span className="tabular-nums text-ink-soft">{timeFmt.format(new Date(dalsi.start))}</span>
+                        <span className="max-w-[9rem] truncate">{dalsi.title}</span>
+                        <span className="text-accent-deep">{untilLabel(minutesOfDay(dalsi.start) - nowMin)}</span>
+                      </>
+                    ) : (
+                      <span className="text-ink-soft">
+                        {events.length} {plural(events.length, 'schůzka', 'schůzky', 'schůzek')} · po všech
+                      </span>
+                    )}
+                  </Chip>
+                )}
+                {isEvening && unfinished.length > 0 && !dayClosed && (
+                  <Chip onClick={() => setShutdownOpen(true)}>
+                    <svg viewBox="0 0 24 24" className="breathe h-4 w-4 text-accent" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z" />
+                    </svg>
+                    Uzávěrka dne
+                  </Chip>
+                )}
+                {isEvening && unfinished.length > 0 && dayClosed && (
+                  <Chip tone="moss" disabled className="opacity-100">
+                    ✓ Den uzavřen
+                  </Chip>
+                )}
+                {inbox.length > 0 && (
+                  <Chip onClick={() => setBezTerminuOpen(true)} className="text-ink-soft">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 13l2.5-7h11L20 13v6H4z" />
+                      <path d="M4 13h5l1.5 2h3L15 13h5" />
+                    </svg>
+                    Bez termínu · {inbox.length}
+                  </Chip>
+                )}
+              </div>
+            )}
+
+            {/* JEDEN seznam v JEDNÉ kartě. Uvnitř: řádka triáže, když něco
+                propadlo; řádky úkolů (připnuté → propadlé → dnešní, nebo po
+                klientech); hotové sbalené na konci. */}
+            <section className="rise" style={stagger(2)}>
+              {otevrene > 0 ? (
                 <>
-                  <span className="text-accent-deep">Teď</span>
-                  <span className="max-w-[9rem] truncate">{bezici.title}</span>
-                </>
-              ) : dalsi ? (
-                <>
-                  <span className="tabular-nums text-ink-soft">{timeFmt.format(new Date(dalsi.start))}</span>
-                  <span className="max-w-[9rem] truncate">{dalsi.title}</span>
-                  <span className="text-accent-deep">{untilLabel(minutesOfDay(dalsi.start) - nowMin)}</span>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h2 className="section-label">dnes · {otevrene}</h2>
+                    {klientiDnes.length >= 2 && (
+                      <div className="flex gap-0.5 rounded-full bg-well p-0.5">
+                        {/* AnimatedBackground (motion-primitives): pilulka mezi volbami plyne */}
+                        <AnimatedBackground value={razeni} onValueChange={(id) => zmenRazeni(id as Razeni)} className="rounded-full bg-card shadow-card">
+                          <button data-id="priorita" className="h-8 rounded-full px-2.5 text-[12px] font-medium text-ink-soft data-[checked=true]:text-ink">
+                            Priorita
+                          </button>
+                          <button data-id="klient" className="h-8 rounded-full px-2.5 text-[12px] font-medium text-ink-soft data-[checked=true]:text-ink">
+                            Klient
+                          </button>
+                        </AnimatedBackground>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="seznam-na-papire">
+                    {radkaProjit}
+
+                    <ul className="divide-y divide-line">
+                      {skupiny.map((sk, i) => (
+                        <Fragment key={sk.client?.id ?? `bez-${i}`}>
+                          {skupiny.length > 1 && (
+                            <li className="skupina-li">
+                              <span className="flex items-center gap-1.5 px-4 pb-1 pt-3 text-[12px] font-medium text-ink-soft">
+                                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: sk.client?.color ?? 'var(--color-edge)' }} />
+                                {sk.client?.name ?? 'bez klienta'}
+                              </span>
+                            </li>
+                          )}
+                          {sk.polozky.map((p) => row(p.task, p.showDate))}
+                        </Fragment>
+                      ))}
+                    </ul>
+
+                    {zbyva > 0 && (
+                      <button
+                        onClick={() => setLimit((l) => l + DAVKA)}
+                        className="w-full border-t border-line py-2.5 text-center text-sm font-medium text-accent-deep transition-colors duration-150 active:bg-well/60"
+                      >
+                        {`Zobrazit ${Math.min(zbyva, DAVKA)} ${plural(Math.min(zbyva, DAVKA), 'další', 'další', 'dalších')}`}
+                        {zbyva > DAVKA && ` (zbývá ${zbyva})`}
+                      </button>
+                    )}
+
+                    {done.length > 0 && (
+                      <>
+                        <button
+                          onClick={prepniHotovo}
+                          aria-expanded={hotovoOpen}
+                          className="flex w-full items-center justify-between gap-2 border-t border-line px-4 py-2.5 text-left transition-colors duration-150 active:bg-well/60"
+                        >
+                          <span className="text-[13px] font-medium text-ink-soft first-letter:uppercase">hotovo · {done.length}</span>
+                          <svg
+                            viewBox="0 0 24 24"
+                            className={`h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 ${hotovoOpen ? 'rotate-90' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M9 6l6 6-6 6" />
+                          </svg>
+                        </button>
+                        <DisclosureContent open={hotovoOpen}>
+                          <ul className="divide-y divide-line border-t border-line">{done.map((t) => row(t))}</ul>
+                        </DisclosureContent>
+                      </>
+                    )}
+                  </div>
+
+                  {gestureTip && (
+                    <p className="mt-2 flex items-start gap-2 px-1 text-[12px] text-ink-faint">
+                      <span className="min-w-0 flex-1">
+                        Přejeď po úkolu doprava = hotovo, doleva = odložit na zítra.
+                      </span>
+                      <button aria-label="Skrýt tip" onClick={dismissTip} className="-m-2 shrink-0 p-2 transition-transform duration-150 active:scale-90">
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                          <path d="M6 6l12 12M18 6L6 18" />
+                        </svg>
+                      </button>
+                    </p>
+                  )}
                 </>
               ) : (
-                <span className="text-ink-soft">
-                  {events.length} {plural(events.length, 'schůzka', 'schůzky', 'schůzek')} · po všech
-                </span>
-              )}
-            </Chip>
-          )}
-          {isEvening && unfinished.length > 0 && !dayClosed && (
-            <Chip onClick={() => setShutdownOpen(true)}>
-              <svg viewBox="0 0 24 24" className="breathe h-4 w-4 text-accent" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z" />
-              </svg>
-              Uzávěrka dne
-            </Chip>
-          )}
-          {isEvening && unfinished.length > 0 && dayClosed && (
-            <Chip tone="moss" disabled className="opacity-100">
-              ✓ Den uzavřen
-            </Chip>
-          )}
-          {inbox.length > 0 && (
-            <Chip onClick={() => setBezTerminuOpen(true)} className="text-ink-soft">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 13l2.5-7h11L20 13v6H4z" />
-                <path d="M4 13h5l1.5 2h3L15 13h5" />
-              </svg>
-              Bez termínu · {inbox.length}
-            </Chip>
-          )}
-        </div>
-      )}
-
-      {/* JEDEN seznam v JEDNÉ kartě. Uvnitř: řádka triáže, když něco
-          propadlo; řádky úkolů (připnuté → propadlé → dnešní, nebo po
-          klientech); hotové sbalené na konci. */}
-      <section className="rise" style={stagger(2)}>
-        {otevrene > 0 ? (
-          <>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <h2 className="section-label">dnes · {otevrene}</h2>
-              {klientiDnes.length >= 2 && (
-                <div className="flex gap-0.5 rounded-full bg-well p-0.5">
-                  {/* AnimatedBackground (motion-primitives): pilulka mezi volbami plyne */}
-                  <AnimatedBackground value={razeni} onValueChange={(id) => zmenRazeni(id as Razeni)} className="rounded-full bg-card shadow-card">
-                    <button data-id="priorita" className="h-8 rounded-full px-2.5 text-[12px] font-medium text-ink-soft data-[checked=true]:text-ink">
-                      Priorita
-                    </button>
-                    <button data-id="klient" className="h-8 rounded-full px-2.5 text-[12px] font-medium text-ink-soft data-[checked=true]:text-ink">
-                      Klient
-                    </button>
-                  </AnimatedBackground>
-                </div>
-              )}
-            </div>
-
-            <div className="seznam-na-papire">
-              {radkaProjit}
-
-              <ul className="divide-y divide-line">
-                {skupiny.map((sk, i) => (
-                  <Fragment key={sk.client?.id ?? `bez-${i}`}>
-                    {skupiny.length > 1 && (
-                      <li className="skupina-li">
-                        <span className="flex items-center gap-1.5 px-4 pb-1 pt-3 text-[12px] font-medium text-ink-soft">
-                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: sk.client?.color ?? 'var(--color-edge)' }} />
-                          {sk.client?.name ?? 'bez klienta'}
-                        </span>
-                      </li>
-                    )}
-                    {sk.polozky.map((p) => row(p.task, p.showDate))}
-                  </Fragment>
-                ))}
-              </ul>
-
-              {zbyva > 0 && (
-                <button
-                  onClick={() => setLimit((l) => l + DAVKA)}
-                  className="w-full border-t border-line py-2.5 text-center text-sm font-medium text-accent-deep transition-colors duration-150 active:bg-well/60"
-                >
-                  {`Zobrazit ${Math.min(zbyva, DAVKA)} ${plural(Math.min(zbyva, DAVKA), 'další', 'další', 'dalších')}`}
-                  {zbyva > DAVKA && ` (zbývá ${zbyva})`}
-                </button>
-              )}
-
-              {done.length > 0 && (
-                <>
-                  <button
-                    onClick={prepniHotovo}
-                    aria-expanded={hotovoOpen}
-                    className="flex w-full items-center justify-between gap-2 border-t border-line px-4 py-2.5 text-left transition-colors duration-150 active:bg-well/60"
-                  >
-                    <span className="text-[13px] font-medium text-ink-soft first-letter:uppercase">hotovo · {done.length}</span>
-                    <svg
-                      viewBox="0 0 24 24"
-                      className={`h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 ${hotovoOpen ? 'rotate-90' : ''}`}
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M9 6l6 6-6 6" />
-                    </svg>
-                  </button>
-                  <DisclosureContent open={hotovoOpen}>
-                    <ul className="divide-y divide-line border-t border-line">{done.map((t) => row(t))}</ul>
-                  </DisclosureContent>
-                </>
-              )}
-            </div>
-
-            {gestureTip && (
-              <p className="mt-2 flex items-start gap-2 px-1 text-[12px] text-ink-faint">
-                <span className="min-w-0 flex-1">
-                  Přejeď po úkolu doprava = hotovo, doleva = odložit na zítra.
-                </span>
-                <button aria-label="Skrýt tip" onClick={dismissTip} className="-m-2 shrink-0 p-2 transition-transform duration-150 active:scale-90">
-                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                    <path d="M6 6l12 12M18 6L6 18" />
-                  </svg>
-                </button>
-              </p>
-            )}
-          </>
-        ) : (
-          // `nacteno` schválně až tady, ne kolem celé obrazovky: hlavička
-          // a dok musí naskočit hned, ať appka nezačíná prázdnou plochou.
-          nacteno && (
-            <>
-              {/* Prázdný dnešek neznamená, že není co rozhodnout — úkoly bez
-                  termínu na řadě by se jinak neukázaly právě v den, kdy je
-                  na ně čas. */}
-              {radkaProjit && <div className="seznam-na-papire mb-3">{radkaProjit}</div>}
-              <div className="relative overflow-hidden rounded-2xl bg-card px-5 py-8 text-center shadow-card">
-                {/* Ripple (magicui): klidná hladina za sluníčkem */}
-                <Ripple className="-translate-y-6" />
-                <svg viewBox="0 0 48 48" className="breathe relative mx-auto h-12 w-12 text-accent/70" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="24" cy="24" r="15" />
-                  <path d="M24 4v5M24 39v5M4 24h5M39 24h5M9.9 9.9l3.5 3.5M34.6 34.6l3.5 3.5M9.9 38.1l3.5-3.5M34.6 13.4l3.5-3.5" />
-                </svg>
-                <BlurText text={done.length > 0 ? 'Všechno hotovo' : 'Čistý stůl'} className="display relative mt-3 text-lg font-medium" />
-                <p className="mt-1 text-sm text-ink-soft">
-                  {done.length > 0 ? `${done.length} ${plural(done.length, 'úkol', 'úkoly', 'úkolů')} dnes odškrtnuto.` : 'Na dnešek nic neplánuješ.'}
-                </p>
-
-                {/* Učící prázdný stav: příklady se ťuknutím vloží do pole,
-                    takže se syntaxe rychlého zadávání naučí sama od sebe. */}
-                {open.length === 0 && done.length === 0 && (
+                // `nacteno` schválně až tady, ne kolem celé obrazovky: hlavička
+                // a dok musí naskočit hned, ať appka nezačíná prázdnou plochou.
+                nacteno && (
                   <>
-                    <p className="mt-4 text-[13px] font-medium text-ink-soft">Zkus napsat třeba:</p>
-                    <div className="mt-2 flex flex-col gap-1.5">
-                      {EXAMPLES.map((ex) => (
-                        <button
-                          key={ex}
-                          onClick={() => window.dispatchEvent(new CustomEvent('todo:prefill', { detail: ex }))}
-                          className="rounded-full bg-well px-3 py-2 text-[13px] text-ink transition-transform duration-150 active:scale-95"
-                        >
-                          „{ex}"
-                        </button>
-                      ))}
+                    {/* Prázdný dnešek neznamená, že není co rozhodnout — úkoly bez
+                        termínu na řadě by se jinak neukázaly právě v den, kdy je
+                        na ně čas. */}
+                    {radkaProjit && <div className="seznam-na-papire mb-3">{radkaProjit}</div>}
+                    <div className="relative overflow-hidden rounded-2xl bg-card px-5 py-8 text-center shadow-card">
+                      {/* Ripple (magicui): klidná hladina za sluníčkem */}
+                      <Ripple className="-translate-y-6" />
+                      <svg viewBox="0 0 48 48" className="breathe relative mx-auto h-12 w-12 text-accent/70" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="24" cy="24" r="15" />
+                        <path d="M24 4v5M24 39v5M4 24h5M39 24h5M9.9 9.9l3.5 3.5M34.6 34.6l3.5 3.5M9.9 38.1l3.5-3.5M34.6 13.4l3.5-3.5" />
+                      </svg>
+                      <BlurText text={done.length > 0 ? 'Všechno hotovo' : 'Čistý stůl'} className="display relative mt-3 text-lg font-medium" />
+                      <p className="mt-1 text-sm text-ink-soft">
+                        {done.length > 0 ? `${done.length} ${plural(done.length, 'úkol', 'úkoly', 'úkolů')} dnes odškrtnuto.` : 'Na dnešek nic neplánuješ.'}
+                      </p>
+
+                      {/* Učící prázdný stav: příklady se ťuknutím vloží do pole,
+                          takže se syntaxe rychlého zadávání naučí sama od sebe. */}
+                      {open.length === 0 && done.length === 0 && (
+                        <>
+                          <p className="mt-4 text-[13px] font-medium text-ink-soft">Zkus napsat třeba:</p>
+                          <div className="mt-2 flex flex-col gap-1.5">
+                            {EXAMPLES.map((ex) => (
+                              <button
+                                key={ex}
+                                onClick={() => window.dispatchEvent(new CustomEvent('todo:prefill', { detail: ex }))}
+                                className="rounded-full bg-well px-3 py-2 text-[13px] text-ink transition-transform duration-150 active:scale-95"
+                              >
+                                „{ex}"
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+
+                      <button
+                        onClick={() => setHelpOpen(true)}
+                        className="mt-4 text-[13px] font-medium text-accent-deep transition-transform duration-150 active:scale-95"
+                      >
+                        Jak to funguje
+                      </button>
                     </div>
+
+                    {done.length > 0 && (
+                      <div className="mt-3 overflow-hidden rounded-2xl bg-card shadow-card">
+                        <button
+                          onClick={prepniHotovo}
+                          aria-expanded={hotovoOpen}
+                          className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition-colors duration-150 active:bg-well/60"
+                        >
+                          <span className="text-[13px] font-medium text-ink-soft first-letter:uppercase">hotovo · {done.length}</span>
+                          <svg
+                            viewBox="0 0 24 24"
+                            className={`h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 ${hotovoOpen ? 'rotate-90' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M9 6l6 6-6 6" />
+                          </svg>
+                        </button>
+                        <DisclosureContent open={hotovoOpen}>
+                          <ul className="divide-y divide-line border-t border-line">{done.map((t) => row(t))}</ul>
+                        </DisclosureContent>
+                      </div>
+                    )}
                   </>
-                )}
-
-                <button
-                  onClick={() => setHelpOpen(true)}
-                  className="mt-4 text-[13px] font-medium text-accent-deep transition-transform duration-150 active:scale-95"
-                >
-                  Jak to funguje
-                </button>
-              </div>
-
-              {done.length > 0 && (
-                <div className="mt-3 overflow-hidden rounded-2xl bg-card shadow-card">
-                  <button
-                    onClick={prepniHotovo}
-                    aria-expanded={hotovoOpen}
-                    className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition-colors duration-150 active:bg-well/60"
-                  >
-                    <span className="text-[13px] font-medium text-ink-soft first-letter:uppercase">hotovo · {done.length}</span>
-                    <svg
-                      viewBox="0 0 24 24"
-                      className={`h-4 w-4 shrink-0 text-ink-faint transition-transform duration-200 ${hotovoOpen ? 'rotate-90' : ''}`}
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M9 6l6 6-6 6" />
-                    </svg>
-                  </button>
-                  <DisclosureContent open={hotovoOpen}>
-                    <ul className="divide-y divide-line border-t border-line">{done.map((t) => row(t))}</ul>
-                  </DisclosureContent>
-                </div>
+                )
               )}
-            </>
-          )
+            </section>
+          </>
         )}
-      </section>
+      </div>
 
       {navrhOpen && dayPlan && (
         <NavrhSheet
@@ -713,7 +779,7 @@ export function TodayView({
           nowMin={nowMin}
           restStart={restStart}
           today={today}
-          freeMin={freeMin !== null && restStart < WORK_END ? freeMin : null}
+          freeMin={freeMin !== null && restStart < konecPrace ? freeMin : null}
           onOpenTask={onOpenTask}
           onClose={() => setKalendarOpen(false)}
         />

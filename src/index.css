@@ -363,6 +363,39 @@ select {
   animation-delay: calc(var(--stagger, 0) * 35ms);
 }
 
+/* Listování dnů na Dnes (tah přes hlavičku): nový den přijede ze strany,
+   kam se listovalo — další zprava, předchozí zleva. Jen transform
+   a opacity, stejně jako všechno ostatní, co se tu hýbe. */
+@keyframes den-zprava {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes den-zleva {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.den-zprava {
+  animation: den-zprava 0.28s var(--ease-glide) both;
+}
+
+.den-zleva {
+  animation: den-zleva 0.28s var(--ease-glide) both;
+}
+
 /* Kaskáda řádků uvnitř seskupeného seznamu: každý další řádek přijede
    o chlup později, takže se seznam „rozvine" místo skokového objevení.
    Index nejde v CSS spočítat, proto pevná řada pro prvních osm řádků —
@@ -974,6 +1007,8 @@ body:has(.sheet-backdrop:not(.closing)) .app-shell {
 
 @media (prefers-reduced-motion: reduce) {
   .rise,
+  .den-zprava,
+  .den-zleva,
   .ripple,
   .tip,
   .pop,

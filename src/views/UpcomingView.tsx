@@ -35,6 +35,7 @@ import {
   updateTask,
 } from '../db/repo'
 import { jePreplneno, popisPreplneneho } from '../lib/kapacitaDne'
+import { poznamkaKSobote, vetaSabatu } from '../lib/sabat'
 import { useOsobniStrop } from '../lib/prutok'
 import { nalozPoDnech, volnejsiDen } from '../lib/volnyDen'
 import { addDays, formatDayLabel, formatEventRange, formatFullDate, formatFullDateNa, fromISODate, mondayOf, toISODate, todayISO } from '../lib/dates'
@@ -292,9 +293,11 @@ export function UpcomingView({
    */
   const stropDne = useCallback(
     (iso: string, t: Task): { text: string; akce: ToastAkce } | undefined => {
-      if (strop === undefined) return undefined
+      // Sobota je šabat až do západu slunce (`src/lib/sabat.ts`): práce na
+      // ni smí, ale jen večer — appka to řekne hned, ne až v sobotu ráno.
+      const sabat = poznamkaKSobote(iso)
       const pocet = (naloz.get(iso)?.ukoly ?? 0) + 1
-      if (!jePreplneno(pocet, strop)) return undefined
+      if (!sabat && (strop === undefined || !jePreplneno(pocet, strop))) return undefined
       const od = toISODate(addDays(fromISODate(iso), 1))
       const doDne = toISODate(addDays(fromISODate(iso), OKNO_JINAM))
       const jinam = volnejsiDen(nalozPoDnech(open, events, od, doDne, today), od, OKNO_JINAM)
@@ -302,7 +305,7 @@ export function UpcomingView({
         // Krátký popisek dne („so 12. 9."), ne „sobota 12. září": toast
         // má `max-w-48` a delší věta se v něm ořízne — hlášku, kterou
         // není vidět celou, je zbytečné psát.
-        text: popisPreplneneho(formatDayLabel(iso), pocet, strop),
+        text: sabat ? `${formatDayLabel(iso)} · ${sabat}` : popisPreplneneho(formatDayLabel(iso), pocet, strop!),
         akce: {
           popisek: 'Jinam',
           kdyz: () => {
@@ -465,6 +468,8 @@ export function UpcomingView({
             )}
           </span>
         </div>
+        {/* Pátek a sobota: kdy začíná a končí šabat. */}
+        {vetaSabatu(vybrany) && <p className="text-[13px] text-ink-soft first-letter:uppercase">{vetaSabatu(vybrany)}</p>}
         {/* Pruh přes celou šířku: v mřížce je ten samý obrázek v malém. */}
         <PruhDne dily={denNaloz?.dily ?? []} klid={klid} strop={strop} />
 

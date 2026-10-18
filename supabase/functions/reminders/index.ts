@@ -10,6 +10,15 @@
 //   shutdown   — podvečer ve všední den; připomene zbylé úkoly a uzávěrku
 //   review   — v neděli večer; pozvánka na týdenní ohlédnutí
 //
+// Šabat (od pátečního do sobotního západu slunce, `sabat.ts`): v té době
+// se neposílá nic, žádného druhu. Páteční uzávěrka proto nesmí přijít až
+// po západu — v zimě zapadá kolem čtvrté a běžná uzávěrka (15:30 UTC)
+// by spadla do šabatu a tiše propadla. V pátek ji posílá vlastní cron
+// úloha `reminders-shutdown-patek` (každou čtvrthodinu 14–15 UTC,
+// parametr `patek=1`): odejde v té čtvrthodině, kam padne běžný čas,
+// nejpozději ale hodinu před západem (`patecniUzaverka`). Běžná úloha
+// v pátek mlčí, takže uzávěrka přijde právě jednou.
+//
 // Proč server: iOS webovým appkám nedovolí naplánovat notifikaci lokálně,
 // takže všechno časované musí přijít pushem zvenčí.
 //
@@ -23,6 +32,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import * as webpush from 'jsr:@negrel/webpush@0.3'
+import { denVTydnu, jeSabat, patecniUzaverka } from './sabat.ts'
 
 type Rec = Record<string, unknown>
 
@@ -71,9 +81,22 @@ interface Payload {
 }
 
 Deno.serve(async (req) => {
-  const kind = new URL(req.url).searchParams.get('kind') ?? 'due'
+  const url = new URL(req.url)
+  const kind = url.searchParams.get('kind') ?? 'due'
   if (!['due', 'checkpoint', 'shutdown', 'review'].includes(kind)) {
     return Response.json({ error: 'neznámý kind' }, { status: 400 })
+  }
+
+  const dnes = pragueToday()
+  const ted = Date.now()
+  if (jeSabat(dnes, ted)) return Response.json({ kind, sent: 0, sabat: true })
+  if (kind === 'shutdown' && denVTydnu(dnes) === 5) {
+    // Pátek: jen páteční úloha, a jen v té čtvrthodině, kam padne cíl.
+    const ctvrthodina = (ms: number) => Math.floor(ms / 900_000)
+    const cil = patecniUzaverka(dnes, Date.parse(`${dnes}T15:30:00Z`))
+    if (url.searchParams.get('patek') !== '1' || ctvrthodina(ted) !== ctvrthodina(cil)) {
+      return Response.json({ kind, sent: 0, patek: true })
+    }
   }
 
   const admin = createClient(

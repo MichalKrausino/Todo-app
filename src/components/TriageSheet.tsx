@@ -52,6 +52,7 @@ import { jeOdkladanySlib, jeParkovany, popisOdkladu } from '../lib/odkladani'
 import { addDays, formatDayLabel, formatDaysAgo, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { useNaloz, volnejsiDen } from '../lib/volnyDen'
 import { PAUZA_DNI, jeBezTerminu } from '../lib/projitBezTerminu'
+import { poznamkaKSobote } from '../lib/sabat'
 import { plural } from '../lib/labels'
 import { MonthPicker } from './MonthPicker'
 import { Sheet } from './Sheet'
@@ -246,7 +247,11 @@ export function TriageSheet({
                     className="flex-1 rounded-xl bg-card py-2.5 shadow-card transition-transform duration-150 active:scale-[0.98]"
                   >
                     <span className="block text-[15px] font-medium text-ink">Zítra</span>
-                    <span className="block text-[13px] text-ink-soft">{popisDne(zitra)}</span>
+                    {/* V pátek je zítra šabat — „Zítra" zůstává doslovné, jen to řekne. */}
+                    <span className="block text-[13px] text-ink-soft">
+                      {popisDne(zitra)}
+                      {poznamkaKSobote(zitra) && ` · ${poznamkaKSobote(zitra)}`}
+                    </span>
                   </button>
                   <button
                     onClick={() => odpovez('volny')}

@@ -14,6 +14,10 @@
 --   reminders-shutdown   30 15 * * 1-5     → 17:30 v pracovní dny
 --   reminders-review     0 16 * * 0        → 18:00 v neděli
 --   morning-plan         0 5 * * *         → 7:00 (ranní návrh dne, už běží)
+--
+-- Šabat (od pátečního do sobotního západu slunce): v pátek posílá uzávěrku
+-- vlastní úloha `reminders-shutdown-patek` a ranní návrh v sobotu neběží —
+-- obojí nastavuje `supabase/sabat.sql` (spustit až po tomhle souboru).
 
 -- ===========================================================================
 -- A) Rovnou s klíčem v příkazu

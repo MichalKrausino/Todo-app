@@ -13,7 +13,7 @@
 // zmizí na všech zařízeních naráz běžnou synchronizací.
 
 import type { Priority, Subtask, Task, ZadaniUkolu } from '../db/types'
-import type { Navrh } from '../../supabase/functions/zpresni/navrh'
+import type { Navrh } from './zpresneniNavrh'
 import { sPridanym } from './sdileniUkolu'
 
 export type { Navrh }
