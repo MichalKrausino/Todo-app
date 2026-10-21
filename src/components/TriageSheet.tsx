@@ -41,9 +41,9 @@
 // dní bez termínu a nikde se neozval — chip je nabídka, kterou si člověk
 // musí sám vzpomenout otevřít, a ranní návrh se skoro nečte. „Projít" je
 // to, co se opravdu dělá, takže za propadlými přijdou VŠECHNY úkoly bez
-// dne (`src/lib/projitBezTerminu.ts`; jen prošlý má týden pokoj). Odpovědi se řídí KAŽDÝM ÚKOLEM ZVLÁŠŤ (`bezDne`), ne celým
+// dne (`src/lib/projitBezTerminu.ts`; jen o čem jsem dnes rozhodl, přijde zítra). Odpovědi se řídí KAŽDÝM ÚKOLEM ZVLÁŠŤ (`bezDne`), ne celým
 // panelem: propadlý má „Přeskočit" a značku odkládání, úkol bez dne
-// „Nechat bez termínu", které ho na ten týden uloží (`prohlednuto`).
+// „Nechat bez termínu", které ho uloží do zítřka (`prohlednuto`).
 
 import { useState } from 'react'
 import type { Client, Task } from '../db/types'
@@ -51,7 +51,7 @@ import { sortTasks, updateTask } from '../db/repo'
 import { jeOdkladanySlib, jeParkovany, popisOdkladu } from '../lib/odkladani'
 import { addDays, formatDayLabel, formatDaysAgo, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { useNaloz, volnejsiDen } from '../lib/volnyDen'
-import { PAUZA_DNI, jeBezTerminu } from '../lib/projitBezTerminu'
+import { jeBezTerminu } from '../lib/projitBezTerminu'
 import { poznamkaKSobote } from '../lib/sabat'
 import { plural } from '../lib/labels'
 import { MonthPicker } from './MonthPicker'
@@ -136,7 +136,6 @@ export function TriageSheet({
   // Zátěž je živá, takže každý odložený úkol posune volbu dalšímu.
   const naloz = useNaloz()
   const volny = volnejsiDen(naloz, zitra, 7)
-  const navrat = toISODate(addDays(fromISODate(dnes), PAUZA_DNI))
 
   const odpovez = (odpoved: Odpoved, den?: string) => {
     if (!task) return
@@ -158,9 +157,9 @@ export function TriageSheet({
     // inbox je „ještě nezpracované" a tenhle úkol člověk zpracoval
     // právě teď — rozhodl, že datum nemá. Zůstává rozdělaný, jen bez dne.
     // Razítko `prohlednuto`: o datu se právě rozhodlo, tak ať se úkol
-    // nevrací do průchodu hned zítra jako „bez termínu".
+    // nevrací do průchodu ještě dnes jako „bez termínu" (zítra už ano).
     if (odpoved === 'bezdata') void updateTask(task.id, { dueDate: undefined, scheduledFor: undefined, prohlednuto: dnes })
-    // Nechat bez termínu = viděl jsem, teď ne. Týden pokoj, pak se vrátí.
+    // Nechat bez termínu = viděl jsem, dnes ne. Zítra je v průchodu zase.
     if (odpoved === 'nechano') void updateTask(task.id, { prohlednuto: dnes })
     setHotovo((h) => [...h, { task, odpoved, pred }])
   }
@@ -275,8 +274,8 @@ export function TriageSheet({
                 {bezDne && (
                   <button onClick={() => odpovez('nechano')} className={tlacitko}>
                     <span className="block text-[15px] font-medium text-ink">Nechat bez termínu</span>
-                    {/* Pauza má den konce, který je vidět — odložení není zapomenutí. */}
-                    <span className="block text-[13px] text-ink-soft">sem se vrátí {popisDne(navrat)}</span>
+                    {/* Kdy se vrátí, je vidět — odložení není zapomenutí. */}
+                    <span className="block text-[13px] text-ink-soft">sem se vrátí zítra</span>
                   </button>
                 )}
                 {/* Úkol bez termínu, který se posouvá pořád dokola, není
