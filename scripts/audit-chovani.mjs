@@ -1155,11 +1155,18 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   const page = await ctx.newPage()
   await page.goto('http://localhost:4194/Todo-app/',{waitUntil:'networkidle'}); await page.waitForTimeout(600)
 
-  // Den, na který se sype: o tři dny dál a jistě v zobrazeném měsíci
-  // (u konce měsíce se couvne zpátky, ať se nemusí listovat).
+  // Den, na který se sype: zhruba o tři dny dál a jistě v zobrazeném
+  // měsíci (ať se nemusí listovat). Sobota ani neděle to být nesmí: na
+  // sobotu hlásí toast šabat (ten má přednost před stropem) a den před
+  // cílem slouží jako volný — padl-li by na sobotu, ozval by se taky.
+  // Dokud se bral prostě „+3", spadl audit každou středu.
   const cil = await page.evaluate(() => {
-    const d = new Date(); d.setDate(d.getDate() + 3)
-    if (d.getMonth() !== new Date().getMonth()) { d.setTime(Date.now()); d.setDate(d.getDate() + 1) }
+    for (const o of [3, 4, 2, 5, 1, 6]) {
+      const d = new Date(); d.setDate(d.getDate() + o)
+      if (d.getMonth() !== new Date().getMonth() || d.getDay() === 6 || d.getDay() === 0) continue
+      return d.toISOString().slice(0, 10)
+    }
+    const d = new Date(); d.setDate(d.getDate() + 1)
     return d.toISOString().slice(0, 10)
   })
   const volny = await page.evaluate((c) => {
@@ -1905,8 +1912,9 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
 // „Bez termínu" si člověk musí sám vzpomenout otevřít a ranní návrh se
 // skoro nečte (otevřený 2 rána z 20). Teď za propadlými jedou VŠECHNY
 // úkoly bez dne (`bezTerminuKProjiti`, i ten zapsaný dnes — Michalova
-// volba), „Nechat bez termínu" jim dá týden pokoj a řádka „Projít" stojí
-// i nad prázdným dneškem.
+// volba), „Nechat bez termínu" je pustí jen do zítřka a řádka „Projít"
+// stojí i nad prázdným dneškem. Dřív platilo „Nechat" týden — a jediný
+// úkol bez termínu se na skutečných datech pět dní neukázal nikde.
 {
   const ctx = await b.newContext({viewport:{width:390,height:844}})
   const page = await ctx.newPage()
@@ -1944,38 +1952,43 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await zasej([
     { id: 'prop', createdAt: pred(9), updatedAt: pred(9), title: 'Propadlý report', priority: 'normal', status: 'active', order: 0, dueDate: dny.propadlo },
     { id: 'disk', createdAt: pred(17), updatedAt: pred(13), title: 'Dát přístup na Google disk se soubory', priority: 'normal', status: 'active', order: 1 },
-    // prošlý předevčírem: má týden pokoj
-    { id: 'prosly', createdAt: pred(30), updatedAt: pred(2), title: 'Už jednou prošlý', priority: 'high', status: 'active', order: 2, prohlednuto: dny.predDvema },
+    // nechaný dnes: dnes už ne (rozhodl jsem o něm), zítra zase
+    { id: 'prosly', createdAt: pred(30), updatedAt: pred(0), title: 'Dnes už prošlý', priority: 'high', status: 'active', order: 2, prohlednuto: dny.dnes },
+    // nechaný předevčírem: je v průchodu zase — dřív by měl týden pokoj
+    { id: 'predevcirem', createdAt: pred(30), updatedAt: pred(2), title: 'Nechaný předevčírem', priority: 'normal', status: 'active', order: 4, prohlednuto: dny.predDvema },
     // zapsaný dnes: jde do průchodu taky, jen za tím, kdo čeká déle
     { id: 'cerstvy', createdAt: pred(0), updatedAt: pred(0), title: 'Dnes zapsaný nápad', priority: 'normal', status: 'inbox', order: 3 },
   ])
   await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
   const r1 = await radka()
-  T_(r1 !== null && /po termínu · 1/i.test(r1) && /\+ 2 bez termínu/.test(r1),
+  T_(r1 !== null && /po termínu · 1/i.test(r1) && /\+ 3 bez termínu/.test(r1),
      'řádka „Projít" řekne i o úkolech bez termínu, které jsou na řadě (' + r1 + ')')
 
   await page.getByRole('button', { name: /Projít/ }).click(); await page.waitForTimeout(800)
   const pocet = await panel.locator('header span').first().textContent().catch(() => '')
-  T_(/1 \/ 3/.test(pocet ?? ''), 've frontě je propadlý a všechny úkoly bez termínu i dnešní — jen nedávno prošlý ne (' + pocet + ')')
+  T_(/1 \/ 4/.test(pocet ?? ''), 've frontě je propadlý a všechny úkoly bez termínu i dnešní — jen ten, o kterém jsem rozhodl dnes, ne (' + pocet + ')')
   await panel.getByRole('button', { name: /^Zítra/ }).click(); await page.waitForTimeout(600)
   const nazev = await panel.locator('p.display').first().textContent().catch(() => '')
   T_(/Google disk/.test(nazev ?? ''), 'za propadlým přijde úkol, který 17 dní nikdo neviděl (' + nazev + ')')
   const popis = await panel.innerText()
   T_(/Bez termínu · zapsáno před 17 dny/.test(popis), 'karta řekne, že je bez termínu a jak dlouho leží')
   const tlacitka = (await panel.locator('button').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim())
-  T_(tlacitka.some((t) => /^Nechat bez termínu sem se vrátí/.test(t)) && !tlacitka.includes('Přeskočit'),
-     'úkol bez dne dostane „Nechat bez termínu" i s dnem návratu, ne „Přeskočit"')
+  T_(tlacitka.some((t) => /^Nechat bez termínu sem se vrátí zítra/.test(t)) && !tlacitka.includes('Přeskočit'),
+     'úkol bez dne dostane „Nechat bez termínu" i s návratem zítra, ne „Přeskočit"')
   T_(tlacitka.some((t) => /^Vybrat termín/.test(t)), 'a může dostat i vlastní termín')
 
   await panel.getByRole('button', { name: /^Nechat bez termínu/ }).click(); await page.waitForTimeout(700)
   const disk = await ukol('disk')
   T_(disk.prohlednuto === dny.dnes && disk.due === null && disk.sched === null,
      '„Nechat bez termínu" úkol nechá bez data, jen si zapamatuje, že ho dnes viděl (' + JSON.stringify(disk) + ')')
+  const zase = await panel.locator('p.display').first().textContent().catch(() => '')
+  T_(/Nechaný předevčírem/.test(zase ?? ''), 'úkol nechaný předevčírem je v průchodu zase — týden ticha byl zapomenutí (' + zase + ')')
+  await panel.getByRole('button', { name: /^Nechat bez termínu/ }).click(); await page.waitForTimeout(700)
   const dalsi = await panel.locator('p.display').first().textContent().catch(() => '')
   T_(/Dnes zapsaný/.test(dalsi ?? ''), 'i úkol zapsaný dnes přijde na řadu, za tím, kdo čeká déle (' + dalsi + ')')
   await panel.getByRole('button', { name: /^Nechat bez termínu/ }).click(); await page.waitForTimeout(700)
   await panel.getByRole('button', { name: 'Hotovo' }).click(); await page.waitForTimeout(700)
-  T_(await radka() === null, 'po průchodu řádka zmizí — prošlé úkoly mají týden pokoj')
+  T_(await radka() === null, 'po průchodu řádka zmizí — o čem jsem dnes rozhodl, přijde až zítra')
   await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900)
   T_(await radka() === null, 'a nevrátí se ani po znovunačtení')
 

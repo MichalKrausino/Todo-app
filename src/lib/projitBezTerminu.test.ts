@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Task } from '../db/types'
-import { PAUZA_DNI, bezTerminuKProjiti } from './projitBezTerminu'
+import { bezTerminuKProjiti } from './projitBezTerminu'
 
 const DNES = '2026-10-13'
 const u = (id: string, o: Partial<Task> = {}): Task => ({
@@ -30,18 +30,16 @@ describe('bezTerminuKProjiti', () => {
     expect(ids(bezTerminuKProjiti([u('dnes', { createdAt: `${DNES}T08:00:00` })], DNES))).toEqual(['dnes'])
   })
 
-  it('prošel jsem ho a nechal bez termínu → týden pokoj, pak se vrátí', () => {
+  // Týden ticha byl zapomenutí: jediný úkol bez termínu se na skutečných
+  // datech pět dní neukázal nikde. Dnes rozhodnuto = dnes klid, zítra zpátky.
+  it('nechaný bez termínu se dnes nevrací, zítra je v průchodu zase', () => {
     const t = u('a', { prohlednuto: DNES })
     expect(bezTerminuKProjiti([t], DNES)).toEqual([])
-    expect(bezTerminuKProjiti([t], '2026-10-19')).toEqual([])
-    expect(ids(bezTerminuKProjiti([t], '2026-10-20'))).toEqual(['a'])
-    expect(PAUZA_DNI).toBe(7)
+    expect(ids(bezTerminuKProjiti([t], '2026-10-14'))).toEqual(['a'])
   })
 
-  it('odpočívá z ranního návrhu → neozve se před slíbeným dnem', () => {
-    const odpociva = new Map([['a', '2026-10-16']])
-    expect(bezTerminuKProjiti([u('a')], DNES, odpociva)).toEqual([])
-    expect(ids(bezTerminuKProjiti([u('a')], '2026-10-16', odpociva))).toEqual(['a'])
+  it('nechaný před pěti dny je v průchodu (dřív týden pokoj)', () => {
+    expect(ids(bezTerminuKProjiti([u('benovi', { prohlednuto: '2026-10-08' })], DNES))).toEqual(['benovi'])
   })
 
   it('hotové, zahozené, smazané a dnes připnuté ne', () => {

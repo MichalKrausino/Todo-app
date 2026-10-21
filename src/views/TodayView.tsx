@@ -337,7 +337,7 @@ export function TodayView({
   // kromě těch, které jsem nedávno nechal bez termínu
   // (`src/lib/projitBezTerminu.ts`). Bez nich se úkol bez dne neozval
   // nikde: na skutečných datech jeden ležel 17 dní a nikdo ho neviděl.
-  const kProjiti = useMemo(() => bezTerminuKProjiti(inbox, today, pamet.odpociva), [inbox, today, pamet.odpociva])
+  const kProjiti = useMemo(() => bezTerminuKProjiti(inbox, today), [inbox, today])
   const fronta = useMemo(() => [...visOverdue, ...kProjiti], [visOverdue, kProjiti])
   const otevrene = poradi.length
   const viditelne = useMemo(() => poradi.slice(0, limit), [poradi, limit])

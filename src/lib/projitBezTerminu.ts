@@ -14,28 +14,28 @@
 // „Projít" je přitom to, co člověk opravdu dělá — rozhoduje tam po jednom,
 // kam s čím. Tak ať tam chodí i práce bez dne, ne jen ta propadlá.
 //
-// PRAVIDLA — VŠECHNY ÚKOLY BEZ TERMÍNU (Michalova volba)
+// PRAVIDLA — VŠECHNY ÚKOLY BEZ TERMÍNU, KAŽDÝ DEN (Michalova volba)
 //
 // První verze jich brala nejvýš pět denně a zapsané dnes nechávala na
 // zítřek, aby z průchodu nebyla zeď. Michal to chce obráceně: v „Projít"
 // má být KAŽDÝ úkol bez termínu a on ho buď pošle na den, nebo nechá být.
-// Výjimky jsou jen dvě a obě jsou rozhodnutí, které už udělal sám:
 //
-// 1. Prošel jsem ho a nechal bez termínu (`prohlednuto`)? Pak má
-//    `PAUZA_DNI` pokoj a den návratu stojí pod tlačítkem. Bez toho by se
-//    týž seznam vracel hned po zavření průchodu a odpověď by nic neznamenala.
-// 2. Odpočívá z ranního návrhu („Volnější den", druhé „Dnes ne")? Pak se
-//    neozve před dnem, který mu appka slíbila — dva hlasy, z nichž jeden
-//    říká „až v pátek" a druhý „teď", jsou appka, která si protiřečí.
+// Druhá verze ještě nechávala „Nechat bez termínu" platit TÝDEN a mlčela
+// i o úkolech, které odpočívaly z ranního návrhu. Na skutečných datech
+// to znamenalo, že jediný úkol bez termínu („Napsat Benovi jak to je
+// s platbou bez DPH…", nechaný 16. 10.) se pět dní neukázal nikde —
+// a Michal to řekl přesně: „takhle si na ty úkoly nikdy nevzpomenu".
+// Týden ticha je zapomenutí, ne pauza. Teď proto platí jediné pravidlo:
+//
+// O úkolu jsem DNES rozhodl („Nechat bez termínu", „Bez data" —
+// `prohlednuto` je dnešek)? Pak se dnes nevrací, ať se týž úkol neobjeví
+// znovu hned po zavření průchodu. ZÍTRA je v průchodu zase.
 //
 // Úkol připnutý na dnešek už na dnešku je, ten se neptá. Pořadí:
 // nejdůležitější a nejdéle neviděné první.
 
 import type { Priority, Task } from '../db/types'
 import { daysSince } from './dates'
-
-/** Kolik dní má pokoj úkol, který jsem prošel a nechal bez termínu. */
-export const PAUZA_DNI = 7
 
 const VAHA: Record<Priority, number> = { critical: 3, high: 2, normal: 1, low: 0 }
 
@@ -46,18 +46,12 @@ export function jeBezTerminu(t: Pick<Task, 'dueDate' | 'scheduledFor'>): boolean
   return !t.dueDate && !t.scheduledFor
 }
 
-export function bezTerminuKProjiti(
-  ukoly: readonly Task[],
-  dnes: string,
-  odpociva: ReadonlyMap<string, string> = new Map(),
-): Task[] {
+export function bezTerminuKProjiti(ukoly: readonly Task[], dnes: string): Task[] {
   return ukoly
     .filter((t) => {
       if (t.deletedAt || (t.status !== 'active' && t.status !== 'inbox')) return false
       if (!jeBezTerminu(t) || t.pinnedFor === dnes) return false
-      if (t.prohlednuto && daysSince(t.prohlednuto, dnes) < PAUZA_DNI) return false
-      const doKdy = odpociva.get(t.id)
-      return !(doKdy && doKdy > dnes)
+      return t.prohlednuto !== dnes
     })
     .sort(
       (a, b) =>
