@@ -9,7 +9,7 @@
 // se podle hodin ještě spousta věcí vešla.
 
 import type { Client, Project, Task } from '../db/types'
-import { addDays, fromISODate, mondayOf, toISODate } from './dates'
+import { addDays, fromISODate, mistniDen, mondayOf, toISODate } from './dates'
 import { osobniPrutok, stropZPrutoku, type Prutok } from './prutok'
 import { jeOdkladanySlib, vetaOOdkladani } from './odkladani'
 
@@ -68,7 +68,7 @@ export function computeWeekStats(
   const live = tasks.filter((t) => !t.deletedAt)
 
   const completed = live.filter((t) => {
-    const day = t.completedAt?.slice(0, 10)
+    const day = mistniDen(t.completedAt)
     return t.status === 'done' && day && day >= weekStart && day <= weekEnd
   })
 
@@ -115,7 +115,7 @@ export function computeWeekStats(
       !c.deletedAt &&
       c.status === 'active' &&
       c.kind === 'client' &&
-      c.createdAt.slice(0, 10) < weekStart &&
+      mistniDen(c.createdAt) < weekStart &&
       !completedClientIds.has(c.id),
   )
 

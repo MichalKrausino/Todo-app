@@ -73,7 +73,24 @@ function Karta({
     await db.navrhy.delete(task.id)
   }
 
-  if (!platne.length) return null
+  // Nic platného nezbylo (třeba jediná změna byla „Předat" člověku, který
+  // u tohohle klienta není, nebo je appka offline a seznam lidí nedošel).
+  // Karta se přesto ukáže s „Nechat být": dřív vrátila `null`, panel stál
+  // prázdný bez jediného tlačítka a chip „Zpřesnit · 1" nešel nikdy
+  // vyřídit — návrh smaže až odpověď.
+  if (!platne.length) {
+    return (
+      <li className="space-y-2 px-4 py-3" data-zpresneni={task.id}>
+        <p className="text-[13px] leading-snug text-ink-soft">„{task.zadani?.text}“</p>
+        <p className="text-[15px] leading-snug text-ink-soft">Z návrhu tu teď nic použít nejde.</p>
+        <div className="flex items-center gap-2 pt-1">
+          <Button size="sm" variant="secondary" onClick={() => void hotovo([])}>
+            Nechat být
+          </Button>
+        </div>
+      </li>
+    )
+  }
   return (
     <li className="space-y-2 px-4 py-3" data-zpresneni={task.id}>
       <p className="text-[13px] leading-snug text-ink-soft">„{task.zadani?.text}“</p>

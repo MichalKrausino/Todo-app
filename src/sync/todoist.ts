@@ -106,8 +106,13 @@ export async function checkTodoistLinked(): Promise<boolean> {
   const sb = getSupabase()
   if (!sb) return false
   const { data, error } = await sb.rpc('has_todoist_token')
-  const linked = !error && Boolean(data)
-  setStatus({ linked })
+  // Selhaný dotaz je „nevím", ne „nepropojeno" — stav zůstane, jak byl,
+  // a příští obnova se zeptá znovu.
+  if (error) return false
+  const linked = Boolean(data)
+  // Bez tokenu není co hlásit: stará chyba ze stažení („Todoist není
+  // propojený") by jen opakovala to, co říká formulář pro propojení.
+  setStatus(linked ? { linked } : { linked, lastError: undefined })
   return linked
 }
 
@@ -176,7 +181,9 @@ export function initTodoist(): void {
   onRepoWrite(() => {
     clearTimeout(pushTimer)
     pushTimer = setTimeout(() => {
-      if (!navigator.onLine || !getSupabase()) return
+      // Bez tokenu by každý zápis jen vyrobil chybu na serveru; co čeká,
+      // odejde s první obnovou po propojení (ta začíná odesláním).
+      if (!navigator.onLine || !getSupabase() || !status.linked) return
       void pushNewTasks()
       void pushTodoistEdits()
     }, 2500)
@@ -195,10 +202,6 @@ export function initTodoist(): void {
 // (src/sync/live.ts) i návrat do popředí.
 export async function maybeRefreshTodoist(): Promise<void> {
   if (Date.now() - lastFetchAt < REFRESH_MIN_INTERVAL_MS) return
-  // Dřív stačilo koukat na napojené klienty. Teď chodí i úkoly přiřazené
-  // mně osobně z nespárovaných projektů, takže bez klientů je potřeba
-  // aspoň vědět, jestli vůbec máme token — jinak by se nestáhlo nic.
-  if (status.linked === undefined) await checkTodoistLinked()
   await refreshTodoist()
 }
 
@@ -211,11 +214,22 @@ async function linkedClients(): Promise<Client[]> {
 export async function refreshTodoist(force = false): Promise<void> {
   if (refreshing || !navigator.onLine || !getSupabase()) return
   if (force) lastFetchAt = 0
+  // Bez tokenu není koho se ptát — a to ani tehdy, když u klienta zůstalo
+  // spárování z doby, kdy Todoist propojený byl. Dřív stačil spárovaný
+  // klient, takže appka po odpojení volala Todoist dál každých pět minut
+  // a server pokaždé odpověděl chybou „Todoist není propojený" (změřeno:
+  // všechna volání za den skončila 500). Spárování se nemaže, ať se po
+  // novém propojení nemusí párovat znovu; nepropojený stav se ověřuje
+  // levným dotazem na každé obnově, aby propojení z jiného zařízení
+  // nezůstalo bez povšimnutí. Razítko obnovy padá i na ten dotaz, jinak
+  // by ho plánovač posílal každých 30 s.
+  if (!status.linked) {
+    lastFetchAt = Date.now()
+    if (!(await checkTodoistLinked())) return
+  }
   // Napojení klienti nejsou podmínka: úkoly přiřazené mně osobně chodí
-  // i z projektů, které v appce nemám spárované. Bez tokenu ovšem není
-  // koho se ptát.
+  // i z projektů, které v appce nemám spárované.
   const clients = await linkedClients()
-  if (clients.length === 0 && !getTodoistStatus().linked) return
 
   const clientOf = new Map<string, string>() // todoist projekt → náš klient
   for (const c of clients) for (const pid of c.todoistProjectIds ?? []) clientOf.set(pid, c.id)

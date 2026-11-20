@@ -70,6 +70,17 @@ describe('ruleFromPreset / presetFromRule', () => {
   it('týdenní předvolba si vezme den z termínu', () => {
     expect(ruleFromPreset('weekly', '2026-07-31')).toBe('FREQ=WEEKLY;BYDAY=FR')
   })
+
+  it('„Měsíčně" z termínu 29.–31. nevynechá únor ani krátké měsíce', () => {
+    // Dřív BYMONTHDAY=31: faktura s termínem 31. 1. se po odškrtnutí
+    // objevila až 31. 3. a mřížka 1–28 v detailu to neuměla ukázat.
+    const rule = ruleFromPreset('monthly', '2027-01-31')
+    expect(rule).toBe('FREQ=MONTHLY;BYMONTHDAY=28')
+    expect(nextOccurrence(rule, '2027-01-31', '2027-01-31')).toBe('2027-02-28')
+    expect(ruleFromPreset('quarterly', '2026-11-30')).toBe('FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=28')
+    expect(ruleFromPreset('yearly', '2028-02-29')).toBe('FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=28')
+    expect(ruleFromPreset('yearly', '2026-12-31')).toBe('FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=31')
+  })
 })
 
 describe('humanizeRule', () => {

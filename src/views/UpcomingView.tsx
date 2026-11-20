@@ -309,7 +309,9 @@ export function UpcomingView({
         akce: {
           popisek: 'Jinam',
           kdyz: () => {
-            void updateTask(t.id, { dueDate: jinam })
+            // Den vybrala appka chvíli po zařazení — to není odklad, který by
+            // měl úkol nést jako značku „odloženo 1×".
+            void updateTask(t.id, { dueDate: jinam, postponeCount: t.postponeCount })
             ukazToast(`${nazevDne(jinam)} — „${t.title}"`)
           },
         },

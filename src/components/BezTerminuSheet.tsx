@@ -62,7 +62,10 @@ export function BezTerminuSheet({
       {
         popisek: 'Zpět',
         kdyz: () => {
-          void updateTask(t.id, { dueDate: undefined, status: 'inbox' })
+          // Zpátky do stavu, ve kterém byl: úkol vědomě nechaný bez data
+          // („Bez data" v triáži) je rozdělaný, ne v inboxu — dřív se
+          // vracel vždycky do inboxu, tedy mezi „ještě nezpracované".
+          void updateTask(t.id, { dueDate: t.dueDate, status: t.status, postponeCount: t.postponeCount })
           setPoslane((s) => {
             const n = new Set(s)
             n.delete(t.id)

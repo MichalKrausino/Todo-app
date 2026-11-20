@@ -980,6 +980,22 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   })
   T_(vedleSebe !== null && vedleSebe.prekryv <= 0 && vedleSebe.seznam > 300,
      'seznam zůstane vidět vedle detailu (překryv ' + (vedleSebe?.prekryv ?? '?') + ' px, seznam ' + (vedleSebe?.seznam ?? '?') + ' px)')
+  // Sloupec zůstává otevřený vedle seznamu, takže ťuknutí na JINÝ řádek
+  // ho nezavře, jen vymění úkol. Pole panelu se plní jednou při připojení
+  // — bez nového klíče ukazoval detail pořád první úkol a „Uložit" jeho
+  // pole zapsalo do druhého (oba úkoly pak nesly jméno prvního).
+  await page.getByRole('button',{name:'Nový úkol'}).click(); await page.waitForTimeout(500)
+  await page.keyboard.type('sirokodruhy')
+  await page.keyboard.press('Enter'); await page.waitForTimeout(800)
+  await page.keyboard.press('Escape'); await page.waitForTimeout(300)
+  await page.getByText('sirokoprvni').first().click(); await page.waitForTimeout(600)
+  await page.locator('main').getByText('sirokodruhy').first().click(); await page.waitForTimeout(600)
+  const nazevVDetailu = await page.locator('aside[aria-label="Detail úkolu"] #pole-ukol').inputValue().catch(() => '')
+  T_(nazevVDetailu === 'sirokodruhy', 'ťuknutí na jiný řádek ukáže v otevřeném detailu ten druhý úkol (' + nazevVDetailu + ')')
+  await page.locator('aside[aria-label="Detail úkolu"]').getByRole('button',{name:'Uložit'}).click(); await page.waitForTimeout(600)
+  T_(await page.locator('main').getByText('sirokoprvni').count() >= 1 && await page.locator('main').getByText('sirokodruhy').count() >= 1,
+     'uložení druhého úkolu nepřepíše jeho jméno jménem prvního')
+  await page.locator('main').getByText('sirokoprvni').first().click(); await page.waitForTimeout(600)
   await page.keyboard.press('Escape'); await page.waitForTimeout(500)
   T_(await sloupec.count() === 0, 'Escape sloupec zavře')
 

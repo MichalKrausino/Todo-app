@@ -19,9 +19,9 @@
 // tam nejdřív za tři dny — dvakrát „ne" chce aspoň pár dní klidu) a
 // ukládá ho k rozhodnutí, server ho jen ctí.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Client, Task } from '../db/types'
-import { decideDayPlanSuggestion, oznacNavrhVidenym, probudUkol, updateTask } from '../db/repo'
+import { decideDayPlanSuggestion, getTask, oznacNavrhVidenym, probudUkol, updateTask } from '../db/repo'
 import { deleteBlockForTask, scheduleBlockForTask } from '../sync/calendar'
 import { addDays, formatDayLabel, formatKdy, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { plural } from '../lib/labels'
@@ -47,7 +47,7 @@ type Odpoved = 'prijato' | 'odlozeno' | 'tyden' | 'zahozeno' | 'vraceno'
 interface Krok {
   navrh: Navrh
   odpoved: Odpoved
-  pred: Pick<Task, 'scheduledFor' | 'status'>
+  pred: Pick<Task, 'scheduledFor' | 'status' | 'postponeCount'>
   /** den návratu, když z odpovědi vzešla pauza */
   navrat?: string
 }
@@ -93,12 +93,32 @@ export function NavrhSheet({
   const volny = volnejsiDen(naloz, posun(dnes, 1), OKNO_DNI)
   const volnyPoPauze = volnejsiDen(naloz, posun(dnes, KLID_PO_ODMITNUTI_DNI), OKNO_DNI)
 
+  // Zakládání bloku běží po síti — „Zpět" na něj musí počkat, jinak by
+  // vrácení během té chvíle blok nenašlo a ten by v kalendáři zůstal.
+  const bloky = useRef(new Map<string, Promise<void>>())
+
   const prijmi = (navrh: Navrh) => {
-    const pred = { scheduledFor: navrh.task.scheduledFor, status: navrh.task.status }
+    const pred = {
+      scheduledFor: navrh.task.scheduledFor,
+      status: navrh.task.status,
+      // vrácení přijetí posune den zpátky na později — odklad to není
+      postponeCount: navrh.task.postponeCount,
+    }
     void decideDayPlanSuggestion(planId, navrh.task.id, 'accepted')
     // přijatý návrh si zabere blok v kalendáři „Todo"
-    void scheduleBlockForTask({ ...navrh.task, scheduledFor: dnes })
+    bloky.current.set(navrh.task.id, scheduleBlockForTask({ ...navrh.task, scheduledFor: dnes }))
     return pred
+  }
+
+  // Blok se uvolňuje podle ČERSTVÉHO úkolu: `calendarEventId` zapisuje
+  // `scheduleBlockForTask` až do databáze, ne do snímku z otevření panelu,
+  // takže dřív „Zpět" id nenašlo a blok zůstal v Google Kalendáři — dál
+  // zabíral čas mezi schůzkami a úkol si nesl id osiřelého bloku.
+  const uvolniBlok = async (id: string) => {
+    await bloky.current.get(id)
+    bloky.current.delete(id)
+    const t = await getTask(id)
+    if (t) await deleteBlockForTask(t)
   }
 
   // Vrácení jednoho kroku — z tlačítka Zpět (poslední) i z toastu
@@ -108,7 +128,7 @@ export function NavrhSheet({
     void decideDayPlanSuggestion(planId, krok.navrh.task.id, 'ignored')
     if (krok.odpoved === 'prijato') {
       void updateTask(krok.navrh.task.id, krok.pred)
-      void deleteBlockForTask(krok.navrh.task)
+      void uvolniBlok(krok.navrh.task.id)
     } else if (krok.odpoved === 'zahozeno') {
       void updateTask(krok.navrh.task.id, { status: krok.pred.status })
     }

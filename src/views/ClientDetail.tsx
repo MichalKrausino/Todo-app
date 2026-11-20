@@ -158,6 +158,12 @@ export function ClientDetail({
   const kontrola = checkFrequencyOf(checkTask)
   const sablon = client.templateIds.length
   const otevreny = projekt ? projects.find((p) => p.id === projekt) : undefined
+  // Uzavřený nebo smazaný projekt ze seznamu zmizí a jeho panel s ním —
+  // dřív ale zůstal zapamatovaný jako otevřený a po „Vrátit" v toastu
+  // panel nečekaně vyjel znovu. Zapomíná se při vykreslení (hook tu stát
+  // nemůže, je pod podmíněným `return`); React takové srovnání stavu
+  // dovoluje a vykreslí znovu hned.
+  if (projekt && !otevreny) setProjekt(null)
   const postup = (projectId: string) => {
     const all = everyTask.filter((t) => t.projectId === projectId)
     return { hotovo: all.filter((t) => t.status === 'done').length, celkem: all.length }

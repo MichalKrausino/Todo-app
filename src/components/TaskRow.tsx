@@ -52,6 +52,7 @@ export const TaskRow = memo(function TaskRow({
   showDate = true,
   showPin = true,
   kdoMaJmeno,
+  den,
 }: {
   task: Task
   client?: Client
@@ -65,6 +66,11 @@ export const TaskRow = memo(function TaskRow({
   // by „já" u každého řádku byla jen tapeta. Počítá to volající, protože
   // řádek nemá vědět, kdo jsem (viz src/lib/tymUkoly.ts).
   kdoMaJmeno?: string
+  // Den, na kterém řádek stojí, když to není dnešek (listování dny na
+  // Dnes). Odklad gestem jde od NĚJ: dřív bral vždycky skutečný zítřek,
+  // takže na „Zítra" přetažení nic neudělalo a v sobotu úkol POSUNULO
+  // dopředu na pátek. Bez něj (běžné seznamy) platí dnešek.
+  den?: string
 }) {
   const done = task.status === 'done'
   const [pendingDone, setPendingDone] = useState(false)
@@ -88,8 +94,10 @@ export const TaskRow = memo(function TaskRow({
 
   // Odklad na zítřek — stejná logika jako Uzávěrka dne: posouvá se to
   // pole, které úkol na den váže; blok v kalendáři „Todo" se uvolní.
+  const dnes = todayISO()
+  const odDne = den && den > dnes ? den : dnes
   const postponeTomorrow = () => {
-    const tomorrow = toISODate(addDays(fromISODate(todayISO()), 1))
+    const tomorrow = toISODate(addDays(fromISODate(odDne), 1))
     if (task.calendarEventId) void deleteBlockForTask(task)
     void updateTask(task.id, {
       ...(task.scheduledFor ? { scheduledFor: tomorrow } : { dueDate: tomorrow }),
@@ -230,7 +238,7 @@ export const TaskRow = memo(function TaskRow({
             }}
             className="flex flex-1 items-center justify-center text-[13px] font-semibold text-card"
           >
-            Zítra
+            {odDne === dnes ? 'Zítra' : 'O den dál'}
           </button>
         </div>
       )}

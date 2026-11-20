@@ -61,9 +61,22 @@ export const PRESET_LABELS: Record<RecurrencePreset, string> = {
   yearly: 'Ročně',
 }
 
+// Den v měsíci, který má KAŽDÝ měsíc. RRULE s `BYMONTHDAY=31` měsíce bez
+// 31. dne tiše přeskočí: „Měsíčně" na faktuře s termínem 31. 1. se po
+// odškrtnutí objevila až 31. 3. (únor vypadl) a dál chyběl duben, červen,
+// září i listopad. Z 29. a 30. vypadával únor. Mřížka dnů v detailu proto
+// odjakživa nabízí jen 1–28 — a teď to platí i pro den vzatý z termínu
+// nebo z dneška (totéž dělá `clientCheck.ts`).
+export const denKazdehoMesice = (d: number): number => Math.min(Math.max(1, d), 28)
+
+// Roční pravidlo přeskočí jen 29. únor (je jednou za čtyři roky); ostatní
+// dny v daném měsíci existují vždy.
+export const denVRoce = (mesic: number, d: number): number => (mesic === 2 && d > 28 ? 28 : d)
+
 // Pravidlo z předvolby vztažené ke konkrétnímu dni (pro úkoly: den = termín).
 export function ruleFromPreset(preset: RecurrencePreset, dateISO: string): string {
-  const [, m, d] = dateISO.split('-').map(Number)
+  const [, m, den] = dateISO.split('-').map(Number)
+  const d = preset === 'yearly' ? denVRoce(m, den) : denKazdehoMesice(den)
   const byday = JS_TO_BYDAY[toUTC(dateISO).getUTCDay()]
   switch (preset) {
     case 'daily':

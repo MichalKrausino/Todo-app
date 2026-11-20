@@ -19,6 +19,7 @@ import {
   activeClients,
   assignTask,
   clientProjects,
+  getTask,
   removeTask,
   restoreDeleted,
   togglePinned,
@@ -202,6 +203,13 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
       novyPlan: scheduledFor,
     })
     const hasDate = Boolean(dueDate || plan)
+    // Stav se čte ČERSTVÝ, ne ze snímku z otevření panelu: na Macu zůstává
+    // detail otevřený vedle seznamu a úkol jde mezitím odškrtnout (nebo ho
+    // odškrtne kolega a přijde syncem). Uložení by ho jinak vrátilo na
+    // `active` a u opakovaného úkolu by vedle nového výskytu zůstal otevřený
+    // i ten starý. Panel stav nikdy neupravuje — mění ho jen přechod
+    // z inboxu, když úkol dostal den.
+    const cur = await getTask(task.id)
     await updateTask(task.id, {
       title: title.trim(),
       notes: notes.trim() || undefined,
@@ -213,7 +221,7 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
       dueTime: dueDate && dueTime ? dueTime : undefined,
       scheduledFor: plan,
       recurrenceRule: rule ?? undefined,
-      status: task.status === 'inbox' && hasDate ? 'active' : task.status,
+      ...(cur?.status === 'inbox' && hasDate ? { status: 'active' as const } : {}),
     })
     // Úprava todoistího úkolu se označí jako neodeslaná a hned se zkusí
     // poslat; do té doby ji stažení nepřepíše.
@@ -221,9 +229,13 @@ export function TaskEditSheet({ task, onClose }: { task: Task; onClose: () => vo
       await updateTask(task.id, { todoistDirty: true })
       void pushTodoistEdits()
     }
-    // Zrušené naplánování uvolní i blok v kalendáři „Todo" — včetně toho,
-    // které právě překonal přepsaný termín.
-    if (task.calendarEventId && !plan) void deleteBlockForTask(task)
+    // Zrušené i PŘESUNUTÉ naplánování uvolní blok v kalendáři „Todo" —
+    // včetně toho, které právě překonal přepsaný termín. Dřív se uvolňoval
+    // jen při zrušení, takže přesun na zítřek nechal blok na dnešku a ten
+    // dál zabíral čas mezi schůzkami (gesto „Zítra" i uzávěrka ho uvolňují
+    // odjakživa). Id bloku se bere z čerstvého čtení — blok mohl vzniknout
+    // až po otevření panelu.
+    if (cur?.calendarEventId && (!plan || plan !== cur.scheduledFor)) void deleteBlockForTask(cur)
     close()
   }
 
