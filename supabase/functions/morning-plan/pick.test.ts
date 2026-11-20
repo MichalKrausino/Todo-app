@@ -75,6 +75,29 @@ describe('skórování úkolu bez termínu', () => {
   })
 })
 
+describe('skórování úkolu s termínem dopředu', () => {
+  it('vysoká priorita s termínem za tři týdny ráno nenabízí', () => {
+    // Reconciler šablon zakládá instance 90 dní dopředu; za prioritu
+    // bral každý výskyt 2 body a ráno nabídlo dvě kopie téhož reportu.
+    const daleko = task({ status: 'active', priority: 'high', dueDate: addDaysISO(TODAY, 21) })
+    expect(scoreAndReason(daleko, NO_CLIENTS, TODAY).score).toBeLessThanOrEqual(0)
+    const kriticky = task({ status: 'active', priority: 'critical', dueDate: addDaysISO(TODAY, 21) })
+    // filtr `score > 0` dělá `ohodnot` — tatáž cesta jako na serveru
+    expect(pickSuggestions(ohodnot([daleko, kriticky], NO_CLIENTS, TODAY))).toHaveLength(0)
+  })
+
+  it('zítřek s vysokou prioritou se nabízí dál', () => {
+    const zitra = task({ status: 'active', priority: 'high', dueDate: addDaysISO(TODAY, 1) })
+    expect(scoreAndReason(zitra, NO_CLIENTS, TODAY).score).toBeGreaterThan(1.5)
+  })
+
+  it('ticho u klienta platí i pro práci dopředu', () => {
+    const klient = { id: 'k1', name: 'Alza', kind: 'client', lastActivityAt: `${addDaysISO(TODAY, -40)}T10:00:00Z` }
+    const daleko = task({ status: 'active', clientId: 'k1', dueDate: addDaysISO(TODAY, 21) })
+    expect(scoreAndReason(daleko, new Map([['k1', klient]]), TODAY).score).toBeGreaterThan(0)
+  })
+})
+
 describe('výběr návrhů', () => {
   it('úkoly bez termínu se nabídnou, i když je dost úkolů s termínem', () => {
     const sTerminem = Array.from({ length: 10 }, () =>

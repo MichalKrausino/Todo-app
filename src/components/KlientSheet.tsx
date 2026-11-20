@@ -28,6 +28,7 @@ import { ColorPicker } from './ColorPicker'
 import { Sheet } from './Sheet'
 import { Button } from './ui/Button'
 import { Switch } from './ui/Switch'
+import { useJa } from '../lib/useTym'
 import { AnimatedBackground } from './ui/AnimatedBackground'
 
 const row = 'flex items-center justify-between gap-3 px-4 py-3'
@@ -119,6 +120,15 @@ export function KlientSheet({
       () => restoreDeleted(plan),
     )
   }
+
+  // Cizí klient (sdílí ho se mnou někdo jiný): archivace i smazání by
+  // zasáhly i majitele — řádek klienta je jeden pro oba a tombstone podle
+  // last-write-wins vyhraje všude, smazání navíc vezme s sebou i majitelovy
+  // úkoly, které mi nasdílel. „Vrátit" by přitom viděl jen ten, kdo mazal.
+  // Server to odmítne taky (supabase/mazani-majitel.sql); tady se to
+  // nenabízí vůbec. Bez razítka majitele (ještě neodeslaný) je klient můj.
+  const ja = useJa()
+  const cizi = Boolean(client.ownerId && ja && client.ownerId !== ja)
 
   const napojenTodoist = (client.todoistProjectIds?.length ?? 0) > 0
   const kontrola = checkFrequencyOf(checkTask) ?? 'off'
@@ -296,17 +306,23 @@ export function KlientSheet({
 
           <ClientSharing clientId={id} />
 
-          <footer className="flex items-center gap-2 pt-1">
-            <Button
-              variant="secondary"
-              onClick={() => void updateClient(id, { status: client.status === 'archived' ? 'active' : 'archived' })}
-            >
-              {client.status === 'archived' ? 'Obnovit' : 'Archivovat'}
-            </Button>
-            <Button variant="destructive" onClick={() => void del(close)}>
-              Smazat klienta
-            </Button>
-          </footer>
+          {cizi ? (
+            <p className="pt-1 text-[13px] leading-snug text-ink-soft">
+              Klienta spravuje ten, kdo ho s tebou sdílí — archivovat ani smazat ho odsud nejde.
+            </p>
+          ) : (
+            <footer className="flex items-center gap-2 pt-1">
+              <Button
+                variant="secondary"
+                onClick={() => void updateClient(id, { status: client.status === 'archived' ? 'active' : 'archived' })}
+              >
+                {client.status === 'archived' ? 'Obnovit' : 'Archivovat'}
+              </Button>
+              <Button variant="destructive" onClick={() => void del(close)}>
+                Smazat klienta
+              </Button>
+            </footer>
+          )}
         </>
       )}
     </Sheet>

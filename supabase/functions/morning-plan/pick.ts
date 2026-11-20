@@ -119,8 +119,18 @@ export function scoreAndReason(
     })
   }
 
+  // Priorita přidává jen tomu, co je na řadě TEĎ (bez termínu, propadlé,
+  // dnes, zítra). Úkol s termínem za tři týdny dřív bral za vysokou
+  // prioritu 2 body a prošel filtrem `score > 0` — a protože reconciler
+  // šablon zakládá instance 90 dní dopředu, nabídlo ráno klidně dvě kopie
+  // téhož týdenního reportu (30. 11. i 7. 12.) jako „vysoká priorita"
+  // a přijetí přeneslo prosincový výskyt na dnešek. Ticho u klienta
+  // (níž) platí dál: zanedbaný klient je důvod sáhnout i po práci dopředu.
+  const budouci = d !== undefined && d > addDaysISO(today, 1)
   const p = prio(t)
-  if (p === 'critical') {
+  if (budouci) {
+    if (p === 'low') score -= 1
+  } else if (p === 'critical') {
     score += 4
     reasons.push({ w: 3, text: 'kritická priorita' })
   } else if (p === 'high') {
