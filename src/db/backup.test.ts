@@ -71,7 +71,7 @@ describe('importBackup', () => {
     expect(await db.tasks.get(b.id)).toBeTruthy() // nic se nemaže
   })
 
-  it('vynuluje push kurzory, aby se obnovená data odeslala na server', async () => {
+  it('vynuluje kurzory stahování, ať si zařízení vezme rozhodnutí serveru', async () => {
     await db.syncState.bulkPut([
       { id: 'push:tasks', value: '2026-08-01T00:00:00.000Z' },
       { id: 'pull:tasks', value: '2026-08-01T00:00:00.000Z' },
@@ -80,7 +80,9 @@ describe('importBackup', () => {
     await importBackup(await exportBackup())
 
     expect(await db.syncState.get('push:tasks')).toBeUndefined()
-    expect(await db.syncState.get('pull:tasks')).toBeTruthy() // pull kurzor zůstává
+    // Pull kurzor pryč: server rozhodne podle last-write-wins a jeho
+    // novější verze (třeba tombstone) se musí stáhnout i sem.
+    expect(await db.syncState.get('pull:tasks')).toBeUndefined()
   })
 
   it('cizí nebo poškozený soubor odmítne se srozumitelnou hláškou', async () => {

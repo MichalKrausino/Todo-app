@@ -23,8 +23,13 @@ export async function exportBackup(): Promise<BackupFile> {
 }
 
 // Obnova: záznamy se vloží po id (bulkPut) — existující se přepíšou,
-// nic dalšího se nemaže. Push kurzory se vynulují, aby další sync
-// poslal všechno na server (tam rozhodne last-write-wins).
+// nic dalšího se nemaže. Obnovené záznamy odejdou samy (evidence
+// odeslaných verzí v `pushState` pozná, že se liší od odeslané), a server
+// o nich rozhodne podle last-write-wins. Jeho rozhodnutí se ale musí
+// i STÁHNOUT: kurzory stahování se proto vynulují. Dokud se nechávaly,
+// zůstal novější stav ze serveru (třeba tombstone klienta, kvůli kterému
+// člověk zálohu obnovoval) za kurzorem a tohle zařízení ukazovalo
+// obnovená data navždy, zatímco server i ostatní zařízení je měly smazaná.
 export async function importBackup(parsed: unknown): Promise<number> {
   const file = parsed as Partial<BackupFile> | null
   // `typeof null === 'object'`, takže bez explicitní kontroly by soubor
@@ -48,10 +53,10 @@ export async function importBackup(parsed: unknown): Promise<number> {
       await db.table(name).bulkPut(rows)
       count += rows.length
     }
-    const pushKeys = (await db.syncState.toArray())
+    const kurzory = (await db.syncState.toArray())
       .map((r) => r.id)
-      .filter((id) => id.startsWith('push:'))
-    await db.syncState.bulkDelete(pushKeys)
+      .filter((id) => id.startsWith('pull:') || id.startsWith('push:'))
+    await db.syncState.bulkDelete(kurzory)
   })
   emitRepoWrite()
   return count
