@@ -987,6 +987,9 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   // ho nezavře, jen vymění úkol. Pole panelu se plní jednou při připojení
   // — bez nového klíče ukazoval detail pořád první úkol a „Uložit" jeho
   // pole zapsalo do druhého (oba úkoly pak nesly jméno prvního).
+  // Zadávání z prvního úkolu je pořád rozbalené a „Nový úkol" by ho
+  // jen složil — Escape ho složí napřed, ať tlačítko opravdu otevře pole.
+  await page.keyboard.press('Escape'); await page.waitForTimeout(400)
   await page.getByRole('button',{name:'Nový úkol'}).click(); await page.waitForTimeout(500)
   await page.keyboard.type('sirokodruhy')
   await page.keyboard.press('Enter'); await page.waitForTimeout(800)
