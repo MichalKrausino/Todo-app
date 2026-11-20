@@ -304,7 +304,14 @@ export default function App() {
   useEffect(() => {
     const check = () => {
       const hash = window.location.hash
-      if (hash === '#shutdown') setTab('today')
+      // #navrh (ranní návrh) i #shutdown otevírá panel na Dnes — appka
+      // na Dnes přepne a složí „Vše", jinak by ťuknutí na notifikaci
+      // z Plánu neudělalo nic a panel by vyskočil, až člověk Dnes otevře
+      // sám. Hash nechává být: přebírá ho TodayView, až se připojí.
+      if (hash === '#shutdown' || hash === '#navrh') {
+        setTab('today')
+        setVse(false)
+      }
       const task = /^#task-(.+)$/.exec(hash)
       if (task) {
         history.replaceState(null, '', window.location.pathname + window.location.search)
@@ -673,7 +680,11 @@ export default function App() {
           }}
         />
       )}
-      {editing && <TaskEditSheet task={editing} onClose={() => setEditing(null)} />}
+      {/* `key`: na Macu zůstává detail otevřený vedle seznamu a ťuknutí na
+          jiný řádek mění jen `editing`. Pole panelu se plní jednou při
+          připojení, takže bez nového klíče ukazoval detail pořád PRVNÍ
+          úkol — a „Uložit" jeho pole zapsalo do druhého. */}
+      {editing && <TaskEditSheet key={editing.id} task={editing} onClose={() => setEditing(null)} />}
       {syncOpen && <SyncSheet onClose={() => setSyncOpen(false)} />}
       {reviewOpen && <WeeklyReviewSheet onClose={() => setReviewOpen(false)} />}
       {/* Zprávy u doku (a hlavně „Vrátit" po smazání) — jedna pro celou

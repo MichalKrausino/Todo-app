@@ -42,7 +42,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Task } from '../db/types'
 import { hotoveOd } from '../db/repo'
-import { addDays, fromISODate, toISODate, todayISO } from './dates'
+import { addDays, fromISODate, mistniDen, toISODate, todayISO } from './dates'
 import { mojeUkoly } from './tymUkoly'
 import { useJa } from './useTym'
 
@@ -90,7 +90,8 @@ export function ukolyHotovePoDnech(ukoly: Task[], od: string, doDne: string): Ma
   const out = new Map<string, number>()
   for (const t of ukoly) {
     if (t.deletedAt || t.status !== 'done') continue
-    const den = (t.completedAt ?? '').slice(0, 10)
+    const den = mistniDen(t.completedAt)
+    if (!den) continue
     if (den < od || den > doDne) continue
     out.set(den, (out.get(den) ?? 0) + 1)
   }

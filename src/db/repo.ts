@@ -5,7 +5,7 @@ import { db } from './db'
 import { emitRepoWrite } from './events'
 import type { Client, ClientKind, Priority, Project, Task, TaskStatus, ZadaniUkolu } from './types'
 import { deterministicUuid } from '../lib/deterministicId'
-import { addDays, fromISODate, toISODate, todayISO } from '../lib/dates'
+import { addDays, fromISODate, mistniDen, toISODate, todayISO } from '../lib/dates'
 import { HISTORIE_DNI } from '../../supabase/functions/morning-plan/pick'
 import { nextOccurrence } from '../lib/rrule'
 import { krokyProDalsiVyskyt } from '../lib/podukoly'
@@ -228,7 +228,13 @@ export async function updateTask(id: string, patch: Partial<Task>): Promise<void
   const stamped: Partial<Task> = { ...patch, updatedAt: now() }
   // Posun na pozdější den = odklad. Počítadlo je podklad pro značku v triáži
   // („odloženo 4×") a týdenní zpětnou vazbu (Fáze 7).
-  if (existing) {
+  //
+  // Kdo počítadlo v záplatě uvádí sám, ten ho NASTAVUJE — to dělá „Zpět"
+  // (vrací stav před krokem, tedy i počet odkladů) a „Jinam" u čerstvě
+  // zařazeného úkolu. Dřív se i vrácení posunu počítalo jako další odklad:
+  // „Zítra" + „Zpět" dvakrát po sobě dalo „odloženo 2×" úkolu, který se
+  // nepohnul, a zkreslilo to i bilanci v týdenním ohlédnutí.
+  if (existing && !('postponeCount' in patch)) {
     const oldEff = effectiveDate(existing.dueDate, existing.scheduledFor)
     const newEff = effectiveDate(
       'dueDate' in patch ? patch.dueDate : existing.dueDate,
@@ -423,14 +429,16 @@ export const hotoveOd = (dateISO: string) =>
   db.tasks
     .where('status')
     .equals('done')
-    .filter((t) => !t.deletedAt && (t.completedAt ?? '') >= dateISO)
+    .filter((t) => !t.deletedAt && mistniDen(t.completedAt) >= dateISO)
     .toArray()
 
+// Den dokončení je MÍSTNÍ den (`mistniDen`), ne prvních deset znaků
+// razítka v UTC — úkol odškrtnutý po půlnoci patří dnešku.
 export const doneOn = (dateISO: string) =>
   db.tasks
     .where('status')
     .equals('done')
-    .filter((t) => !t.deletedAt && (t.completedAt ?? '').startsWith(dateISO))
+    .filter((t) => !t.deletedAt && mistniDen(t.completedAt) === dateISO)
     .toArray()
 
 // Všechny úkoly klienta včetně hotových — podklad pro postup projektů

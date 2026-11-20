@@ -95,6 +95,21 @@ export function mondayOf(iso: string): string {
   return toISODate(addDays(d, -delta))
 }
 
+// Místní den (YYYY-MM-DD) okamžiku, který nese razítko v UTC.
+//
+// `completedAt` i další razítka vyrábí `toISOString()`, takže uříznout je
+// na deset znaků znamená vzít den v UTC — a úkol odškrtnutý ve 00:30 by
+// patřil včerejšku (v létě všechno mezi 00:00 a 02:00). Na skutečných
+// datech to bylo 9 ze 64 hotových úkolů: na Dnes zmizely z „hotovo",
+// nepohnuly kroužkem postupu a osobní průtok je připsal špatnému dni.
+// Prázdné nebo neplatné razítko dá prázdný řetězec — žádný den.
+export function mistniDen(isoDatetime: string | undefined): string {
+  if (!isoDatetime) return ''
+  if (isoDatetime.length <= 10) return isoDatetime
+  const d = new Date(isoDatetime)
+  return Number.isNaN(d.getTime()) ? '' : toISODate(d)
+}
+
 // Celé dny od daného ISO datetime do dneška (lokálně, po dnech).
 //
 // Razítka (`lastActivityAt`, `updatedAt`) vyrábí `new Date().toISOString()`,

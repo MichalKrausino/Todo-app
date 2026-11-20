@@ -52,6 +52,15 @@ describe('computeWeekStats', () => {
     expect(s.completedByClient[1].client).toBeUndefined()
   })
 
+  it('pondělí po půlnoci patří novému týdnu, ne neděli v UTC', () => {
+    // Po 3. 8. 00:30 místního je v UTC ještě neděle 2. 8. — týden
+    // Po 27. 7. – Ne 2. 8. by si ho přivlastnil.
+    const poPulnoci = new Date(2026, 7, 3, 0, 30).toISOString()
+    expect(poPulnoci.startsWith('2026-08-02')).toBe(true)
+    const s = computeWeekStats([client()], [task({ status: 'done', completedAt: poPulnoci })], SUNDAY)
+    expect(s.completedCount).toBe(0)
+  })
+
   it('rozepíše dokončené i podle projektů klienta', () => {
     const c = client({ id: 'c1' })
     const projects = [

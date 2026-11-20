@@ -22,6 +22,7 @@ import {
 } from './merge'
 import { vytvorKoalescenci } from './koalescence'
 import { dirtyRecords, sendWithFallback, vanishedIds, type PushedVersions } from './outbox'
+import { dekodujKurzor, filtrZaKurzorem, zakodujKurzor } from './kurzor'
 import {
   clientsToForget,
   parseFingerprint,
@@ -337,10 +338,59 @@ async function forgetClientLocally(clientId: string): Promise<void> {
   ])
 }
 
+// Stahování jde podle SERVEROVÉHO razítka `synced_at` (src/sync/kurzor.ts,
+// supabase/razitko-serveru.sql), ne podle `updated_at` z hodin zařízení:
+// odškrtnutí z telefonu, který byl offline, má starší `updated_at` než
+// poslední zápis Macu, a kurzor podle něj ho přeskočil navždy.
 async function pullTable(name: LocalTableName): Promise<void> {
   const table = localTable(name)
   const stateId = `pull:${name}`
-  let cursor = (await db.syncState.get(stateId))?.cursor ?? ''
+  let kurzor = dekodujKurzor((await db.syncState.get(stateId))?.cursor)
+
+  for (;;) {
+    let query = sb!
+      .from(REMOTE_TABLES[name])
+      // `user_id` je jediné místo, kde je vlastnictví řádku pravda (hlídá
+      // ho trigger lww_guard). Bez něj by se po nasdílení klienta nedalo
+      // poznat, které úkoly jsou moje — viz applyPull.
+      .select('id,data,updated_at,user_id,synced_at')
+      .order('synced_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(PAGE_SIZE)
+    if (kurzor) query = query.or(filtrZaKurzorem(kurzor))
+
+    const { data, error } = await query
+    if (error) {
+      // Server bez sloupce (SQL ještě nespuštěné) — stahovat postaru.
+      if (error.code === '42703' || error.message.includes('synced_at')) return pullTablePodleCasu(name)
+      throw new Error(`${name}: ${error.message}`)
+    }
+    const rows = (data ?? []) as Array<PulledRow & { synced_at: string }>
+    if (rows.length === 0) break
+
+    // Čtení a zápis v jedné transakci: mezi `bulkGet` a `bulkPut` by jinak
+    // mohla proběhnout úprava z rozhraní a zápis staženého snímku by ji
+    // přepsal (verze by navíc odpovídala odeslané, takže by se ani neposlala).
+    await db.transaction('rw', table, async () => {
+      const locals = await table.bulkGet(rows.map((r) => r.id))
+      const puts = applyPull(locals, rows)
+      if (puts.length > 0) await table.bulkPut(puts)
+    })
+
+    const posledni = rows[rows.length - 1]
+    kurzor = { at: posledni.synced_at, id: posledni.id }
+    await db.syncState.put({ id: stateId, cursor: zakodujKurzor(kurzor) })
+    if (rows.length < PAGE_SIZE) break
+  }
+}
+
+// Stahování postaru, podle `updated_at` — jen pro server, který ještě nemá
+// serverové razítko. Kurzor v novém tvaru se tu nečte.
+async function pullTablePodleCasu(name: LocalTableName): Promise<void> {
+  const table = localTable(name)
+  const stateId = `pull:${name}`
+  const ulozeny = (await db.syncState.get(stateId))?.cursor ?? ''
+  let cursor = ulozeny.includes('|') ? '' : ulozeny
 
   for (;;) {
     let query = sb!

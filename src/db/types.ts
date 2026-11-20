@@ -113,11 +113,16 @@ export interface Task extends BaseRecord {
   actualMinutes?: number
   recurrenceRule?: string // iCal RRULE (Fáze 4)
   sourceTemplateItemId?: string
+  // Den výskytu šablony, ze kterého instance vznikla (z něj je i její id).
+  // `dueDate` se posunout dá — gestem, triáží, uzávěrkou — a úklid
+  // šablon se podle něj nesmí řídit, jinak by smazal každou instanci
+  // přesunutou z dne, který už minul (viz `src/db/templates.ts`).
+  sourceDate?: string
   completedAt?: string
   postponeCount?: number // kolikrát byl termín posunut na později (signál odkládání)
   // Den (YYYY-MM-DD), kdy jsem úkol bez termínu prošel v „Projít" a nechal
-  // ho bez termínu. Do průchodu se pak vrátí až po pauze
-  // (`src/lib/projitBezTerminu.ts`), jinak by se týž seznam vracel každé ráno.
+  // ho bez termínu. Ten den se do průchodu nevrátí (o úkolu jsem právě
+  // rozhodl), zítra je v něm zase (`src/lib/projitBezTerminu.ts`).
   prohlednuto?: string
   // „Top 3 dne" — YYYY-MM-DD, na který den je úkol připíchnutý. Váže se
   // ke dni (ne bool), takže špendlík zítra sám vyprchá a neuklízí se ručně.

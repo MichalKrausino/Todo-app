@@ -113,7 +113,18 @@ export function QuickAdd({
   const effDueDate = overrides.dueDate === undefined ? parsed?.dueDate : (overrides.dueDate ?? undefined)
   const effDueTime = overrides.dueTime === undefined ? parsed?.dueTime : (overrides.dueTime ?? undefined)
   const effClientId = overrides.clientId === undefined ? parsed?.clientId : (overrides.clientId ?? undefined)
-  const effProjectId = overrides.projectId === undefined ? parsed?.projectId : (overrides.projectId ?? undefined)
+  // Projekt z textu („#ppc") parser hledá bez ohledu na klienta vybraného
+  // ve slotu — o něm neví. Opakované projekty jsou přitom běžné („PPC" má
+  // Alza i Bosch), takže „Klient: Bosch" + „#ppc" ukládalo úkol pod Bosch
+  // s Alzinou PPC: v detailu Bosche spadl mezi úkoly bez projektu a Alze
+  // přibyl cizí úkol. Projekt cizího klienta se proto přehledá u vybraného
+  // klienta podle jména, a když tam není, úkol projekt nedostane.
+  const projektZTextu = (() => {
+    const p = parsed?.projectId ? projects.find((x) => x.id === parsed.projectId) : undefined
+    if (!p || !effClientId || p.clientId === effClientId) return parsed?.projectId
+    return projects.find((x) => x.clientId === effClientId && foldToken(x.name) === foldToken(p.name))?.id
+  })()
+  const effProjectId = overrides.projectId === undefined ? projektZTextu : (overrides.projectId ?? undefined)
   const effPriority: Priority =
     (overrides.priority === undefined ? parsed?.priority : overrides.priority) ?? 'normal'
 
@@ -163,7 +174,7 @@ export function QuickAdd({
     const pool =
       kind === 'client'
         ? clients.map((c) => ({ id: c.id, name: c.name, color: c.color as string | undefined }))
-        : (parsed?.clientId ? projects.filter((p) => p.clientId === parsed.clientId) : projects).map(
+        : (effClientId ? projects.filter((p) => p.clientId === effClientId) : projects).map(
             (p) => ({ id: p.id, name: p.name, color: undefined as string | undefined }),
           )
     const items = pool.filter((x) => foldToken(x.name).startsWith(frag)).slice(0, 4)
@@ -171,7 +182,7 @@ export function QuickAdd({
     // jediná shoda, která už je dopsaná celá → nabídka by jen překážela
     if (items.length === 1 && foldToken(items[0].name) === frag) return null
     return { start: m.index + m[1].length, marker: m[2], items }
-  }, [text, clients, projects, parsed?.clientId])
+  }, [text, clients, projects, effClientId])
 
   const pickMention = (name: string) => {
     if (!mention) return

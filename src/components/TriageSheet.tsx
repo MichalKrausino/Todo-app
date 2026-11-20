@@ -63,7 +63,7 @@ interface Krok {
   task: Task
   odpoved: Odpoved
   // Co bylo před zásahem — na tom stojí „Zpět".
-  pred: Pick<Task, 'scheduledFor' | 'dueDate' | 'status' | 'prohlednuto'>
+  pred: Pick<Task, 'scheduledFor' | 'dueDate' | 'status' | 'prohlednuto' | 'postponeCount'>
 }
 
 // Termín se posouvá stejně jako jinde v appce (gesto na řádku, večerní
@@ -145,6 +145,8 @@ export function TriageSheet({
       dueDate: task.dueDate,
       status: task.status,
       prohlednuto: task.prohlednuto,
+      // „Zpět" vrací i počet odkladů — vrácený posun není další odklad
+      postponeCount: task.postponeCount,
     }
     if (odpoved === 'dnes') void updateTask(task.id, posun(task, dnes))
     if (odpoved === 'zitra') void updateTask(task.id, posun(task, zitra))

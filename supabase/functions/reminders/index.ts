@@ -131,12 +131,49 @@ Deno.serve(async (req) => {
   let sent = 0
 
   for (const userId of users) {
-    const { data: taskRows } = await admin
-      .from('tasks')
-      .select('data')
-      .eq('user_id', userId)
-      .is('deleted_at', null)
-    const tasks = (taskRows ?? []).map((r) => r.data as Rec)
+    const [vlastniRes, prirazeneRes] = await Promise.all([
+      admin.from('tasks').select('data').eq('user_id', userId).is('deleted_at', null),
+      // Co mi dal kolega u sdíleného klienta (Fáze 10) — jeho řádek, takže
+      // se do dotazu podle `user_id` nevejde.
+      admin
+        .from('tasks')
+        .select('data')
+        .eq('data->>assignedTo', userId)
+        .neq('user_id', userId)
+        .is('deleted_at', null),
+    ])
+    if (prirazeneRes.error) console.error('prirazene', prirazeneRes.error.message)
+    // Připomínky jsou o MOJÍ práci, ne o tom, co vlastním — totéž pravidlo
+    // jako ranní návrh a `jeMuj` v appce. Dřív se bralo podle `user_id`:
+    // úkol předaný kolegovi připomínal mně (a počítal se mi do uzávěrky
+    // i „nejdůležitějšího zbývajícího"), kdežto úkol, který kolega předal
+    // mně, nepřipomněl nikomu.
+    const tasks = [
+      ...(vlastniRes.data ?? []).map((r) => r.data as Rec).filter((t) => !t.assignedTo || t.assignedTo === userId),
+      ...(prirazeneRes.data ?? []).map((r) => r.data as Rec),
+    ]
+    // Klient cizího úkolu patří kolegovi — bez něj by v připomínce chybělo
+    // „· Alza", u cizí práce ta důležitější půlka věty.
+    const ciziKlienti = [
+      ...new Set(
+        (prirazeneRes.data ?? [])
+          .map((r) => (r.data as Rec).clientId as string | undefined)
+          .filter((id): id is string => !!id),
+      ),
+    ]
+    const nactiKlienty = async (): Promise<Map<string, string>> => {
+      const [vlastni, cizi] = await Promise.all([
+        admin.from('clients').select('data').eq('user_id', userId).is('deleted_at', null),
+        ciziKlienti.length
+          ? admin.from('clients').select('data').in('id', ciziKlienti).is('deleted_at', null)
+          : Promise.resolve({ data: [] as Array<{ data: unknown }> }),
+      ])
+      return new Map(
+        [...(vlastni.data ?? []), ...(cizi.data ?? [])]
+          .map((r) => r.data as Rec)
+          .map((c) => [c.id as string, c.name as string]),
+      )
+    }
 
     // Odznak na ikoně — stejná logika jako v appce (src/lib/badge.ts).
     const badge = tasks.filter((t) => {
@@ -148,16 +185,7 @@ Deno.serve(async (req) => {
     const payloads: Payload[] = []
 
     if (kind === 'due') {
-      const { data: clientRows } = await admin
-        .from('clients')
-        .select('data')
-        .eq('user_id', userId)
-        .is('deleted_at', null)
-      const clientName = new Map(
-        (clientRows ?? [])
-          .map((r) => r.data as Rec)
-          .map((c) => [c.id as string, c.name as string]),
-      )
+      const clientName = await nactiKlienty()
 
       for (const t of tasks) {
         if (t.status !== 'active' && t.status !== 'inbox') continue
@@ -183,16 +211,7 @@ Deno.serve(async (req) => {
         return d !== undefined && d <= today
       })
       if (left.length > 0) {
-        const { data: clientRows } = await admin
-          .from('clients')
-          .select('data')
-          .eq('user_id', userId)
-          .is('deleted_at', null)
-        const clientName = new Map(
-          (clientRows ?? [])
-            .map((r) => r.data as Rec)
-            .map((c) => [c.id as string, c.name as string]),
-        )
+        const clientName = await nactiKlienty()
 
         // Pořadí důležitosti: připnuté Top 3 vždycky první, pak priorita,
         // pak propadlé. Úkol BEZ času je jen jazýček na vahách při shodě —

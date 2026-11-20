@@ -11,6 +11,7 @@ import {
   formatDayLabel,
   formatDaysAgo,
   fromISODate,
+  mistniDen,
   mondayOf,
   nextMonday,
   toISODate,
@@ -70,6 +71,24 @@ describe('týdenní kotvy', () => {
     expect(mondayOf('2026-08-31')).toBe('2026-08-31') // pondělí samo
     expect(mondayOf('2026-09-06')).toBe('2026-08-31') // neděle
     expect(mondayOf('2026-09-02')).toBe('2026-08-31') // středa
+  })
+})
+
+describe('mistniDen', () => {
+  it('razítko po místní půlnoci je nový den, ne včerejšek v UTC', () => {
+    const poPulnoci = new Date(2026, 10, 20, 0, 30) // 20. 11. 00:30 místního
+    expect(poPulnoci.toISOString().slice(0, 10)).toBe('2026-11-19')
+    expect(mistniDen(poPulnoci.toISOString())).toBe('2026-11-20')
+  })
+
+  it('v létě platí totéž dvě hodiny po půlnoci', () => {
+    expect(mistniDen(new Date(2026, 6, 10, 1, 59).toISOString())).toBe('2026-07-10')
+  })
+
+  it('holý den nechá být, prázdné a nesmyslné razítko nedá žádný den', () => {
+    expect(mistniDen('2026-11-20')).toBe('2026-11-20')
+    expect(mistniDen(undefined)).toBe('')
+    expect(mistniDen('nesmysl-ale-dlouhy')).toBe('')
   })
 })
 

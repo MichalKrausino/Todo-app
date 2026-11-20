@@ -7,7 +7,7 @@
 
 import type { Priority } from '../db/types'
 import { addDays, nextMonday, toISODate } from './dates'
-import { JS_TO_BYDAY } from './rrule'
+import { JS_TO_BYDAY, denKazdehoMesice, denVRoce } from './rrule'
 
 export interface ClientRef {
   id: string
@@ -138,9 +138,9 @@ const RE_PRIORITY = /(?<=^|\s)!(kriticka|critical|krit|vysoka|high|nizka|low|nor
 const RE_BANGS = /(?<=^|\s)(!{1,3})(?=$|[\s,.;])/
 const RE_CLIENT = /(?<=^|\s)@([\w-]+)/
 const RE_PROJECT = /(?<=^|\s)#([\w-]+)/
-const RE_NUMDATE = /(?<=^|\s)(?:do\s+)?(\d{1,2})\.\s?(\d{1,2})\.?(?:\s?(\d{4}))?(?=$|[\s,;])/
+const RE_NUMDATE = /(?<=^|\s)(?:(?:do|od)\s+)?(\d{1,2})\.\s?(\d{1,2})\.?(?:\s?(\d{4}))?(?=$|[\s,;])/
 const RE_MONTHDATE = new RegExp(
-  `(?<=^|\\s)(?:do\\s+)?(\\d{1,2})\\.?\\s?(${Object.keys(MONTHS).join('|')})(?:\\s?(\\d{4}))?(?=$|[\\s,.;])`,
+  `(?<=^|\\s)(?:(?:do|od)\\s+)?(\\d{1,2})\\.?\\s?(${Object.keys(MONTHS).join('|')})(?:\\s?(\\d{4}))?(?=$|[\\s,.;])`,
 )
 // Číslo je nepovinné: „za týden" je „za jeden týden" — česky se jednička
 // vynechává a bez ní parser dřív nepoznal termín vůbec.
@@ -166,15 +166,26 @@ const RE_RECUR = new RegExp(
 )
 // čas deadlineu: „do 14:00", „ve 14:00", samotné „14:00"
 const RE_TIME_COLON = /(?<=^|\s)(?:(?:do|ve|v|od)\s+)?(\d{1,2}):(\d{2})(?=$|[\s,.;!?])/
+// Čas s tečkou po předložce: „ve 14.10", „v 8.30", „od 9.15". Česky se
+// tak čas píše běžně a dřív ho četl RE_NUMDATE jako datum — „call ve
+// 14.10" vyšel na 14. října, „zítra v 8.12" na 8. prosince místo zítřka.
+// Minuty musí mít dvě číslice a za nimi nesmí být tečka („v 14.10." je
+// datum s tečkou na konci, ne čas). „do" sem nepatří: „do 15.09" je
+// mnohem spíš termín než čas.
+const RE_TIME_DOT = /(?<=^|\s)(?:ve?|od)\s+(\d{1,2})\.(\d{2})(?=$|[\s,;!?])/
+// Předložka, po které číslo s tečkou bez koncové tečky čte jako čas.
+const RE_PRED_CASEM = /(?:^|\s)(?:ve?|od)\s+$/
 // „do 14h", „ve 14 h", „v 9 hod"
 const RE_TIME_H = /(?<=^|\s)(?:do|ve|v|od)\s+(\d{1,2})\s?h(?:od(?:in)?)?(?=$|[\s,.;!?])/
 // Holá hodina po předložce: „v 10", „od 9", „v 8 ráno", „v 7 večer".
 // Bere se JEN když za ní už nic nestojí (konec věty nebo interpunkce),
 // případně jen denní doba. Ta podmínka je celá pojistka: „v 10 lidech" je
 // počet, ne čas, a „do 15.9." je datum — obojí by se jinak přečetlo jako
-// hodina a tiše přepsalo termín.
+// hodina a tiše přepsalo termín. Tečka za číslem je konec věty JEN když
+// za ní už nic nestojí — „do 20. prosince" je datum (dřív z něj vyšel
+// navíc čas 20:00 a připomínka přišla ve 20:00), „v 5. patře" je patro.
 const RE_TIME_BARE =
-  /(?<=^|\s)(?:do|ve|v|od)\s+(\d{1,2})(?:\s+(rano|dopoledne|odpoledne|podvecer|vecer))?(?=\s*$|\s*[,;!?]|\.(?!\s*\d))/
+  /(?<=^|\s)(?:do|ve|v|od)\s+(\d{1,2})(?:\s+(rano|dopoledne|odpoledne|podvecer|vecer))?(?=\s*$|\s*[,;!?]|\.\s*$)/
 // denní doby — orientační časy (ráno 9:00, poledne 12:00, večer 19:00…)
 const RE_TIME_WORD =
   /(?<=^|\s)(?:(?:do|k|na|v)\s+)?(po\s+obede|dopoledne|odpoledne|poledne|podvecer|vecera|vecer|rano)(?=$|[\s,.;!?])/
@@ -208,6 +219,14 @@ function parseTime(norm: string): TimeHit | null {
         start: m.index,
         end: m.index + m[0].length,
       }
+    }
+  }
+  m = RE_TIME_DOT.exec(norm)
+  if (m) {
+    const h = Number(m[1])
+    const min = Number(m[2])
+    if (h <= 23 && min <= 59) {
+      return { time: `${String(h).padStart(2, '0')}:${m[2]}`, start: m.index, end: m.index + m[0].length }
     }
   }
   m = RE_TIME_H.exec(norm)
@@ -301,7 +320,7 @@ function parseRecurrence(norm: string, today: Date): RecurHit | null {
     if (unit.startsWith('tyd')) {
       rule = `FREQ=WEEKLY;INTERVAL=${n};BYDAY=${JS_TO_BYDAY[today.getDay()]}`
     } else if (unit.startsWith('mesic')) {
-      rule = `FREQ=MONTHLY;INTERVAL=${n};BYMONTHDAY=${today.getDate()}`
+      rule = `FREQ=MONTHLY;INTERVAL=${n};BYMONTHDAY=${denKazdehoMesice(today.getDate())}`
     } else {
       rule = n === 1 ? 'FREQ=DAILY' : `FREQ=DAILY;INTERVAL=${n}`
     }
@@ -315,13 +334,16 @@ function parseRecurrence(norm: string, today: Date): RecurHit | null {
       : m[1] === 'tyden'
         ? `FREQ=WEEKLY;BYDAY=${JS_TO_BYDAY[today.getDay()]}`
         : m[1] === 'mesic'
-          ? `FREQ=MONTHLY;BYMONTHDAY=${today.getDate()}`
-          : `FREQ=YEARLY;BYMONTH=${today.getMonth() + 1};BYMONTHDAY=${today.getDate()}`
+          ? `FREQ=MONTHLY;BYMONTHDAY=${denKazdehoMesice(today.getDate())}`
+          : `FREQ=YEARLY;BYMONTH=${today.getMonth() + 1};BYMONTHDAY=${denVRoce(today.getMonth() + 1, today.getDate())}`
   return { rule, dueDate: todayISO, ...span }
 }
 
 function parseDate(norm: string, today: Date): DateHit | null {
   let m = RE_NUMDATE.exec(norm)
+  // „ve 14.10" je čas (RE_TIME_DOT), ne 14. října — po předložce času se
+  // číslo s tečkou bere jako datum jen s tečkou na konci nebo s rokem.
+  if (m && !m[3] && !m[0].endsWith('.') && RE_PRED_CASEM.test(norm.slice(0, m.index))) m = null
   if (m) {
     const day = Number(m[1])
     const month = Number(m[2])
@@ -351,7 +373,11 @@ function parseDate(norm: string, today: Date): DateHit | null {
     const n = m[1] ? (NUM_WORDS[m[1]] ?? Number(m[1])) : 1
     let d: Date
     if (m[2].startsWith('mesic')) {
-      d = new Date(today.getFullYear(), today.getMonth() + n, today.getDate())
+      // Tentýž den v cílovém měsíci, a když ho měsíc nemá, jeho poslední
+      // den: „za měsíc" z 31. 1. je 28. 2., ne 3. 3. (`new Date` by den
+      // přetekl do dalšího měsíce).
+      const posledni = new Date(today.getFullYear(), today.getMonth() + n + 1, 0).getDate()
+      d = new Date(today.getFullYear(), today.getMonth() + n, Math.min(today.getDate(), posledni))
     } else {
       d = addDays(today, n * (m[2].startsWith('tyd') ? 7 : 1))
     }
@@ -557,6 +583,8 @@ export function parseQuickAdd(
     .replace(/\s{2,}/g, ' ')
     .trim()
     .replace(/^[,;\s]+|[,;\s]+$/g, '')
+    // tečka po vyjmutém čase („schůzka v 10.") nezůstane viset na konci
+    .replace(/\s+\.$/, '')
 
   return { title, dueDate, dueTime, priority, clientId, clientName, projectId, projectName, recurrenceRule, notes }
 }

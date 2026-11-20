@@ -85,7 +85,11 @@ describe('parseQuickAdd', () => {
 
   it('rozpozná každý den / měsíc a intervaly', () => {
     expect(parseQuickAdd('každý den standup', [], TODAY).recurrenceRule).toBe('FREQ=DAILY')
-    expect(parseQuickAdd('každý měsíc report', [], TODAY).recurrenceRule).toBe('FREQ=MONTHLY;BYMONTHDAY=29')
+    // 29. by v únoru vypadl — den se drží na 28 (viz test níž)
+    expect(parseQuickAdd('každý měsíc report', [], TODAY).recurrenceRule).toBe('FREQ=MONTHLY;BYMONTHDAY=28')
+    expect(parseQuickAdd('každý měsíc report', [], new Date(2026, 6, 15)).recurrenceRule).toBe(
+      'FREQ=MONTHLY;BYMONTHDAY=15',
+    )
     expect(parseQuickAdd('každých 14 dní fakturace', [], TODAY).recurrenceRule).toBe('FREQ=DAILY;INTERVAL=14')
     expect(parseQuickAdd('každé 2 týdny plánování', [], TODAY).recurrenceRule).toBe(
       'FREQ=WEEKLY;INTERVAL=2;BYDAY=WE',
@@ -124,6 +128,31 @@ describe('parseQuickAdd', () => {
     // kdežto „příští měsíc" míří na jeho začátek. Dvě různé věty, dva dny.
     expect(parseQuickAdd('za měsíc kontrola', [], TODAY).dueDate).toBe('2026-08-29')
     expect(parseQuickAdd('za 2 měsíce revize', [], TODAY).dueDate).toBe('2026-09-29')
+  })
+
+  it('„za měsíc" na konci měsíce nepřeteče do dalšího', () => {
+    // 31. 1. + měsíc dřív vyšlo na 3. 3. — únor 31. nemá.
+    expect(parseQuickAdd('za měsíc revize', [], new Date(2027, 0, 31)).dueDate).toBe('2027-02-28')
+    expect(parseQuickAdd('za měsíc revize', [], new Date(2026, 9, 31)).dueDate).toBe('2026-11-30')
+    expect(parseQuickAdd('za 2 měsíce revize', [], new Date(2026, 11, 31)).dueDate).toBe('2027-02-28')
+  })
+
+  it('opakování z 29.–31. dne nepřeskakuje měsíce', () => {
+    // RRULE s BYMONTHDAY=31 měsíc bez 31. dne tiše vynechá; den se proto
+    // drží na 28, jako mřížka v detailu i kontrola klienta.
+    expect(parseQuickAdd('každý měsíc report', [], new Date(2026, 9, 31)).recurrenceRule).toBe(
+      'FREQ=MONTHLY;BYMONTHDAY=28',
+    )
+    expect(parseQuickAdd('každé 3 měsíce audit', [], new Date(2027, 0, 30)).recurrenceRule).toBe(
+      'FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=28',
+    )
+    expect(parseQuickAdd('každý rok výročí', [], new Date(2028, 1, 29)).recurrenceRule).toBe(
+      'FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=28',
+    )
+    // ostatní roční dny zůstávají, jak jsou
+    expect(parseQuickAdd('každý rok výročí', [], new Date(2026, 9, 31)).recurrenceRule).toBe(
+      'FREQ=YEARLY;BYMONTH=10;BYMONTHDAY=31',
+    )
   })
 
   it('rozpozná hovorové dneska/zejtra', () => {
@@ -298,6 +327,44 @@ describe('řeč, kterou člověk píše doopravdy', () => {
     const faktura = parseQuickAdd('faktura do 15.9.', [], TODAY)
     expect(faktura.dueDate).toBe('2026-09-15')
     expect(faktura.dueTime).toBeUndefined()
+  })
+
+  it('datum s tečkou za dnem není hodina — „do 20. prosince" nemá čas 20:00', () => {
+    // Dřív se „do 20." přečetlo podruhé jako holá hodina a připomínka
+    // termínu přišla ve 20:00; „v 5. patře" dostalo 5:00 a z názvu
+    // zbylo „schůzka . patře".
+    const podklady = parseQuickAdd('odevzdat podklady do 20. prosince', [], TODAY)
+    expect(podklady.dueDate).toBe('2026-12-20')
+    expect(podklady.dueTime).toBeUndefined()
+    expect(parseQuickAdd('faktura do 15. ledna', [], TODAY).dueTime).toBeUndefined()
+    const kampan = parseQuickAdd('kampaň od 1. prosince', [], TODAY)
+    expect(kampan.dueDate).toBe('2026-12-01')
+    expect(kampan.dueTime).toBeUndefined()
+    expect(kampan.title).toBe('kampaň')
+    const patro = parseQuickAdd('schůzka v 5. patře', [], TODAY)
+    expect(patro.dueTime).toBeUndefined()
+    expect(patro.title).toBe('schůzka v 5. patře')
+    // tečka na konci věty hodinu nechá být — a v názvu nezůstane
+    const deset = parseQuickAdd('schůzka v 10.', [], TODAY)
+    expect(deset.dueTime).toBe('10:00')
+    expect(deset.title).toBe('schůzka')
+  })
+
+  it('čas s tečkou po předložce je čas, ne datum', () => {
+    // „call ve 14.10" dřív vyšel na 14. října a „zítra v 8.12" na
+    // 8. prosince — datum přebilo i výslovné „zítra".
+    const call = parseQuickAdd('call ve 14.10', [], TODAY)
+    expect(call.dueTime).toBe('14:10')
+    expect(call.dueDate).toBe('2026-07-29')
+    expect(call.title).toBe('call')
+    const zitra = parseQuickAdd('zítra v 8.12 call', [], TODAY)
+    expect(zitra.dueDate).toBe('2026-07-30')
+    expect(zitra.dueTime).toBe('08:12')
+    expect(parseQuickAdd('schůzka ve 14.30', [], TODAY).dueTime).toBe('14:30')
+    // bez předložky, s tečkou na konci nebo po „do" je to pořád datum
+    expect(parseQuickAdd('sraz 14.10.', [], TODAY).dueDate).toBe('2026-10-14')
+    expect(parseQuickAdd('sraz 14.10.', [], TODAY).dueTime).toBeUndefined()
+    expect(parseQuickAdd('faktura do 15.09', [], TODAY).dueDate).toBe('2026-09-15')
   })
 
   it('„po obědě" je 13:00', () => {

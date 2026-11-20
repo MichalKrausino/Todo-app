@@ -123,7 +123,10 @@ export function TodayView({
     localStorage.setItem('todo.gestureTipSeen', '1')
     setGestureTip(false)
   }
-  const [dayClosed, setDayClosed] = useState(() => localStorage.getItem('todo.dayClosed') === todayISO())
+  // Pamatuje se DEN uzavření, ne příznak: na Macu zůstává Dnes otevřené
+  // přes noc a příznak přečtený jednou při startu by „✓ Den uzavřen"
+  // držel i další večer, kdy uzavřený není (`today` se mezitím změní).
+  const [dayClosedOn, setDayClosedOn] = useState(() => localStorage.getItem('todo.dayClosed'))
   const [razeni, setRazeni] = useState<Razeni>(() =>
     localStorage.getItem(RAZENI_KLIC) === 'klient' ? 'klient' : 'priorita',
   )
@@ -212,8 +215,19 @@ export function TodayView({
           return d !== undefined && d < today
         }),
       ),
-      todays: sortTasks(open.filter((t) => effectiveDate(t) === today)),
-      inbox: sortTasks(open.filter((t) => !effectiveDate(t))),
+      // Připnutý na dnešek („Top 3 dne") patří dnešku, ať má termín
+      // kdykoli: připnout jde i úkol bez data nebo na pátek, a dřív se pak
+      // na Dnes neukázal vůbec — a přitom zabíral jedno ze tří míst, takže
+      // po třech takových hlásila appka „Top 3 je plná" nad prázdným
+      // seznamem. Propadlý připnutý zůstává mezi propadlými (pořadí ho
+      // stejně vytáhne nahoru).
+      todays: sortTasks(
+        open.filter((t) => {
+          const d = effectiveDate(t)
+          return d === today || (t.pinnedFor === today && !(d !== undefined && d < today))
+        }),
+      ),
+      inbox: sortTasks(open.filter((t) => !effectiveDate(t) && t.pinnedFor !== today)),
     }),
     [open, today],
   )
@@ -299,9 +313,10 @@ export function TodayView({
   const isEvening = nowMin >= zacatekUzaverky(today) && !sabatTed
   // Pátek a sobota: kdy začíná a končí šabat (jinak `null`).
   const vetaSabat = vetaSabatu(today, Date.now())
+  const dayClosed = dayClosedOn === today
   const closeDay = () => {
     localStorage.setItem('todo.dayClosed', today)
-    setDayClosed(true)
+    setDayClosedOn(today)
   }
 
   // Stabilní obsluha: `TaskRow` je přes `memo`, takže nová funkce při
@@ -311,7 +326,7 @@ export function TodayView({
     void (t.status === 'done' ? reopenTask(t.id) : completeTask(t.id))
   }, [])
 
-  const row = (t: Task, showDate = true) => (
+  const row = (t: Task, showDate = true, naDen?: string) => (
     <TaskRow
       key={t.id}
       task={t}
@@ -320,6 +335,7 @@ export function TodayView({
       onToggle={toggle}
       onOpen={onOpenTask}
       showDate={showDate}
+      den={naDen}
     />
   )
 
@@ -423,7 +439,9 @@ export function TodayView({
         : poradiDne([], open.filter((t) => effectiveDate(t) === den), den, sortTasks).poradi.map((p) => p.task),
     [posun, open, den],
   )
-  const radekDne = useCallback((t: Task) => row(t, false), [row]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Řádek dne, na který se listuje, ví, na kterém dni stojí — odklad
+  // gestem pak jde o den dál od NĚJ, ne od dneška.
+  const radekDne = useCallback((t: Task) => row(t, false, den), [row, den]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-5">
@@ -761,7 +779,11 @@ export function TodayView({
         )}
       </div>
 
-      {navrhOpen && dayPlan && (
+      {/* Až s načtenými úkoly: panel si frontu snímá jednou při otevření,
+          a z notifikace (`#navrh`) se otevírá hned při startu — kdyby
+          předběhl dotaz na úkoly, zůstal by prázdný a přesto by ráno
+          označil jako viděné. */}
+      {navrhOpen && dayPlan && nacteno && (
         <NavrhSheet
           planId={dayPlan.id}
           navrhy={navrhy}

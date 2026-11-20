@@ -3,7 +3,8 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from './db'
-import { addClient, completeTask, removeTask } from './repo'
+import { addClient, completeTask, removeTask, updateTask } from './repo'
+import { addDays, fromISODate, toISODate, todayISO } from '../lib/dates'
 import {
   addTemplate,
   deployTemplate,
@@ -116,6 +117,59 @@ describe('reconcileTemplates', () => {
     expect(projects[0].name).toBe('PPC')
     const instances = await openInstances()
     expect(instances.every((t) => t.projectId === projects[0].id)).toBe(true)
+  })
+
+  // Denní pravidlo: instance na dnešek existuje vždycky, takže se dá
+  // ověřit posun z dne, který zítra už nebude „chtěný".
+  const denniSablona = async (clientId: string) => {
+    const template = await addTemplate('T')
+    await updateTemplate(template.id, {
+      items: [newTemplateItem({ title: 'Denní kontrola', recurrenceRule: 'FREQ=DAILY', priority: 'normal' })],
+    })
+    await deployTemplate(clientId, template.id)
+    return (await openInstances()).find((t) => t.dueDate === todayISO())!
+  }
+
+  it('instance posunutá z minulého dne se nesmaže', async () => {
+    // Výskyt z 12. poslaný triáží na dnešek má id po 12., které už
+    // nechceme — a úklid ho podle dneška smazal hned při dalším běhu.
+    const client = await addClient({ name: 'K', color: '#fff', kind: 'client' })
+    const dnesni = await denniSablona(client.id)
+    const vcera = toISODate(addDays(fromISODate(todayISO()), -1))
+    const zitra = toISODate(addDays(fromISODate(todayISO()), 1))
+    // výskyt ze včerejška, který člověk posunul na zítřek
+    await db.tasks.put({ ...dnesni, id: crypto.randomUUID(), sourceDate: vcera, dueDate: zitra })
+    const presunuta = (await db.tasks.filter((t) => t.sourceDate === vcera).first())!
+    await reconcileTemplates()
+    expect((await db.tasks.get(presunuta.id))?.deletedAt).toBeUndefined()
+  })
+
+  it('instanci kolegy zařízení bez šablony nesmaže', async () => {
+    // Šablony jsou soukromé: na kolegově zařízení vypadá každá instance
+    // jako osiřelá a jeho tombstone by ji smazal i majiteli.
+    const client = await addClient({ name: 'K', color: '#fff', kind: 'client' })
+    const dnesni = await denniSablona(client.id)
+    await db.syncState.put({ id: 'meta', userId: 'kolega' } as never)
+    await db.tasks.update(dnesni.id, { ownerId: 'majitel' })
+    await db.templates.clear() // kolega šablonu nemá
+    await reconcileTemplates()
+    expect((await db.tasks.get(dnesni.id))?.deletedAt).toBeUndefined()
+  })
+
+  it('instance přesunutá k jinému klientovi neshodí generování ostatním', async () => {
+    const a = await addClient({ name: 'A', color: '#fff', kind: 'client' })
+    const b = await addClient({ name: 'B', color: '#fff', kind: 'client' })
+    const dnesni = await denniSablona(a.id)
+    await updateTask(dnesni.id, { clientId: b.id })
+    // Dřív: `add` s existujícím id → ConstraintError při každém běhu.
+    await expect(reconcileTemplates()).resolves.not.toThrow()
+    const presunuta = await db.tasks.get(dnesni.id)
+    expect(presunuta?.clientId).toBe(b.id)
+    expect(presunuta?.deletedAt).toBeUndefined()
+    // a nový klient dostane šablonu normálně
+    const c = await addClient({ name: 'C', color: '#fff', kind: 'client' })
+    await denniSablona(c.id)
+    expect((await openInstances()).some((t) => t.clientId === c.id)).toBe(true)
   })
 })
 

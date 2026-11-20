@@ -16,7 +16,7 @@ import type { Project, Task, Template, TemplateItem } from './types'
 import { deterministicUuid } from '../lib/deterministicId'
 import { addDays, fromISODate, toISODate, todayISO } from '../lib/dates'
 import { RULE_EPOCH, occurrencesBetween } from '../lib/rrule'
-import { updateClient } from './repo'
+import { mojeId, updateClient } from './repo'
 
 export const GENERATION_HORIZON_DAYS = 90
 
@@ -139,6 +139,7 @@ async function reconcileOnce(): Promise<void> {
   const clients = await db.clients.filter((c) => !c.deletedAt).toArray()
 
   let changed = false
+  const ja = await mojeId()
 
   for (const client of clients) {
     type Wanted = { item: TemplateItem; date: string; projectId?: string }
@@ -180,6 +181,12 @@ async function reconcileOnce(): Promise<void> {
     for (const [id, w] of wanted) {
       const ex = existingById.get(id)
       if (!ex) {
+        // Instance s tímhle id může existovat u JINÉHO klienta — člověk ji
+        // přesunul ve slotu Klient. Dotaz výš je podle klienta, takže ji
+        // nevidí, a `add` by spadl na duplicitním klíči a shodil celý
+        // reconcile pro všechny klienty (a to při každém běhu, dokud den
+        // výskytu nepřejde). Přesunutá instance už je; nezakládá se znovu.
+        if (await db.tasks.get(id)) continue
         const t = now()
         const task: Task = {
           id,
@@ -192,6 +199,7 @@ async function reconcileOnce(): Promise<void> {
           dueDate: w.date,
           status: 'active',
           sourceTemplateItemId: w.item.id,
+          sourceDate: w.date,
           order: 0,
         }
         await db.tasks.add(task)
@@ -214,17 +222,31 @@ async function reconcileOnce(): Promise<void> {
     // stáhnout osiřelé budoucí nehotové instance (undeploy / smazaná položka /
     // změněné pravidlo → jiná id)
     for (const ex of existing) {
+      if (ex.deletedAt || (ex.status !== 'active' && ex.status !== 'inbox')) continue
+      if (wanted.has(ex.id)) continue
+      // Šablony jsou soukromé svému autorovi. Na zařízení kolegy, se kterým
+      // klienta sdílím, šablona není, takže tam vypadá každá instance jako
+      // osiřelá — a jeho tombstone by ji podle last-write-wins smazal
+      // i mně. Uklízí se jen vlastní instance (bez razítka = ještě
+      // neodeslaná, tedy taky moje).
+      if (ex.ownerId && ja && ex.ownerId !== ja) continue
+      // Rozhoduje den VÝSKYTU, ne termín: instance přesunutá z dneška na
+      // zítřek (nebo propadlá poslaná triáží na dnešek) má id po dni,
+      // který už nechceme, a dřív se proto při příštím běhu smazala.
+      const den = ex.sourceDate ?? ex.dueDate
+      if (!den || den < today) continue
+      // Instance přesunutá k tomuhle klientovi od jiného nese id po tom
+      // druhém — uklízet ji tady by byl zásah do cizího výskytu.
       if (
-        !ex.deletedAt &&
-        (ex.status === 'active' || ex.status === 'inbox') &&
-        ex.dueDate &&
-        ex.dueDate >= today &&
-        !wanted.has(ex.id)
+        ex.sourceDate &&
+        ex.sourceTemplateItemId &&
+        (await deterministicUuid('tpl', client.id, ex.sourceTemplateItemId, ex.sourceDate)) !== ex.id
       ) {
-        const t = now()
-        await db.tasks.update(ex.id, { deletedAt: t, updatedAt: t })
-        changed = true
+        continue
       }
+      const t = now()
+      await db.tasks.update(ex.id, { deletedAt: t, updatedAt: t })
+      changed = true
     }
   }
 

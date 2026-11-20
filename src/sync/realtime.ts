@@ -39,9 +39,14 @@ let timer: ReturnType<typeof setTimeout> | undefined
 
 function tuklo(): void {
   clearTimeout(timer)
-  // Pouhý spouštěč, ne zápis: připojí se k běžícímu průchodu místo aby si
-  // vynutil druhý (viz `zZapisu` v engine.ts).
-  timer = setTimeout(() => void syncNow().catch(() => {}), SECKANI_MS)
+  // Ťuknutí si vynutí průchod PO tom běžícím (`zZapisu`), ne jen připojení
+  // k němu: když přijde ve chvíli, kdy běžící průchod už úkoly stáhl (teď
+  // odesílá nebo uklízí), připojením by se kolegovo odškrtnutí ukázalo až
+  // s dalším tikem plánovače za minutu — a to je přesně ta prodleva, kvůli
+  // které realtime vzniklo. Ozvěna vlastního odeslání přidá nejvýš jeden
+  // průchod navíc: stáhne vlastní řádky a nic nepošle, takže další
+  // událost nevznikne.
+  timer = setTimeout(() => void syncNow(true).catch(() => {}), SECKANI_MS)
 }
 
 /**

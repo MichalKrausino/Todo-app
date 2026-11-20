@@ -41,6 +41,17 @@ describe('kvantil', () => {
 })
 
 describe('počty hotové práce po dnech', () => {
+  it('úkol odškrtnutý po půlnoci patří novému dni, ne včerejšku v UTC', () => {
+    // 19. 9. v 00:30 místního je v UTC ještě 18. 9. 22:30 — uříznutí
+    // razítka na deset znaků ho připsalo včerejšku (na skutečných datech
+    // 9 ze 64 hotových úkolů).
+    const poPulnoci = new Date(2026, 8, 19, 0, 30).toISOString()
+    expect(poPulnoci.startsWith('2026-09-18')).toBe(true)
+    const m = ukolyHotovePoDnech([hotovy('x', { completedAt: poPulnoci })], '2026-09-01', DNES)
+    expect(m.get('2026-09-19')).toBe(1)
+    expect(m.has('2026-09-18')).toBe(false)
+  })
+
   it('sčítá kusy podle dne dokončení', () => {
     const m = ukolyHotovePoDnech(
       [hotovy('2026-09-18'), hotovy('2026-09-18'), hotovy('2026-09-19')],

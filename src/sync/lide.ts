@@ -11,6 +11,7 @@
 import { db } from '../db/db'
 import { mojeId, updateTask } from '../db/repo'
 import { zavislaPrirazeni } from '../lib/tymUkoly'
+import { parseFingerprint } from './shareState'
 import { listClientShares, sharedClientIds } from './shares'
 import { getSyncStatus, subscribeSyncStatus } from './status'
 
@@ -99,8 +100,22 @@ export function initLide(): void {
  * (`zavislaPrirazeni`) — a nikdy nesahá na to, co je přiřazené mně.
  */
 async function uklidPrirazeni(lideUKlienta: Map<string, Set<string>>): Promise<void> {
+  // Jen u klientů, které VLASTNÍM. `list_client_shares` dává členovi jen
+  // majitele a jeho samotného, ne ostatní členy — u klienta sdíleného se
+  // třemi lidmi by tedy přiřazení třetímu vypadalo jako „na nikoho" a
+  // členovo zařízení by ho tiše zrušilo (úkol by kolegovi vypadl z Dneška,
+  // a znovu po každém přeřazení). Celý seznam lidí zná jen majitel.
+  // Vlastnictví se čte z otisku sdílení, který engine ukládá při syncu;
+  // bez něj se neuklízí nic.
+  // Úkoly cizích klientů (kde jsem člen) se proto do úklidu vůbec nepouštějí
+  // — z mapy je vyřadit nejde, chybějící klient znamená „nesdílený".
+  const otisk = (await db.syncState.get('shares'))?.cursor
+  if (!otisk) return
+  const clenem = new Set(parseFingerprint(otisk).filter((s) => !s.isOwner).map((s) => s.clientId))
   const ja = await mojeId()
-  const ukoly = await db.tasks.filter((t) => !t.deletedAt && !!t.assignedTo).toArray()
+  const ukoly = await db.tasks
+    .filter((t) => !t.deletedAt && !!t.assignedTo && !(t.clientId && clenem.has(t.clientId)))
+    .toArray()
   if (ukoly.length === 0) return
   for (const id of zavislaPrirazeni(ukoly, lideUKlienta, ja)) {
     await updateTask(id, { assignedTo: undefined })
