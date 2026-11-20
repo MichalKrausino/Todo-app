@@ -17,7 +17,12 @@ Pravidla pro vývoj: [`CLAUDE.md`](CLAUDE.md).
   API klíč se nikam nevkládá. Rutina jede každou hodinu 7–22, ale bez
   konektoru nemá jak sáhnout do databáze — a nástroj, kterým ji Claude
   založil, konektor připojit neumí. SQL (`supabase/zpresneni.sql`) běží od
-  14. 10.
+  14. 10. Stav 20. 11.: rutina pořád bez konektoru, úkol se zadáním čeká
+  na návrh od 29. 10. a tabulka `zpresneni_navrhy` je prázdná.
+- [ ] **Todoist není propojený** (token na serveru chybí), přitom klient
+  „V Bílém" má spárovaný projekt. Appka se teď bez tokenu na Todoist
+  neptá (dřív každých pět minut a pokaždé chyba 500); spárování zůstává,
+  takže po vložení tokenu v appce (Nastavení → Todoist) se stahuje hned.
 - [ ] Volitelně: smazat edge funkci `zpresni` (vrací jen 503, drží ji tam
   jen stará verze appky v telefonu) a prázdnou tabulku z doby API —
   v SQL editoru `drop table public.zpresneni;` (nová se jmenuje
@@ -32,11 +37,13 @@ Pravidla pro vývoj: [`CLAUDE.md`](CLAUDE.md).
   neběží (`supabase/sabat.sql`, už spuštěné).
 - [x] Ranní návrh se střídá i bez odpovědí (edge funkce `morning-plan`
   verze 12, 13. 10.).
-- [ ] **Propojit Google znovu** v appce (obláček vpravo nahoře → „Propojit
-  Google znovu"). Uložený refresh token je z 20. 9., tedy z doby, kdy byla
-  OAuth aplikace v režimu Testing a tokeny platily sedm dní — publikace ho
-  zpětně neoživí. Změřeno v logech: edge funkce `calendar` token přečte
-  a vrátí 401 (větev „potřebuje znovu přihlásit").
+- [x] Revize 20. 11.: stahování jede podle serverového razítka
+  (`supabase/razitko-serveru.sql`), člen sdílení nesmaže klienta majiteli
+  (`supabase/mazani-majitel.sql`) — obojí už spuštěné; `reminders` verze 4
+  (připomínky podle toho, kdo úkol MÁ), `morning-plan` verze 13 (úkoly
+  s termínem za týdny ráno nenabízí jen kvůli prioritě).
+- [x] Google je propojený znovu (token z 28. 9.); edge funkce `calendar`
+  za poslední den odpovídala jen 200.
 - [ ] Smazat dočasnou edge funkci `calendar-diag` v Supabase → Edge Functions
   (je vyprázdněná, vrací jen 410, ale nemá tam co dělat).
 
