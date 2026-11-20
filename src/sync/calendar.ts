@@ -139,7 +139,11 @@ export async function refreshCalendar(): Promise<void> {
     console.warn('kalendář:', message)
     setCalStatus({
       lastError: message,
-      needsReauth: (e as { reauth?: boolean }).reauth === true,
+      // Nepropojený Google je totéž co odpojený: sám se nespraví, dokud se
+      // člověk nepřihlásí přes Google. Server ho hlásí obecnou chybou (500),
+      // takže se dřív ptal znovu každou minutu — u každého, kdo se přihlásil
+      // e-mailem a heslem a kalendář nikdy nepropojil.
+      needsReauth: (e as { reauth?: boolean }).reauth === true || message.startsWith('Kalendář není propojený'),
     })
   } finally {
     refreshing = false
