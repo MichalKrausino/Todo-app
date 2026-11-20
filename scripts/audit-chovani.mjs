@@ -980,6 +980,9 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   })
   T_(vedleSebe !== null && vedleSebe.prekryv <= 0 && vedleSebe.seznam > 300,
      'seznam zůstane vidět vedle detailu (překryv ' + (vedleSebe?.prekryv ?? '?') + ' px, seznam ' + (vedleSebe?.seznam ?? '?') + ' px)')
+  await page.keyboard.press('Escape'); await page.waitForTimeout(500)
+  T_(await sloupec.count() === 0, 'Escape sloupec zavře')
+
   // Sloupec zůstává otevřený vedle seznamu, takže ťuknutí na JINÝ řádek
   // ho nezavře, jen vymění úkol. Pole panelu se plní jednou při připojení
   // — bez nového klíče ukazoval detail pořád první úkol a „Uložit" jeho
@@ -987,17 +990,15 @@ const T_=(p,m)=>{ if(p) { ok++; console.log('✓ '+m) } else { chyby.push(m); co
   await page.getByRole('button',{name:'Nový úkol'}).click(); await page.waitForTimeout(500)
   await page.keyboard.type('sirokodruhy')
   await page.keyboard.press('Enter'); await page.waitForTimeout(800)
-  await page.keyboard.press('Escape'); await page.waitForTimeout(300)
-  await page.getByText('sirokoprvni').first().click(); await page.waitForTimeout(600)
+  await page.keyboard.press('Escape'); await page.waitForTimeout(400)
+  await page.locator('main').getByText('sirokoprvni').first().click(); await page.waitForTimeout(600)
   await page.locator('main').getByText('sirokodruhy').first().click(); await page.waitForTimeout(600)
   const nazevVDetailu = await page.locator('aside[aria-label="Detail úkolu"] #pole-ukol').inputValue().catch(() => '')
   T_(nazevVDetailu === 'sirokodruhy', 'ťuknutí na jiný řádek ukáže v otevřeném detailu ten druhý úkol (' + nazevVDetailu + ')')
   await page.locator('aside[aria-label="Detail úkolu"]').getByRole('button',{name:'Uložit'}).click(); await page.waitForTimeout(600)
   T_(await page.locator('main').getByText('sirokoprvni').count() >= 1 && await page.locator('main').getByText('sirokodruhy').count() >= 1,
      'uložení druhého úkolu nepřepíše jeho jméno jménem prvního')
-  await page.locator('main').getByText('sirokoprvni').first().click(); await page.waitForTimeout(600)
-  await page.keyboard.press('Escape'); await page.waitForTimeout(500)
-  T_(await sloupec.count() === 0, 'Escape sloupec zavře')
+  if (await sloupec.count() > 0) { await page.keyboard.press('Escape'); await page.waitForTimeout(500) }
 
   // (4) zúžení okna vrátí dok — šířka se čte pořád, ne jen při startu
   await page.setViewportSize({width:390,height:844}); await page.waitForTimeout(600)
